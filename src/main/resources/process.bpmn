@@ -98,10 +98,18 @@
           <camunda:formField id="hospitalName" label="Hospital Name" type="string" />
           <camunda:formField id="claimFor" label="Claim For" type="string" />
           <camunda:formField id="claimAmount" label="Claim Amount" type="long" />
+
+          <!-- Policy Comparator Results -->
+          <camunda:formField id="policyComparatorStatus" label="Policy Comparison Status" type="string" />
+          <camunda:formField id="policyMissingInfo" label="Missing Policy Information" type="string" />
+          <camunda:formField id="policyPotentialIssues" label="Policy Issues Found" type="string" />
+
+          <!-- Document Processing Issues -->
           <camunda:formField id="failedForgeApiCall" label="Failed Forged Check Docs" type="string" />
           <camunda:formField id="forgedDocs" label="Forged Docs" type="string" />
           <camunda:formField id="failedOCRCall" label="Failed OCR On Docs" type="string" />
           <camunda:formField id="failedFHIRCall" label="Failed OCR TO FHIR Docs" type="string" />
+
           <camunda:formField id="Action" label="What action would you like to take?" type="enum">
             <camunda:value id="approve" name="Approve" />
             <camunda:value id="reject" name="Reject" />
@@ -144,6 +152,12 @@
           <camunda:formField id="approvedAmount" label="Approved Amount" type="long" />
           <camunda:formField id="bonusAmount" label="Bonus" type="long" />
           <camunda:formField id="finalAmount" label="Final Amount" type="long" />
+
+          <!-- Policy Comparator Results -->
+          <camunda:formField id="policyComparatorStatus" label="Policy Comparison Status" type="string" />
+          <camunda:formField id="policyMissingInfo" label="Missing Policy Information" type="string" />
+          <camunda:formField id="policyPotentialIssues" label="Policy Issues Found" type="string" />
+
           <camunda:formField id="Action1" label="What action would you like to take?" type="enum">
             <camunda:value id="approve" name="Approve" />
             <camunda:value id="reject" name="Reject" />
@@ -262,6 +276,9 @@
           <camunda:formField id="approvedAmount" label="Approved Amount" type="long" />
           <camunda:formField id="bonusAmount" label="Bonus" type="long" />
           <camunda:formField id="finalAmount" label="Final Amount" type="long" />
+          <camunda:formField id="policyComparatorStatus" label="Policy Comparison Status" type="string" />
+          <camunda:formField id="policyMissingInfo" label="Missing Policy Information" type="string" />
+          <camunda:formField id="policyPotentialIssues" label="Policy Issues Found" type="string" />
           <camunda:formField id="Action3" label="What action would you like to take?" type="enum">
             <camunda:value id="proceedToReview" name="Proceed To Review" />
             <camunda:value id="retryClaimCost" name="Retry Claim Cost Computation" />
@@ -294,6 +311,9 @@
           <camunda:formField id="approvedAmount" label="Approved Amount" type="long" />
           <camunda:formField id="bonusAmount" label="Bonus" type="long" />
           <camunda:formField id="finalAmount" label="Final Amount" type="long" />
+          <camunda:formField id="policyComparatorStatus" label="Policy Comparison Status" type="string" />
+          <camunda:formField id="policyMissingInfo" label="Missing Policy Information" type="string" />
+          <camunda:formField id="policyPotentialIssues" label="Policy Issues Found" type="string" />
           <camunda:formField id="Action2" label="What action would you like to take?" type="enum">
             <camunda:value id="proceed" name="Proceed to Claim Cost Computation" />
             <camunda:value id="retry" name="Retry FWA Decisioning" />

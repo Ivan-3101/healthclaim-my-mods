@@ -8,8 +8,8 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.util.EntityUtils;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.ArrayList; // Import ArrayList
-import java.util.List; // Import List
+import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 public class PolicyComparator implements JavaDelegate {
@@ -21,26 +21,28 @@ public class PolicyComparator implements JavaDelegate {
         // 1. Get the FHIR data from the process variables
         String fhirData = (String) execution.getVariable("fhir_json");
 
-        // --- ADDED LOGGING ---
         log.info(">>>> PolicyComparator READ Process Variable 'fhir_json': " + fhirData);
 
-        // 2. Construct the request payload as per the PDF
+        // 2. Construct the request payload
         JSONObject requestBody = new JSONObject();
         JSONObject data = new JSONObject();
-        // Ensure fhirData is not null before parsing
-        if (fhirData == null) {
-            log.error("FHIR JSON data is null. Cannot proceed with Policy Comparator.");
-            // Optionally throw an error to stop the process or handle appropriately
-            throw new org.camunda.bpm.engine.delegate.BpmnError("fhirDataNullError", "FHIR JSON data was null");
-        }
-        data.put("doc_fhir", new JSONObject(fhirData)); // This line could still throw JSONException if fhirData is not valid JSON
-        requestBody.put("data", data);
-        requestBody.put("agentid", "policy_comp"); // As per the PDF
 
-        // --- ADDED LOGGING ---
+        // Handle null FHIR data
+        if (fhirData == null || fhirData.trim().isEmpty()) {
+            log.error("FHIR JSON data is null or empty. Cannot proceed with Policy Comparator.");
+            execution.setVariable("policyMissingInfo", "FHIR data not available");
+            execution.setVariable("policyPotentialIssues", "Unable to compare policy - FHIR data missing");
+            execution.setVariable("policyComparatorStatus", "failed");
+            return;
+        }
+
+        data.put("doc_fhir", new JSONObject(fhirData));
+        requestBody.put("data", data);
+        requestBody.put("agentid", "policy_comp");
+
         log.info(">>>> PolicyComparator BUILT Request Body: " + requestBody.toString());
 
-        // 3. Call the new agent via APIServices
+        // 3. Call the agent
         APIServices apiServices = new APIServices(execution.getTenantId());
         CloseableHttpResponse response = apiServices.callPolicyComparatorAgent(requestBody.toString());
 
@@ -50,46 +52,49 @@ public class PolicyComparator implements JavaDelegate {
         log.info("Policy Comparator API status " + statusCode);
         log.info("Policy Comparator API response " + resp);
 
-        // --- Start of Replacement Block ---
         if (statusCode == 200) {
-            JSONObject responseJson = new JSONObject(resp);
-            JSONObject answer = responseJson.getJSONObject("answer");
-            // We are interested in List 2 which contains potential issues/deviations
-            JSONArray list2 = answer.getJSONArray("List 2");
+            try {
+                JSONObject responseJson = new JSONObject(resp);
+                JSONObject answer = responseJson.getJSONObject("answer");
+                JSONArray list2 = answer.getJSONArray("List 2");
 
-            List<String> potentialIssues = new ArrayList<>();
-            List<String> missingInfoItems = new ArrayList<>();
+                List<String> potentialIssues = new ArrayList<>();
+                List<String> missingInfoItems = new ArrayList<>();
 
-            for (int i = 0; i < list2.length(); i++) {
-                JSONObject item = list2.getJSONObject(i);
-                String status = item.optString("Status/Issue", ""); // Use optString for safety
-                String area = item.optString("Question/Area", "Unknown Area");
+                for (int i = 0; i < list2.length(); i++) {
+                    JSONObject item = list2.getJSONObject(i);
+                    String status = item.optString("Status/Issue", "");
+                    String area = item.optString("Question/Area", "Unknown Area");
 
-                if ("Missing information".equalsIgnoreCase(status)) {
-                    missingInfoItems.add(area);
-                } else if (!"Match".equalsIgnoreCase(status)) {
-                    // Add other non-matching statuses to potential issues list
-                    potentialIssues.add(area + ": " + status);
+                    if ("Missing information".equalsIgnoreCase(status)) {
+                        missingInfoItems.add(area);
+                    } else if (!"Match".equalsIgnoreCase(status)) {
+                        potentialIssues.add(area + ": " + status);
+                    }
                 }
+
+                // Save smaller, specific variables
+                String missingInfo = missingInfoItems.isEmpty() ? "None" : String.join(", ", missingInfoItems);
+                String issues = potentialIssues.isEmpty() ? "None" : String.join("\n", potentialIssues);
+
+                execution.setVariable("policyMissingInfo", missingInfo);
+                execution.setVariable("policyPotentialIssues", issues);
+                execution.setVariable("policyComparatorStatus", "success");
+
+                log.info(">>>> PolicyComparator SET 'policyMissingInfo': " + missingInfo);
+                log.info(">>>> PolicyComparator SET 'policyPotentialIssues': " + issues);
+
+            } catch (Exception e) {
+                log.error("Error parsing Policy Comparator response: " + e.getMessage(), e);
+                execution.setVariable("policyMissingInfo", "Error parsing response");
+                execution.setVariable("policyPotentialIssues", "Unable to extract policy comparison data");
+                execution.setVariable("policyComparatorStatus", "error");
             }
-
-            // --- Save Smaller, Specific Variables ---
-            // Save items marked as "Missing information"
-            execution.setVariable("policyMissingInfo", String.join(", ", missingInfoItems));
-            log.info(">>>> PolicyComparator SET 'policyMissingInfo': " + String.join(", ", missingInfoItems));
-
-            // Save other potential issues (e.g., "Potential exclusion", "Potential issue")
-            execution.setVariable("policyPotentialIssues", String.join("\n", potentialIssues)); // Use newline for readability
-            log.info(">>>> PolicyComparator SET 'policyPotentialIssues': " + String.join("\n", potentialIssues));
-
-            // --- IMPORTANT: Ensure the old line saving the full response is removed or commented out ---
-            // execution.setVariable("policyComparatorResponse", resp); // <-- Make sure this line is gone!
-
         } else {
-            // Optional: Add error handling for non-200 status codes
             log.error("Policy Comparator API returned status code: " + statusCode);
-            // Example: throw new org.camunda.bpm.engine.delegate.BpmnError("failedPolicyComparator");
+            execution.setVariable("policyMissingInfo", "API call failed");
+            execution.setVariable("policyPotentialIssues", "Unable to compare policy - API error " + statusCode);
+            execution.setVariable("policyComparatorStatus", "failed");
         }
-        // --- End of Replacement Block ---
     }
 }

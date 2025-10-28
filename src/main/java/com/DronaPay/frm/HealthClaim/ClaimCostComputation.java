@@ -37,15 +37,12 @@ public class ClaimCostComputation implements JavaDelegate {
         attribs.put("doctor_id", execution.getVariable("doctorIdentifier"));
         attribs.put("doctor_name", execution.getVariable("doctorName"));
         attribs.put("disease_name", execution.getVariable("diseaseName"));
-//        attribs.put("disease_code", execution.getVariable("diseaseCode"));
         attribs.put("procedure", execution.getVariable("procedure"));
         attribs.put("start_date", execution.getVariable("startDate"));
-//        attribs.put("end_date", execution.getVariable("performedPeriodEnd"));
         attribs.put("medication_name", execution.getVariable("medicationName"));
         attribs.put("instruction_for_usage", execution.getVariable("dosageInstruction"));
         attribs.put("patient_contact", execution.getVariable("contact"));
         attribs.put("insurance_company", execution.getVariable("insuranceCompany"));
-//        attribs.put("expenses", execution.getVariable("expenses"));
         attribs.put("time_period", execution.getVariable("period"));
         attribs.put("hospital_name", execution.getVariable("hospitalName"));
         attribs.put("claim_for", execution.getVariable("claimFor"));
@@ -65,22 +62,56 @@ public class ClaimCostComputation implements JavaDelegate {
 
         if (statucode == 200) {
             JSONObject resObj = new JSONObject(resp);
+
+            // FIX: Convert approved_amount to Long
             if(!resObj.isNull("/score/decisiondetails/0/approved_amount")){
-
-                execution.setVariable("approvedAmount", resObj.optQuery("/score/decisiondetails/0/approved_amount"));
+                Object approvedAmountObj = resObj.optQuery("/score/decisiondetails/0/approved_amount");
+                if (approvedAmountObj != null) {
+                    execution.setVariable("approvedAmount", convertToLong(approvedAmountObj));
+                }
             }
 
+            // FIX: Convert bonus to Long
             if(!resObj.isNull("/score/decisiondetails/0/bonus")){
-
-                execution.setVariable("bonusAmount", resObj.optQuery("/score/decisiondetails/0/bonus"));
+                Object bonusObj = resObj.optQuery("/score/decisiondetails/0/bonus");
+                if (bonusObj != null) {
+                    execution.setVariable("bonusAmount", convertToLong(bonusObj));
+                }
             }
 
+            // FIX: Convert final_amount to Long
             if(!resObj.isNull("/score/decisiondetails/0/final_amount")){
-
-                execution.setVariable("finalAmount", resObj.optQuery("/score/decisiondetails/0/final_amount"));
+                Object finalAmountObj = resObj.optQuery("/score/decisiondetails/0/final_amount");
+                if (finalAmountObj != null) {
+                    execution.setVariable("finalAmount", convertToLong(finalAmountObj));
+                }
             }
         }else{
             throw new BpmnError("failedClaimCost");
+        }
+    }
+
+    /**
+     * Helper method to convert Object to Long (handles Double, Integer, String)
+     */
+    private Long convertToLong(Object value) {
+        if (value == null) {
+            return 0L;
+        }
+        if (value instanceof Double) {
+            return ((Double) value).longValue();
+        } else if (value instanceof Integer) {
+            return ((Integer) value).longValue();
+        } else if (value instanceof Long) {
+            return (Long) value;
+        } else {
+            // Fallback: try to parse as double then convert
+            try {
+                return Math.round(Double.parseDouble(value.toString()));
+            } catch (NumberFormatException e) {
+                log.error("Failed to convert value to Long: " + value, e);
+                return 0L;
+            }
         }
     }
 

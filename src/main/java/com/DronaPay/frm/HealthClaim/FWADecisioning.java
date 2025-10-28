@@ -37,15 +37,12 @@ public class FWADecisioning implements JavaDelegate {
         attribs.put("doctor_id", execution.getVariable("doctorIdentifier"));
         attribs.put("doctor_name", execution.getVariable("doctorName"));
         attribs.put("disease_name", execution.getVariable("diseaseName"));
-//        attribs.put("disease_code", execution.getVariable("diseaseCode"));
         attribs.put("procedure", execution.getVariable("procedure"));
         attribs.put("start_date", execution.getVariable("startDate"));
-//        attribs.put("end_date", execution.getVariable("performedPeriodEnd"));
         attribs.put("medication_name", execution.getVariable("medicationName"));
         attribs.put("instruction_for_usage", execution.getVariable("dosageInstruction"));
         attribs.put("patient_contact", execution.getVariable("contact"));
         attribs.put("insurance_company", execution.getVariable("insuranceCompany"));
-//        attribs.put("expenses", execution.getVariable("expenses"));
         attribs.put("time_period", execution.getVariable("period"));
         attribs.put("hospital_name", execution.getVariable("hospitalName"));
         attribs.put("claim_for", execution.getVariable("claimFor"));
@@ -66,7 +63,19 @@ public class FWADecisioning implements JavaDelegate {
 
         if(statucode==200){
             JSONObject resObj=new JSONObject(resp);
-            execution.setVariable("RiskScore", resObj.optQuery("/score/score"));
+            // FIX: Convert Double to Long (integer)
+            Object scoreObj = resObj.optQuery("/score/score");
+            if (scoreObj != null) {
+                // Handle both Double and Integer cases
+                if (scoreObj instanceof Double) {
+                    execution.setVariable("RiskScore", ((Double) scoreObj).longValue());
+                } else if (scoreObj instanceof Integer) {
+                    execution.setVariable("RiskScore", ((Integer) scoreObj).longValue());
+                } else {
+                    // Fallback: try to parse as double then convert
+                    execution.setVariable("RiskScore", Math.round(Double.parseDouble(scoreObj.toString())));
+                }
+            }
         }else{
             throw new BpmnError("failedFWA");
         }

@@ -4,18 +4,26 @@ import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
 import org.json.JSONArray;
 import org.json.JSONObject;
-
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class SendReminderToPolicyHolder implements JavaDelegate {
     @Override
     public void execute(DelegateExecution execution) throws Exception {
-        log.info("Send reminder to policy holder service called for ticket id ", execution.getVariable("TicketID"));
+        log.info("Send reminder to policy holder service called for ticket id "+execution.getVariable("TicketID"));
 
         JSONObject reqBody = new JSONObject();
-        reqBody.put("itenantId", 0);
-        reqBody.put("templateid", 2);
+
+        // Tenant-aware template ID
+        String tenantId = execution.getTenantId();
+//        int templateId = "1".equals(tenantId) ? 7 : 2;
+//        Change id from from 5...10 to 11...15 --> as it had already had other templates in this id
+        int templateId = "1".equals(tenantId) ? 12 : 2;
+
+
+        reqBody.put("itenantId", Integer.parseInt(tenantId));
+        reqBody.put("templateid", templateId);
+
         JSONArray toEmail = new JSONArray();
         toEmail.put(execution.getVariable("sender_email"));
         JSONArray ccEmail = new JSONArray();
@@ -30,8 +38,9 @@ public class SendReminderToPolicyHolder implements JavaDelegate {
 
         reqBody.put("bodyParams", bodyParams);
 
+        log.info("Sending reminder email with templateId: " + templateId + " for tenantId: " + tenantId);
+
         APIServices apiServices = new APIServices(execution.getTenantId());
         apiServices.sendEmailViaUiserver(reqBody, execution.getTenantId());
     }
-
 }
