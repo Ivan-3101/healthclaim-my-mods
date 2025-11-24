@@ -486,6 +486,486 @@ public class MyClass {
 - `javax.servlet-api:4.0.1` (provided)
 - `jakarta.servlet-api:6.1.0` (provided)
 
+**Object Storage**:
+- `minio:8.5.7` - MinIO Java SDK for object storage operations
+
+## Object Storage Architecture
+
+### Overview
+
+The HealthClaim workflow now includes a robust object storage abstraction layer that enables multi-cloud document storage capabilities. The implementation uses MinIO as the primary storage provider, with architecture designed to support S3, Azure Blob Storage, and Google Cloud Storage in the future.
+
+**Why Object Storage?**
+- **Scalability**: Store unlimited documents without database size constraints
+- **Performance**: Offload large binary data from Camunda process variables
+- **Cost**: Cheaper than database storage for large files
+- **Multi-Cloud**: Provider-agnostic design allows switching between MinIO, S3, Azure, etc.
+- **Separability**: Documents can be managed independently from workflow state
+
+### Architecture Components
+
+#### 1. Storage Provider Interface (`StorageProvider.java`)
+
+Defines the contract that all storage implementations must follow:
+
+```java
+public interface StorageProvider {
+    String uploadDocument(String path, byte[] content, String contentType) throws Exception;
+    InputStream downloadDocument(String path) throws Exception;
+    boolean deleteDocument(String path) throws Exception;
+    boolean documentExists(String path) throws Exception;
+    String getProviderName();
+}
+```
+
+**Location**: `com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider`
+
+**Methods**:
+- `uploadDocument()`: Uploads document to storage, returns URL/path
+- `downloadDocument()`: Returns InputStream to document content (caller must close)
+- `deleteDocument()`: Removes document from storage
+- `documentExists()`: Checks if document exists at path
+- `getProviderName()`: Returns provider type ("minio", "s3", "azure")
+
+#### 2. MinIO Storage Provider (`MinIOStorageProvider.java`)
+
+Concrete implementation using MinIO Java SDK.
+
+**Location**: `com.DronaPay.frm.HealthClaim.generic.storage.MinIOStorageProvider`
+
+**Initialization**:
+```java
+// Automatically initialized from tenant properties
+MinIOStorageProvider(Properties props) {
+    String endpoint = props.getProperty("storage.minio.endpoint");
+    String accessKey = props.getProperty("storage.minio.accessKey");
+    String secretKey = props.getProperty("storage.minio.secretKey");
+    String bucketName = props.getProperty("storage.minio.bucketName");
+    
+    // Creates MinIO client and ensures bucket exists
+}
+```
+
+**Key Features**:
+- Automatic bucket creation if it doesn't exist
+- Structured exception handling with context
+- Logging of all operations (upload/download/delete)
+- Returns `minio://bucket/path` URL format
+
+**Upload Example**:
+```java
+StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+String url = storage.uploadDocument(
+    "tenant1/HealthClaim/12345/invoice.pdf",
+    pdfBytes,
+    "application/pdf"
+);
+// Returns: "minio://claim-documents/tenant1/HealthClaim/12345/invoice.pdf"
+```
+
+#### 3. Object Storage Service (`ObjectStorageService.java`)
+
+Factory and utility service for managing storage providers.
+
+**Location**: `com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService`
+
+**Key Methods**:
+
+1. **Get Storage Provider** (with caching):
+```java
+StorageProvider provider = ObjectStorageService.getStorageProvider(tenantId);
+```
+- Loads tenant-specific configuration from `application.properties_{tenantId}`
+- Caches provider instances per tenant (singleton pattern)
+- Supports switching providers via `storage.provider` property
+
+2. **Build Storage Path**:
+```java
+String path = ObjectStorageService.buildStoragePath(
+    "{tenantId}/{workflowKey}/{ticketId}/",  // pattern
+    "1",                                      // tenantId
+    "HealthClaim",                            // workflowKey
+    "12345",                                  // ticketId
+    "invoice.pdf"                             // filename
+);
+// Returns: "1/HealthClaim/12345/invoice.pdf"
+```
+
+**Provider Cache**:
+- Static `Map<String, StorageProvider>` caches providers per tenant
+- Avoids recreating MinIO clients for every operation
+- Call `clearCache()` for hot-reload scenarios
+
+#### 4. Document Processing Service (`DocumentProcessingService.java`)
+
+High-level service for document operations in workflows.
+
+**Location**: `com.DronaPay.frm.HealthClaim.generic.services.DocumentProcessingService`
+
+**Primary Methods**:
+
+1. **Process and Upload Documents**:
+```java
+Map<String, String> documentPaths = DocumentProcessingService.processAndUploadDocuments(
+    execution.getVariable("docs"),  // docs variable (JSON array)
+    tenantId,                        // "1"
+    workflowKey,                     // "HealthClaim"
+    ticketId                         // "12345"
+);
+// Returns Map: {"invoice.pdf" -> "1/HealthClaim/12345/invoice.pdf", ...}
+```
+
+**Process**:
+- Accepts `docs` variable (List or JSON string)
+- Each document has: `filename`, `mimetype`, `encoding`, `content` (base64)
+- Decodes base64 content to byte array
+- Builds storage path using configured pattern
+- Uploads to storage provider
+- Returns map of filename -> storage path
+
+2. **Process Documents (Legacy - In-Memory)**:
+```java
+Map<String, FileValue> fileMap = DocumentProcessingService.processDocuments(docsObject);
+```
+- Creates Camunda `FileValue` objects without uploading
+- Used for backward compatibility
+- Not recommended for large documents
+
+3. **Download Document as FileValue**:
+```java
+FileValue file = DocumentProcessingService.downloadDocumentAsFileValue(
+    filename, storagePath, tenantId
+);
+```
+- Downloads from storage and converts to Camunda FileValue
+- Useful when external systems need FileValue format
+
+4. **Get Document as Base64**:
+```java
+String base64 = DocumentProcessingService.getDocumentAsBase64(
+    filename, documentPaths, tenantId
+);
+```
+- Downloads from storage and encodes as base64
+- Used for AI agent API calls (OCR, forgery detection)
+
+### Configuration
+
+#### Required Properties (per tenant)
+
+Add to `src/main/resources/application.properties_{tenantId}`:
+
+```properties
+# Object Storage Configuration
+storage.provider=minio
+storage.minio.endpoint=http://host.docker.internal:9000
+storage.minio.accessKey=YOUR_ACCESS_KEY
+storage.minio.secretKey=YOUR_SECRET_KEY
+storage.minio.bucketName=claim-documents
+storage.minio.region=us-east-1
+
+# Path pattern: {tenantId}/{workflowKey}/{ticketId}/
+storage.pathPattern={tenantId}/{workflowKey}/{ticketId}/
+```
+
+**Property Descriptions**:
+- `storage.provider`: Storage type ("minio", "s3", "azure") - only "minio" implemented
+- `storage.minio.endpoint`: MinIO server URL (use `host.docker.internal` for Docker)
+- `storage.minio.accessKey`: MinIO access key (default: minioadmin - **CHANGE IN PRODUCTION**)
+- `storage.minio.secretKey`: MinIO secret key (default: minioadmin123 - **CHANGE IN PRODUCTION**)
+- `storage.minio.bucketName`: Bucket name (created automatically if missing)
+- `storage.minio.region`: AWS region (optional, for S3-compatible setup)
+- `storage.pathPattern`: Template for document paths with variables: `{tenantId}`, `{workflowKey}`, `{ticketId}`
+
+**Security Notes**:
+- Never commit credentials to git
+- Use environment variables or secrets manager in production
+- Change default credentials (minioadmin/minioadmin123)
+- Use HTTPS endpoints in production
+
+#### MinIO Server Setup
+
+**Docker Compose**:
+```yaml
+version: '3'
+services:
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+volumes:
+  minio-data:
+```
+
+**Access MinIO Console**: http://localhost:9001
+
+### Integration with Workflow
+
+#### How Documents Flow Through Workflow
+
+1. **Workflow Start**: User submits claim with documents via `docs` variable
+   ```json
+   {
+     "docs": [
+       {
+         "filename": "invoice.pdf",
+         "mimetype": "application/pdf",
+         "encoding": "base64",
+         "content": "JVBERi0xLjQK..."
+       }
+     ]
+   }
+   ```
+
+2. **GenericIDGeneratorDelegate**: First workflow task
+   - Generates ticket ID (e.g., 12345)
+   - Calls `DocumentProcessingService.processAndUploadDocuments()`
+   - Uploads all documents to MinIO
+   - Sets process variables:
+     - `documentPaths`: Map of filename -> storage path
+     - `attachmentVars`: List of filenames for multi-instance loop
+     - `fileProcessMap`: Initialized map for processing results
+
+3. **Multi-Instance Document Processing**: Loops over each document
+   - **OCROnDoc**: Downloads document from MinIO, sends to OCR agent
+   - **IdentifyForgedDocuments**: Downloads document, sends to forgery detection
+   - **OCRToFHIR**: Converts OCR text to FHIR
+   - **PolicyComparator**: Compares FHIR data against policy
+
+4. **Downstream Tasks**: Use `documentPaths` variable to access documents
+
+#### Delegate Integration Pattern
+
+**Standard Pattern for Accessing Documents**:
+
+```java
+@Slf4j
+public class MyDocumentProcessor implements JavaDelegate {
+    @Override
+    public void execute(DelegateExecution execution) throws Exception {
+        // 1. Get current document filename (in multi-instance loop)
+        String filename = (String) execution.getVariable("attachment");
+        
+        // 2. Get document paths map
+        Map<String, String> documentPaths = 
+            (Map<String, String>) execution.getVariable("documentPaths");
+        
+        // 3. Get storage path for this document
+        String storagePath = documentPaths.get(filename);
+        if (storagePath == null) {
+            throw new RuntimeException("Storage path not found for: " + filename);
+        }
+        
+        // 4. Download from storage
+        String tenantId = execution.getTenantId();
+        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+        
+        try (InputStream fileContent = storage.downloadDocument(storagePath)) {
+            // 5. Process document
+            byte[] bytes = fileContent.readAllBytes();
+            // ... your processing logic ...
+        } // InputStream auto-closed
+    }
+}
+```
+
+**Critical**: Always use try-with-resources for `InputStream` to prevent resource leaks.
+
+#### Examples from Existing Delegates
+
+**OCROnDoc.java**:
+```java
+// Retrieve from MinIO instead of FileValue
+String filename = (String) execution.getVariable("attachment");
+Map<String, String> documentPaths = 
+    (Map<String, String>) execution.getVariable("documentPaths");
+String storagePath = documentPaths.get(filename);
+
+// Download from Storage
+StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+InputStream fileContent = storage.downloadDocument(storagePath);
+
+// Convert to base64 for OCR agent
+byte[] bytes = IOUtils.toByteArray(fileContent);
+String base64 = Base64.getEncoder().encodeToString(bytes);
+
+// Call OCR agent
+JSONObject requestBody = new JSONObject();
+requestBody.put("data", new JSONObject().put("base64_img", base64));
+requestBody.put("agentid", "openaiVision");
+```
+
+**IdentifyForgedDocuments.java**:
+```java
+// Same pattern: retrieve storage path, download, process
+String storagePath = documentPaths.get(filename);
+StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+InputStream fileContent = storage.downloadDocument(storagePath);
+
+// Convert to base64 for forgery detection agent
+byte[] bytes = IOUtils.toByteArray(fileContent);
+String base64 = Base64.getEncoder().encodeToString(bytes);
+
+// Call forgery agent
+requestBody.put("agentid", "forgeryagent");
+```
+
+### Migration Considerations
+
+#### Migrating from FileValue to Object Storage
+
+If you have existing delegates using Camunda FileValue:
+
+**Old Pattern**:
+```java
+FileValue fileValue = execution.getVariableTyped(attachmentVar);
+InputStream stream = fileValue.getValue();
+```
+
+**New Pattern**:
+```java
+String filename = (String) execution.getVariable("attachment");
+Map<String, String> documentPaths = 
+    (Map<String, String>) execution.getVariable("documentPaths");
+StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+InputStream stream = storage.downloadDocument(documentPaths.get(filename));
+```
+
+**Backward Compatibility Strategy**:
+- `DocumentProcessingService.processDocuments()` still creates FileValue objects
+- Use for in-flight processes or gradual migration
+- Eventually migrate all to object storage for scalability
+
+### Generic Package Structure
+
+New generic packages enable reusability across workflows:
+
+**`com.DronaPay.frm.HealthClaim.generic.storage`**:
+- `StorageProvider` - Interface for storage providers
+- `MinIOStorageProvider` - MinIO implementation
+- Future: `S3StorageProvider`, `AzureBlobStorageProvider`, `GCSStorageProvider`
+
+**`com.DronaPay.frm.HealthClaim.generic.services`**:
+- `ObjectStorageService` - Storage provider factory and utilities
+- `DocumentProcessingService` - High-level document operations
+- `ConfigurationService` - Tenant configuration management
+
+**`com.DronaPay.frm.HealthClaim.generic.delegates`**:
+- `GenericIDGeneratorDelegate` - Generic ticket ID generation and document upload
+- `GenericMasterDataVerificationDelegate` - Reusable master data validation
+- Future: More reusable delegates for common workflow patterns
+
+**Design Philosophy**:
+- **Workflow-Agnostic**: Generic components work for HealthClaim, MotorClaim, etc.
+- **Tenant-Aware**: All services accept tenantId for multi-tenant configuration
+- **Provider Pattern**: Easy to swap MinIO for S3/Azure without changing workflow code
+
+### Troubleshooting
+
+#### Common Issues
+
+**Issue**: `Exception: Bucket does not exist`
+- **Cause**: MinIO server doesn't have the bucket
+- **Solution**: MinIOStorageProvider auto-creates buckets, check MinIO server is running and accessible
+
+**Issue**: `Connection refused to MinIO endpoint`
+- **Cause**: MinIO server not running or incorrect endpoint
+- **Solution**: 
+  - Verify MinIO is running: `docker ps` or check service status
+  - Check endpoint URL in properties (use `host.docker.internal` for Docker)
+  - Test connectivity: `curl http://localhost:9000/minio/health/live`
+
+**Issue**: `Access Denied` when uploading
+- **Cause**: Invalid credentials
+- **Solution**: Verify accessKey/secretKey match MinIO server credentials
+
+**Issue**: Documents not appearing in MinIO Console
+- **Cause**: Wrong bucket name or path
+- **Solution**: 
+  - Check `storage.minio.bucketName` matches expected bucket
+  - Verify path pattern generates correct paths
+  - Check MinIO Console: http://localhost:9001
+
+**Issue**: `InputStream` not closed warnings
+- **Cause**: Not using try-with-resources
+- **Solution**: Always wrap storage downloads in try-with-resources:
+  ```java
+  try (InputStream stream = storage.downloadDocument(path)) {
+      // process
+  }
+  ```
+
+#### Debugging Storage Operations
+
+**Enable Debug Logging**:
+Add to `healthclaim-logback.xml`:
+```xml
+<logger name="com.DronaPay.frm.HealthClaim.generic.storage" level="DEBUG"/>
+<logger name="com.DronaPay.frm.HealthClaim.generic.services" level="DEBUG"/>
+```
+
+**Log Output**:
+```
+INFO  MinIOStorageProvider - Uploading document to MinIO: 1/HealthClaim/12345/invoice.pdf
+INFO  MinIOStorageProvider - Document uploaded successfully: 1/HealthClaim/12345/invoice.pdf (45632 bytes)
+DEBUG ObjectStorageService - Initializing storage provider 'minio' for tenant 1
+```
+
+**MinIO Client Logs**:
+MinIO Java SDK logs to SLF4J, visible in application logs.
+
+### Best Practices
+
+1. **Always Close InputStreams**:
+   ```java
+   try (InputStream stream = storage.downloadDocument(path)) {
+       // process stream
+   } // auto-closed
+   ```
+
+2. **Validate documentPaths Exists**:
+   ```java
+   if (documentPaths == null || !documentPaths.containsKey(filename)) {
+       throw new RuntimeException("Storage path not found for: " + filename);
+   }
+   ```
+
+3. **Use Configured Path Patterns**:
+   - Don't hardcode paths like `"documents/" + filename`
+   - Use `ObjectStorageService.buildStoragePath()` with pattern from properties
+   - Ensures consistent structure across tenants
+
+4. **Secure Credentials**:
+   - Never commit `application.properties_{tenantId}` with real credentials
+   - Use environment variables or secrets manager
+   - Rotate credentials regularly
+
+5. **Handle Storage Failures Gracefully**:
+   ```java
+   try {
+       storage.uploadDocument(path, content, type);
+   } catch (Exception e) {
+       log.error("Failed to upload document: {}", path, e);
+       throw new BpmnError("STORAGE_ERROR", "Document upload failed");
+   }
+   ```
+
+6. **Log Storage Operations**:
+   - Log every upload/download with filename, size, tenant ID
+   - Helps with audit trail and debugging
+
+7. **Monitor Storage Size**:
+   - MinIO buckets can grow large
+   - Implement retention policies for old documents
+   - Monitor disk usage on MinIO server
+
 ## Project Structure
 
 ```
@@ -498,12 +978,12 @@ healthclaim/
 │   │   │   ├── CamundaBpmProcessApplication.java   # Process application entry
 │   │   │   ├── ClaimCostComputation.java           # Cost calculation
 │   │   │   ├── FWADecisioning.java                 # Risk scoring
-│   │   │   ├── GenerateIDAndWorkflowName.java      # ID generation
-│   │   │   ├── IdentifyForgedDocuments.java        # Forgery detection
+│   │   │   ├── GenerateIDAndWorkflowName.java      # ID generation (DEPRECATED)
+│   │   │   ├── IdentifyForgedDocuments.java        # Forgery detection (uses MinIO)
 │   │   │   ├── IntimateClaimApproval.java          # Approval email
 │   │   │   ├── LoggerDelegate.java                 # Logging utility
 │   │   │   ├── MissingInfoRejectionMail.java       # Missing info email
-│   │   │   ├── OCROnDoc.java                       # OCR processing
+│   │   │   ├── OCROnDoc.java                       # OCR processing (uses MinIO)
 │   │   │   ├── OCRToFHIR.java                      # FHIR conversion
 │   │   │   ├── PolicyComparator.java               # Policy comparison agent
 │   │   │   ├── ProcessAgentResponse.java           # Agent response handler
@@ -513,7 +993,18 @@ healthclaim/
 │   │   │   ├── SendReminderToPolicyHolder.java     # Reminder email
 │   │   │   ├── TenantPropertiesUtil.java           # Multi-tenant config
 │   │   │   ├── TokenUtil.java                      # Auth token manager
-│   │   │   └── VerifyMasterData.java               # Master data validation
+│   │   │   ├── VerifyMasterData.java               # Master data validation
+│   │   │   ├── generic/
+│   │   │   │   ├── delegates/
+│   │   │   │   │   ├── GenericIDGeneratorDelegate.java        # Generic ID gen + doc upload
+│   │   │   │   │   └── GenericMasterDataVerificationDelegate.java
+│   │   │   │   ├── services/
+│   │   │   │   │   ├── ConfigurationService.java             # Tenant config loader
+│   │   │   │   │   ├── DocumentProcessingService.java        # Document operations
+│   │   │   │   │   └── ObjectStorageService.java             # Storage provider factory
+│   │   │   │   └── storage/
+│   │   │   │       ├── StorageProvider.java                  # Storage interface
+│   │   │   │       └── MinIOStorageProvider.java             # MinIO implementation
 │   │   └── resources/
 │   │       ├── META-INF/
 │   │       │   └── processes.xml                   # Tenant & deployment config
