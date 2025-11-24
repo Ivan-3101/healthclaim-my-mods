@@ -1,46 +1,30 @@
 package com.DronaPay.frm.HealthClaim;
 
+import com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailDelegate;
+import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
-import org.json.JSONArray;
-import org.json.JSONObject;
-import lombok.extern.slf4j.Slf4j;
 
+/**
+ * Wrapper delegate for Reminder Email to Policy Holder
+ * Delegates to generic implementation
+ */
 @Slf4j
 public class SendReminderToPolicyHolder implements JavaDelegate {
+
+    private final GenericEmailDelegate genericDelegate = new GenericEmailDelegate();
+
     @Override
     public void execute(DelegateExecution execution) throws Exception {
-        log.info("Send reminder to policy holder service called for ticket id "+execution.getVariable("TicketID"));
+        log.debug("SendReminderToPolicyHolder called - delegating to generic implementation");
 
-        JSONObject reqBody = new JSONObject();
+        // Set email type for generic delegate
+        execution.setVariableLocal("emailType", "reminder");
+        execution.setVariableLocal("workflowKey", "HealthClaim");
 
-        // Tenant-aware template ID
-        String tenantId = execution.getTenantId();
-//        int templateId = "1".equals(tenantId) ? 7 : 2;
-//        Change id from from 5...10 to 11...15 --> as it had already had other templates in this id
-        int templateId = "1".equals(tenantId) ? 12 : 2;
+        // Call the generic implementation
+        genericDelegate.execute(execution);
 
-
-        reqBody.put("itenantId", Integer.parseInt(tenantId));
-        reqBody.put("templateid", templateId);
-
-        JSONArray toEmail = new JSONArray();
-        toEmail.put(execution.getVariable("sender_email"));
-        JSONArray ccEmail = new JSONArray();
-        JSONArray bccEmail = new JSONArray();
-        reqBody.put("toEmail", toEmail);
-        reqBody.put("ccEmail", ccEmail);
-        reqBody.put("bccEmail", bccEmail);
-
-        JSONObject bodyParams = new JSONObject();
-        bodyParams.put("name", execution.getVariable("holder_name"));
-        bodyParams.put("policyId", execution.getVariable("policy_id"));
-
-        reqBody.put("bodyParams", bodyParams);
-
-        log.info("Sending reminder email with templateId: " + templateId + " for tenantId: " + tenantId);
-
-        APIServices apiServices = new APIServices(execution.getTenantId());
-        apiServices.sendEmailViaUiserver(reqBody, execution.getTenantId());
+        log.debug("SendReminderToPolicyHolder completed via generic delegate");
     }
 }

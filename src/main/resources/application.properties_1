@@ -39,3 +39,24 @@ storage.minio.region=us-east-1
 
 # Path pattern: {tenantId}/{workflowKey}/{ticketId}/
 storage.pathPattern={tenantId}/{workflowKey}/{ticketId}/
+
+
+
+# =============================================================
+# EMAIL CONFIGURATION (Generic Email Delegate)
+# =============================================================
+
+# Email Template IDs for Tenant 1
+email.approval.templateId=15
+email.rejection.templateId=14
+email.requestInfo.templateId=11
+email.reminder.templateId=12
+email.missingInfo.templateId=13
+
+# Email Variable Mappings
+# The process variable name that contains the recipient email address
+email.recipientVariable=sender_email
+
+# Body parameter mappings (template variable name -> process variable name)
+email.bodyParam.name=holder_name
+email.bodyParam.policyId=policy_id
