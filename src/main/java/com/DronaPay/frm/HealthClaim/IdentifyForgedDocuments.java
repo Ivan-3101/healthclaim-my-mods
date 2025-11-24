@@ -5,12 +5,13 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
+import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
 import org.apache.commons.io.IOUtils;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.util.EntityUtils;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
-import org.camunda.bpm.engine.variable.value.FileValue;
 import org.json.JSONObject;
 
 import lombok.extern.slf4j.Slf4j;
@@ -21,11 +22,23 @@ public class IdentifyForgedDocuments implements JavaDelegate {
     @SuppressWarnings("unchecked")
     @Override
     public void execute(DelegateExecution execution) throws Exception {
-        log.info("Identify Forged Documents called by ticket id "+ execution.getVariable("TicketID"));
-        //Directory retreival implementation needed
-        FileValue fileValue = (FileValue) execution.getVariableTyped(execution.getVariable("attachment").toString());
+        log.info("Identify Forged Documents called by ticket id " + execution.getVariable("TicketID"));
 
-        InputStream fileContent = fileValue.getValue();
+        // --- CHANGED: Retrieve from MinIO instead of FileValue ---
+        String filename = (String) execution.getVariable("attachment");
+        Map<String, String> documentPaths = (Map<String, String>) execution.getVariable("documentPaths");
+
+        if (documentPaths == null || !documentPaths.containsKey(filename)) {
+            throw new RuntimeException("Storage path not found for document: " + filename);
+        }
+
+        String storagePath = documentPaths.get(filename);
+        String tenantId = execution.getTenantId();
+
+        // Download from Storage
+        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+        InputStream fileContent = storage.downloadDocument(storagePath);
+        // ---------------------------------------------------------
 
         byte[] bytes = IOUtils.toByteArray(fileContent);
         String base64 = Base64.getEncoder().encodeToString(bytes);
@@ -64,18 +77,22 @@ public class IdentifyForgedDocuments implements JavaDelegate {
 
         Map<String, Map<String, Object>> fileProcessMap = (Map<String, Map<String, Object>>) execution
                 .getVariable("fileProcessMap");
-        if (fileProcessMap.containsKey(fileValue.getFilename())) {
-            Map<String, Object> proccessOutput = fileProcessMap.get(fileValue.getFilename());
+
+        // Ensure map is initialized (just in case)
+        if (fileProcessMap == null) {
+            fileProcessMap = new HashMap<>();
+        }
+
+        if (fileProcessMap.containsKey(filename)) {
+            Map<String, Object> proccessOutput = fileProcessMap.get(filename);
             proccessOutput.put("forgedDocCheckOutput", forgeryOutput);
-            fileProcessMap.put(fileValue.getFilename(), proccessOutput);
+            fileProcessMap.put(filename, proccessOutput);
         } else {
             Map<String, Object> proccessOutput = new HashMap<>();
             proccessOutput.put("forgedDocCheckOutput", forgeryOutput);
-            fileProcessMap.put(fileValue.getFilename(), proccessOutput);
+            fileProcessMap.put(filename, proccessOutput);
         }
 
-         execution.setVariable("fileProcessMap", fileProcessMap);
-
+        execution.setVariable("fileProcessMap", fileProcessMap);
     }
-
 }
