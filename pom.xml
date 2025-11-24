@@ -164,6 +164,14 @@
       <scope>provided</scope>
     </dependency>
 
+
+      <!-- Add this in the <dependencies> section -->
+    <dependency>
+        <groupId>io.minio</groupId>
+        <artifactId>minio</artifactId>
+        <version>8.5.7</version>
+    </dependency>
+
   </dependencies>
 
   <repositories>

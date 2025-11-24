@@ -5,7 +5,6 @@ import com.DronaPay.frm.HealthClaim.generic.services.DocumentProcessingService;
 import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
-import org.camunda.bpm.engine.variable.value.FileValue;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -27,30 +26,30 @@ public class GenericIDGeneratorDelegate implements JavaDelegate {
         execution.setVariable("TicketID", ticketId);
         log.info("Generated TicketID: {}", ticketId);
 
-        // 2. Process documents and create FileValue objects
+        // 2. Get workflow key (for now, hardcoded; later from config)
+        String workflowKey = "HealthClaim"; // TODO: Make configurable
+
+        // 3. Process documents and upload to object storage
         Object docsObject = execution.getVariable("docs");
-        Map<String, FileValue> fileMap = DocumentProcessingService.processDocuments(docsObject);
+        Map<String, String> documentPaths = DocumentProcessingService.processAndUploadDocuments(
+                docsObject, tenantId, workflowKey, String.valueOf(ticketId)
+        );
 
-        // 3. Set FileValue variables in execution
-        List<String> attachmentVars = new ArrayList<>();
-        for (Map.Entry<String, FileValue> entry : fileMap.entrySet()) {
-            String filename = entry.getKey();
-            FileValue fileValue = entry.getValue();
-
-            execution.setVariable(filename, fileValue);
-            attachmentVars.add(filename);
-        }
-
-        // 4. Set attachment list for multi-instance loop
+        // 4. Set document paths for multi-instance loop
+        List<String> attachmentVars = new ArrayList<>(documentPaths.keySet());
         execution.setVariable("attachmentVars", attachmentVars);
         log.info("Set {} attachments for processing: {}", attachmentVars.size(), attachmentVars);
 
-        // 5. Initialize file process map
+        // 5. Store document paths map for later retrieval
+        execution.setVariable("documentPaths", documentPaths);
+        log.debug("Document paths: {}", documentPaths);
+
+        // 6. Initialize file process map
         Map<String, Map<String, Object>> fileProcessMap =
-                DocumentProcessingService.initializeFileProcessMap(fileMap.keySet());
+                DocumentProcessingService.initializeFileProcessMap(documentPaths.keySet());
         execution.setVariable("fileProcessMap", fileProcessMap);
 
-        // 6. Load tenant-specific expiry duration (optional config)
+        // 7. Load tenant-specific expiry duration (optional config)
         try {
             Properties props = ConfigurationService.getTenantProperties(tenantId);
             String expiryDuration = props.getProperty("expiry.duration", "24h");

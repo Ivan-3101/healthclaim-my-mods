@@ -1,5 +1,6 @@
 package com.DronaPay.frm.HealthClaim.generic.services;
 
+import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.engine.variable.Variables;
 import org.camunda.bpm.engine.variable.value.FileValue;
@@ -12,9 +13,68 @@ import java.util.*;
 public class DocumentProcessingService {
 
     /**
-     * Process documents from the 'docs' variable and create FileValue objects
-     * @param docsObject - the docs variable from process (can be List or String)
-     * @return Map of filename -> FileValue
+     * Process documents and upload to object storage
+     * @param docsObject - the docs variable from process
+     * @param tenantId - tenant ID
+     * @param workflowKey - workflow key (e.g., "HealthClaim")
+     * @param ticketId - ticket ID
+     * @return Map of filename -> storage path
+     */
+    public static Map<String, String> processAndUploadDocuments(
+            Object docsObject, String tenantId, String workflowKey, String ticketId) {
+
+        Map<String, String> documentPaths = new HashMap<>();
+
+        if (docsObject == null) {
+            log.warn("No documents provided in 'docs' variable");
+            return documentPaths;
+        }
+
+        try {
+            // Get storage provider
+            StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+
+            // Get path pattern from properties
+            Properties props = ConfigurationService.getTenantProperties(tenantId);
+            String pathPattern = props.getProperty("storage.pathPattern",
+                    "{tenantId}/{workflowKey}/{ticketId}/");
+
+            // Convert docs to list
+            List<Map<String, Object>> docsList = convertToDocsList(docsObject);
+
+            for (Map<String, Object> doc : docsList) {
+                String filename = doc.get("filename").toString();
+                String mimetype = doc.get("mimetype").toString();
+                String base64Content = doc.get("content").toString();
+
+                // Decode base64 content
+                byte[] fileContent = Base64.getDecoder().decode(base64Content);
+
+                // Build storage path
+                String storagePath = ObjectStorageService.buildStoragePath(
+                        pathPattern, tenantId, workflowKey, ticketId, filename
+                );
+
+                // Upload to storage
+                String documentUrl = storage.uploadDocument(storagePath, fileContent, mimetype);
+                documentPaths.put(filename, storagePath);
+
+                log.info("Uploaded document: {} -> {} ({} bytes)",
+                        filename, storagePath, fileContent.length);
+            }
+
+            log.info("Successfully uploaded {} documents to storage", documentPaths.size());
+
+        } catch (Exception e) {
+            log.error("Error processing and uploading documents", e);
+        }
+
+        return documentPaths;
+    }
+
+    /**
+     * Process documents WITHOUT uploading (for backward compatibility)
+     * Creates FileValue objects in memory
      */
     public static Map<String, FileValue> processDocuments(Object docsObject) {
         Map<String, FileValue> fileMap = new HashMap<>();
@@ -57,6 +117,45 @@ public class DocumentProcessingService {
     }
 
     /**
+     * Download document from storage and create FileValue
+     * @param filename - document filename
+     * @param storagePath - path in object storage
+     * @param tenantId - tenant ID
+     * @return FileValue object
+     */
+    public static FileValue downloadDocumentAsFileValue(
+            String filename, String storagePath, String tenantId) throws Exception {
+
+        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+
+        // Download document content
+        byte[] content = storage.downloadDocument(storagePath).readAllBytes();
+
+        // Determine MIME type from filename
+        String mimeType = guessMimeType(filename);
+
+        // Create FileValue
+        return Variables.fileValue(filename)
+                .file(content)
+                .mimeType(mimeType)
+                .encoding("UTF-8")
+                .create();
+    }
+
+    /**
+     * Guess MIME type from filename extension
+     */
+    private static String guessMimeType(String filename) {
+        String lower = filename.toLowerCase();
+        if (lower.endsWith(".pdf")) return "application/pdf";
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+        if (lower.endsWith(".png")) return "image/png";
+        if (lower.endsWith(".doc")) return "application/msword";
+        if (lower.endsWith(".docx")) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        return "application/octet-stream";
+    }
+
+    /**
      * Convert various input formats to List<Map<String, Object>>
      */
     @SuppressWarnings("unchecked")
@@ -91,5 +190,23 @@ public class DocumentProcessingService {
         }
         log.debug("Initialized file process map for {} files", filenames.size());
         return fileProcessMap;
+    }
+
+    /**
+     * Get document for agent processing
+     * Downloads from storage and returns as base64 string
+     */
+    public static String getDocumentAsBase64(String filename,
+                                             Map<String, String> documentPaths,
+                                             String tenantId) throws Exception {
+        String storagePath = documentPaths.get(filename);
+        if (storagePath == null) {
+            throw new IllegalArgumentException("Document not found: " + filename);
+        }
+
+        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+        byte[] content = storage.downloadDocument(storagePath).readAllBytes();
+
+        return Base64.getEncoder().encodeToString(content);
     }
 }

@@ -26,3 +26,16 @@ springapi.api.key=add98899-1729-4e82-beae-25ec43e4128a
 ai.agent.url=http://host.docker.internal:8000
 ai.agent.username=batchuser
 ai.agent.password=100!batch
+
+
+
+# Object Storage Configuration
+storage.provider=minio
+storage.minio.endpoint=http://host.docker.internal:9000
+storage.minio.accessKey=minioadmin
+storage.minio.secretKey=minioadmin123
+storage.minio.bucketName=claim-documents
+storage.minio.region=us-east-1
+
+# Path pattern: {tenantId}/{workflowKey}/{ticketId}/
+storage.pathPattern={tenantId}/{workflowKey}/{ticketId}/
