@@ -36,6 +36,8 @@ public class OCROnDoc implements JavaDelegate {
         String storagePath = documentPaths.get(filename);
         String tenantId = execution.getTenantId();
 
+        log.info("Downloading document from storage for OCR: {}", storagePath);
+
         // Download from Storage
         StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
         InputStream fileContent = storage.downloadDocument(storagePath);
@@ -43,6 +45,8 @@ public class OCROnDoc implements JavaDelegate {
 
         byte[] bytes = IOUtils.toByteArray(fileContent);
         String base64 = Base64.getEncoder().encodeToString(bytes);
+
+        log.debug("Document converted to base64 for OCR, size: {} bytes", bytes.length);
 
         JSONObject requestBody = new JSONObject();
         JSONObject data = new JSONObject();
@@ -57,6 +61,7 @@ public class OCROnDoc implements JavaDelegate {
         int statucode = response.getStatusLine().getStatusCode();
         log.info("OCR on Doc API status " + statucode);
         log.info("OCR on Doc API  response " + resp);
+
         Map<String, Object> ocrOnDocOutput = new HashMap<>();
         ocrOnDocOutput.put("ocrOnDocAPIResponse", resp);
         ocrOnDocOutput.put("ocrOnDocAPIStatusCode", statucode);
@@ -68,8 +73,12 @@ public class OCROnDoc implements JavaDelegate {
             String ocrText = resObj.getString("answer");
             execution.setVariable("ocr_text", ocrText);
 
+            log.info("OCR extraction successful for document: {}", filename);
+            log.debug("OCR text length: {} characters", ocrText.length());
+
         } else {
             ocrOnDocOutput.put("ocrOnDocAPICall", "failed");
+            log.error("OCR failed for document: {} with status: {}", filename, statucode);
         }
 
         Map<String, Map<String, Object>> fileProcessMap = (Map<String, Map<String, Object>>) execution
@@ -94,5 +103,7 @@ public class OCROnDoc implements JavaDelegate {
         if (statucode != 200) {
             throw new BpmnError("failedOcr");
         }
+
+        log.info("OCR processing completed for document: {}", filename);
     }
 }

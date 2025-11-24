@@ -35,6 +35,8 @@ public class OCRToFHIR implements JavaDelegate {
             log.warn("OCR text is null for file: " + filename);
         }
 
+        log.debug("Converting OCR text to FHIR for document: {}, text length: {} characters", filename, ocrText.length());
+
         data.put("ocr_text", ocrText);
 
         requestBody.put("data", data);
@@ -47,6 +49,7 @@ public class OCRToFHIR implements JavaDelegate {
         int statucode = response.getStatusLine().getStatusCode();
         log.info("OCR To FHIR API status " + statucode);
         log.info("OCR To FHIR API response " + resp);
+
         Map<String, Object> ocrToFHIROutput = new HashMap<>();
 
         ocrToFHIROutput.put("ocrToFHIRAPIResponse", resp);
@@ -69,10 +72,12 @@ public class OCRToFHIR implements JavaDelegate {
 
             execution.setVariable("fhir_json", fhirJsonString);
 
-            log.info(">>>> OCRtoFHIR Process Variable 'fhir_json' SET TO: " + fhirJsonString);
+            log.info("FHIR conversion successful for document: {}", filename);
+            log.debug("FHIR JSON set in process variable 'fhir_json'");
 
         } else {
             ocrToFHIROutput.put("ocrToFHIRAPICall", "failed");
+            log.error("FHIR conversion failed for document: {} with status: {}", filename, statucode);
         }
 
         Map<String, Map<String, Object>> fileProcessMap = (Map<String, Map<String, Object>>) execution
@@ -95,5 +100,7 @@ public class OCRToFHIR implements JavaDelegate {
         }
 
         execution.setVariable("fileProcessMap", fileProcessMap);
+
+        log.info("OCR to FHIR processing completed for document: {}", filename);
     }
 }

@@ -63,32 +63,58 @@ public class ClaimCostComputation implements JavaDelegate {
         if (statucode == 200) {
             JSONObject resObj = new JSONObject(resp);
 
-            // FIX: Convert approved_amount to Long
-            if(!resObj.isNull("/score/decisiondetails/0/approved_amount")){
-                Object approvedAmountObj = resObj.optQuery("/score/decisiondetails/0/approved_amount");
-                if (approvedAmountObj != null) {
-                    execution.setVariable("approvedAmount", convertToLong(approvedAmountObj));
-                }
-            }
+            // Get claim amount as fallback default
+            Long claimAmount = getClaimAmount(execution);
 
-            // FIX: Convert bonus to Long
-            if(!resObj.isNull("/score/decisiondetails/0/bonus")){
-                Object bonusObj = resObj.optQuery("/score/decisiondetails/0/bonus");
-                if (bonusObj != null) {
-                    execution.setVariable("bonusAmount", convertToLong(bonusObj));
-                }
-            }
+            // FIX: Extract amounts with null handling and defaults
+            Long approvedAmount = getAmountOrDefault(resObj, "/score/decisiondetails/0/approved_amount", claimAmount);
+            Long bonusAmount = getAmountOrDefault(resObj, "/score/decisiondetails/0/bonus", 0L);
+            Long finalAmount = getAmountOrDefault(resObj, "/score/decisiondetails/0/final_amount", claimAmount);
 
-            // FIX: Convert final_amount to Long
-            if(!resObj.isNull("/score/decisiondetails/0/final_amount")){
-                Object finalAmountObj = resObj.optQuery("/score/decisiondetails/0/final_amount");
-                if (finalAmountObj != null) {
-                    execution.setVariable("finalAmount", convertToLong(finalAmountObj));
-                }
-            }
-        }else{
+            // Set process variables
+            execution.setVariable("approvedAmount", approvedAmount);
+            execution.setVariable("bonusAmount", bonusAmount);
+            execution.setVariable("finalAmount", finalAmount);
+
+            log.info("Claim cost computation results - Approved: {}, Bonus: {}, Final: {}",
+                    approvedAmount, bonusAmount, finalAmount);
+
+        } else {
             throw new BpmnError("failedClaimCost");
         }
+    }
+
+    /**
+     * Get claim amount from process variable with safe fallback
+     */
+    private Long getClaimAmount(DelegateExecution execution) {
+        try {
+            Object claimAmountObj = execution.getVariable("claimAmount");
+            if (claimAmountObj != null) {
+                return convertToLong(claimAmountObj);
+            }
+        } catch (Exception e) {
+            log.warn("Could not retrieve claimAmount variable", e);
+        }
+        return 0L; // Default if not available
+    }
+
+    /**
+     * Extract amount from JSON path with null handling and default value
+     */
+    private Long getAmountOrDefault(JSONObject resObj, String path, Long defaultValue) {
+        try {
+            // Check if path exists and is not null
+            Object value = resObj.optQuery(path);
+            if (value != null && !JSONObject.NULL.equals(value)) {
+                return convertToLong(value);
+            }
+        } catch (Exception e) {
+            log.warn("Could not extract value from path: {}, using default: {}", path, defaultValue);
+        }
+
+        log.debug("Using default value {} for path: {}", defaultValue, path);
+        return defaultValue;
     }
 
     /**
@@ -114,5 +140,4 @@ public class ClaimCostComputation implements JavaDelegate {
             }
         }
     }
-
 }

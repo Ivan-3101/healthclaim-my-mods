@@ -35,6 +35,8 @@ public class IdentifyForgedDocuments implements JavaDelegate {
         String storagePath = documentPaths.get(filename);
         String tenantId = execution.getTenantId();
 
+        log.info("Downloading document from storage: {}", storagePath);
+
         // Download from Storage
         StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
         InputStream fileContent = storage.downloadDocument(storagePath);
@@ -42,6 +44,8 @@ public class IdentifyForgedDocuments implements JavaDelegate {
 
         byte[] bytes = IOUtils.toByteArray(fileContent);
         String base64 = Base64.getEncoder().encodeToString(bytes);
+
+        log.debug("Document converted to base64, size: {} bytes", bytes.length);
 
         JSONObject requestBody = new JSONObject();
         JSONObject data = new JSONObject();
@@ -94,5 +98,7 @@ public class IdentifyForgedDocuments implements JavaDelegate {
         }
 
         execution.setVariable("fileProcessMap", fileProcessMap);
+
+        log.info("Forgery detection completed for document: {}", filename);
     }
 }
