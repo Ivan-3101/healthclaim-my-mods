@@ -7,7 +7,6 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.util.EntityUtils;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
-import org.camunda.bpm.engine.variable.value.FileValue;
 import org.json.JSONObject;
 
 import lombok.extern.slf4j.Slf4j;
@@ -18,14 +17,24 @@ public class OCRToFHIR implements JavaDelegate {
     @Override
     public void execute(DelegateExecution execution) throws Exception {
         log.info("OCR To FHIR service called by ticket id " + execution.getVariable("TicketID"));
-        FileValue fileValue = (FileValue) execution.getVariableTyped(execution.getVariable("attachment").toString());
+
+        // --- FIX: Retrieve filename string directly, NOT FileValue ---
+        // In MinIO architecture, 'attachment' variable holds the filename string, not a reference to a FileValue object
+        String filename = (String) execution.getVariable("attachment");
+        // -------------------------------------------------------------
 
         JSONObject requestBody = new JSONObject();
         JSONObject data = new JSONObject();
 
-        // --- THIS IS THE FIX ---
-        // We now read "ocr_text" as a simple string to match how OCROnDoc.java saves it.
+        // We read "ocr_text" as a simple string to match how OCROnDoc.java saves it.
         String ocrText = (String) execution.getVariable("ocr_text");
+
+        // Safety check in case OCR failed or text is null
+        if (ocrText == null) {
+            ocrText = "";
+            log.warn("OCR text is null for file: " + filename);
+        }
+
         data.put("ocr_text", ocrText);
 
         requestBody.put("data", data);
@@ -48,8 +57,15 @@ public class OCRToFHIR implements JavaDelegate {
 
             JSONObject resObj = new JSONObject(resp);
 
-            JSONObject fhirJsonObject = resObj.getJSONObject("answer");
-            String fhirJsonString = fhirJsonObject.toString();
+            // Handle cases where 'answer' might be a string or object depending on Agent response
+            Object answerObj = resObj.get("answer");
+            String fhirJsonString;
+
+            if (answerObj instanceof JSONObject) {
+                fhirJsonString = ((JSONObject) answerObj).toString();
+            } else {
+                fhirJsonString = answerObj.toString();
+            }
 
             execution.setVariable("fhir_json", fhirJsonString);
 
@@ -61,14 +77,23 @@ public class OCRToFHIR implements JavaDelegate {
 
         Map<String, Map<String, Object>> fileProcessMap = (Map<String, Map<String, Object>>) execution
                 .getVariable("fileProcessMap");
-        if (fileProcessMap.containsKey(fileValue.getFilename())) {
-            Map<String, Object> proccessOutput = fileProcessMap.get(fileValue.getFilename());
+
+        // Safety check
+        if (fileProcessMap == null) {
+            fileProcessMap = new HashMap<>();
+        }
+
+        // --- FIX: Use 'filename' string variable instead of 'fileValue.getFilename()' ---
+        if (fileProcessMap.containsKey(filename)) {
+            Map<String, Object> proccessOutput = fileProcessMap.get(filename);
             proccessOutput.put("ocrToFHIROutput", ocrToFHIROutput);
-            fileProcessMap.put(fileValue.getFilename(), proccessOutput);
+            fileProcessMap.put(filename, proccessOutput);
         } else {
             Map<String, Object> proccessOutput = new HashMap<>();
             proccessOutput.put("ocrToFHIROutput", ocrToFHIROutput);
-            fileProcessMap.put(fileValue.getFilename(), proccessOutput);
+            fileProcessMap.put(filename, proccessOutput);
         }
+
+        execution.setVariable("fileProcessMap", fileProcessMap);
     }
 }
