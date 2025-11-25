@@ -381,7 +381,7 @@
     <bpmn:sequenceFlow id="Flow_0gtta65" name="approve" sourceRef="Gateway_FWAReviewDecision" targetRef="Activity_0v6rfa2">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${fwaReviewAction == "proceedToCost"}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sendTask id="Activity_RequestFWAInfo" name="Request Additional Info for FWA" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:delegateExpression="com.DronaPay.frm.HealthClaim.RequestFWAInfoMail">
+    <bpmn:sendTask id="Activity_RequestFWAInfo" name="Request Additional Info for FWA" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.RequestFWAInfoMail">
       <bpmn:incoming>Flow_1ljexqk</bpmn:incoming>
       <bpmn:outgoing>Flow_0xebx2i</bpmn:outgoing>
     </bpmn:sendTask>
@@ -392,11 +392,11 @@
     <bpmn:receiveTask id="Activity_ReceiveFWAInfoResponse" name="Receive FWA Info Response" messageRef="Message_154ipo1">
       <bpmn:incoming>Flow_0xebx2i</bpmn:incoming>
     </bpmn:receiveTask>
-    <bpmn:sendTask id="Activity_1jck5w8" name="Missing info Rejection Email to Policy Holder" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:delegateExpression="com.DronaPay.frm.HealthClaim.FWAMissingInfoRejectionMail">
+    <bpmn:sendTask id="Activity_1jck5w8" name="Missing info Rejection Email to Policy Holder" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FWAMissingInfoRejectionMail">
       <bpmn:incoming>Flow_1d0tsww</bpmn:incoming>
       <bpmn:outgoing>Flow_0kpfbwi</bpmn:outgoing>
     </bpmn:sendTask>
-    <bpmn:sendTask id="Activity_0ytppf9" name="Send FWA Reminder" camunda:delegateExpression="com.DronaPay.frm.HealthClaim.SendFWAReminderMail">
+    <bpmn:sendTask id="Activity_0ytppf9" name="Send FWA Reminder" camunda:class="com.DronaPay.frm.HealthClaim.SendFWAReminderMail">
       <bpmn:incoming>Flow_0k70ifz</bpmn:incoming>
       <bpmn:outgoing>Flow_1m4191f</bpmn:outgoing>
     </bpmn:sendTask>
