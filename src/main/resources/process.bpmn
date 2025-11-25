@@ -369,6 +369,7 @@
         </camunda:formData>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_0vxvqkn</bpmn:incoming>
+      <bpmn:incoming>Flow_0974uhc</bpmn:incoming>
       <bpmn:outgoing>Flow_1tv2yp4</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:exclusiveGateway id="Gateway_FWAReviewDecision" name="FWA Review Decision">
@@ -391,6 +392,7 @@
     </bpmn:endEvent>
     <bpmn:receiveTask id="Activity_ReceiveFWAInfoResponse" name="Receive FWA Info Response" messageRef="Message_154ipo1">
       <bpmn:incoming>Flow_0xebx2i</bpmn:incoming>
+      <bpmn:outgoing>Flow_0974uhc</bpmn:outgoing>
     </bpmn:receiveTask>
     <bpmn:sendTask id="Activity_1jck5w8" name="Missing info Rejection Email to Policy Holder" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FWAMissingInfoRejectionMail">
       <bpmn:incoming>Flow_1d0tsww</bpmn:incoming>
@@ -423,6 +425,7 @@
     <bpmn:sequenceFlow id="Flow_1b7zwic" name="Reject" sourceRef="Gateway_FWAReviewDecision" targetRef="Activity_16cm9bp">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${fwaReviewAction == "rejectClaim"}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_0974uhc" sourceRef="Activity_ReceiveFWAInfoResponse" targetRef="Activity_ReviewFWAResults" />
   </bpmn:process>
   <bpmn:error id="Error_1brcit7" name="forgeddoc" />
   <bpmn:message id="Message_3r951pg" name="policyHolderResponse" />
@@ -852,6 +855,12 @@
         <bpmndi:BPMNLabel>
           <dc:Bounds x="2733" y="283" width="33" height="14" />
         </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0974uhc_di" bpmnElement="Flow_0974uhc">
+        <di:waypoint x="2450" y="580" />
+        <di:waypoint x="2450" y="690" />
+        <di:waypoint x="2520" y="690" />
+        <di:waypoint x="2520" y="800" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

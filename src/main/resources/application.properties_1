@@ -60,3 +60,11 @@ email.recipientVariable=sender_email
 # Body parameter mappings (template variable name -> process variable name)
 email.bodyParam.name=holder_name
 email.bodyParam.policyId=policy_id
+
+
+
+# FWA Review Email Template IDs
+email.requestFWAInfo.templateId=16
+email.fwaReminder.templateId=17
+email.fwaMissingInfo.templateId=18
+email.fwaRejection.templateId=19
