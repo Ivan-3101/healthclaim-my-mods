@@ -23,7 +23,7 @@ uiserver.apikey=f877a5b1-b6d6-4733-9d2e-0509538e536e
 springapi.url=https://main.dev.dronapay.net/springapi
 springapi.api.key=add98899-1729-4e82-beae-25ec43e4128a
 
-ai.agent.url=http://host.docker.internal:8000
+ai.agent.url=https://main.dev.dronapay.net/dia
 ai.agent.username=batchuser
 ai.agent.password=100!batch
 
