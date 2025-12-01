@@ -41,6 +41,13 @@ import java.util.UUID;
  *       },
  *       "errorHandling": {"errorCode": "failedFWA"}
  *     }
+ *   },
+ *   "externalAPIs": {
+ *     "springAPI": {
+ *       "baseUrl": "https://main.dev.dronapay.net/springapi",
+ *       "apiKey": "...",
+ *       "endpoints": { "score": "/score" }
+ *     }
  *   }
  * }
  */
@@ -89,8 +96,10 @@ public class GenericScoringAPIDelegate implements JavaDelegate {
         // 5. Build request body
         JSONObject requestBody = buildRequestBody(scoringConfig, execution);
 
-        // 6. Call API
-        APIServices apiServices = new APIServices(tenantId);
+        // 6. Initialize APIServices with workflow configuration (NEW!)
+        APIServices apiServices = new APIServices(tenantId, workflowConfig);
+
+        // 7. Call API
         CloseableHttpResponse response = null;
 
         if (scoringType.equals("fwaDecisioning")) {
@@ -101,7 +110,7 @@ public class GenericScoringAPIDelegate implements JavaDelegate {
             throw new IllegalArgumentException("Unknown scoring type: " + scoringType);
         }
 
-        // 7. Process response
+        // 8. Process response
         processResponse(response, scoringConfig, execution, scoringType);
 
         log.info("=== Generic Scoring API Delegate Completed ===");
