@@ -40,14 +40,19 @@ public class APIServices {
     private String ai_agent_password;
 
     /**
-     * Constructor that loads configuration from database (preferred)
-     * Falls back to properties file if database config not found
+     * Constructor that loads configuration from database (REQUIRED)
+     * NO fallback to properties file - will throw exception if config missing
      *
      * @param tenantid - Tenant ID
-     * @param workflowConfig - Workflow configuration from database (optional)
+     * @param workflowConfig - Workflow configuration from database (REQUIRED)
      * @throws IOException
+     * @throws IllegalArgumentException if external API config not found in database
      */
     public APIServices(String tenantid, JSONObject workflowConfig) throws IOException {
+        if (workflowConfig == null) {
+            throw new IllegalArgumentException("workflowConfig cannot be null - database configuration is required");
+        }
+
         // Load tenant properties (for email, storage, etc.)
         Properties props = TenantPropertiesUtil.getTenantProps(tenantid);
 
@@ -69,69 +74,67 @@ public class APIServices {
         this.smtpProps.put("mail.smtp.writetimeout", props.getProperty("mail.smtp.writetimeout"));
         this.smtpProps.put("mail.smtp.starttls.enable", props.getProperty("mail.smtp.starttls.enable"));
 
-        // Load external API configuration from database or fallback to properties
-        loadExternalAPIConfig(workflowConfig, props);
+        // Load external API configuration from database (NO FALLBACK)
+        loadExternalAPIConfig(workflowConfig);
 
         log.info("APIServices initialized - Spring API: {}, Agent API: {}",
                 this.spring_api_url, this.ai_agent_url);
     }
 
     /**
-     * Legacy constructor for backward compatibility
-     * Loads all configuration from properties file
-     *
-     * @param tenantid - Tenant ID
-     * @throws IOException
+     * Load external API configuration from database - NO FALLBACK
+     * Throws exception if configuration not found
      */
-    public APIServices(String tenantid) throws IOException {
-        this(tenantid, null);
-    }
-
-    /**
-     * Load external API configuration from database with fallback to properties
-     */
-    private void loadExternalAPIConfig(JSONObject workflowConfig, Properties props) {
-        boolean loadedFromDB = false;
-
-        // Try to load from database first
-        if (workflowConfig != null && workflowConfig.has("externalAPIs")) {
-            try {
-                JSONObject externalAPIs = workflowConfig.getJSONObject("externalAPIs");
-
-                // Load Spring API config
-                if (externalAPIs.has("springAPI")) {
-                    JSONObject springAPI = externalAPIs.getJSONObject("springAPI");
-                    this.spring_api_url = springAPI.getString("baseUrl");
-                    this.spring_api_key = springAPI.getString("apiKey");
-                    loadedFromDB = true;
-                    log.debug("Loaded Spring API config from database");
-                }
-
-                // Load Agent API config
-                if (externalAPIs.has("agentAPI")) {
-                    JSONObject agentAPI = externalAPIs.getJSONObject("agentAPI");
-                    this.ai_agent_url = agentAPI.getString("baseUrl");
-                    this.ai_agent_username = agentAPI.getString("username");
-                    this.ai_agent_password = agentAPI.getString("password");
-                    loadedFromDB = true;
-                    log.debug("Loaded Agent API config from database");
-                }
-
-            } catch (Exception e) {
-                log.warn("Failed to load external API config from database, falling back to properties", e);
-                loadedFromDB = false;
-            }
+    private void loadExternalAPIConfig(JSONObject workflowConfig) {
+        if (!workflowConfig.has("externalAPIs")) {
+            throw new IllegalArgumentException(
+                    "External API configuration not found in database. " +
+                            "Please ensure 'externalAPIs' section exists in ui.workflowmasters.filterparams"
+            );
         }
 
-        // Fallback to properties file if database config not found
-        if (!loadedFromDB) {
-            this.spring_api_url = props.getProperty("springapi.url");
-            this.spring_api_key = props.getProperty("springapi.api.key");
-            this.ai_agent_url = props.getProperty("ai.agent.url");
-            this.ai_agent_username = props.getProperty("ai.agent.username");
-            this.ai_agent_password = props.getProperty("ai.agent.password");
-            log.debug("Loaded API config from properties file (fallback)");
+        JSONObject externalAPIs = workflowConfig.getJSONObject("externalAPIs");
+
+        // Load Spring API config (REQUIRED)
+        if (!externalAPIs.has("springAPI")) {
+            throw new IllegalArgumentException(
+                    "Spring API configuration not found in database. " +
+                            "Please add 'springAPI' section to externalAPIs configuration"
+            );
         }
+
+        JSONObject springAPI = externalAPIs.getJSONObject("springAPI");
+
+        if (!springAPI.has("baseUrl") || !springAPI.has("apiKey")) {
+            throw new IllegalArgumentException(
+                    "Spring API configuration incomplete. Required fields: baseUrl, apiKey"
+            );
+        }
+
+        this.spring_api_url = springAPI.getString("baseUrl");
+        this.spring_api_key = springAPI.getString("apiKey");
+        log.info("Loaded Spring API config from database: {}", this.spring_api_url);
+
+        // Load Agent API config (REQUIRED)
+        if (!externalAPIs.has("agentAPI")) {
+            throw new IllegalArgumentException(
+                    "Agent API configuration not found in database. " +
+                            "Please add 'agentAPI' section to externalAPIs configuration"
+            );
+        }
+
+        JSONObject agentAPI = externalAPIs.getJSONObject("agentAPI");
+
+        if (!agentAPI.has("baseUrl") || !agentAPI.has("username") || !agentAPI.has("password")) {
+            throw new IllegalArgumentException(
+                    "Agent API configuration incomplete. Required fields: baseUrl, username, password"
+            );
+        }
+
+        this.ai_agent_url = agentAPI.getString("baseUrl");
+        this.ai_agent_username = agentAPI.getString("username");
+        this.ai_agent_password = agentAPI.getString("password");
+        log.info("Loaded Agent API config from database: {}", this.ai_agent_url);
     }
 
     public void sendEmailViaUiserver(JSONObject emailReqBody, String tenantid) throws Exception {
@@ -267,18 +270,16 @@ public class APIServices {
         return response;
 
     }
+
     public CloseableHttpResponse callPolicyComparatorAgent(String body) throws IOException, URISyntaxException {
 
         log.info("Call Policy Comparator Agent API Called with body " + body);
 
         CloseableHttpClient client = HttpClients.createDefault();
-        // The endpoint from the PDF
         URI uri = new URI(String.format("%s/agent", this.ai_agent_url));
-//        HAVE TO CHANGE THE ABOVE URL TO THE DEV ONE, BEFORE ILL DO THE TEST ON POSTMAN TO THE API
         HttpPost httpPost = new HttpPost(uri);
         httpPost.addHeader("Content-Type", "application/json");
 
-        // Assuming the same authentication as the other AI agent
         String auth = this.ai_agent_username + ":" + this.ai_agent_password;
         String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
         String authHeader = "Basic " + encodedAuth;

@@ -1,6 +1,5 @@
 package com.DronaPay.frm.HealthClaim.generic.delegates;
 
-import com.DronaPay.frm.HealthClaim.APIServices;
 import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -16,7 +15,6 @@ import org.json.JSONObject;
 
 import java.net.URI;
 import java.sql.Connection;
-import java.util.Properties;
 
 @Slf4j
 public class GenericMasterDataVerificationDelegate implements JavaDelegate {
@@ -38,8 +36,8 @@ public class GenericMasterDataVerificationDelegate implements JavaDelegate {
         JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig(workflowKey, tenantId, conn);
         conn.close();
 
-        // 2. Load verification configuration
-        VerificationConfig config = loadConfiguration(tenantId, workflowConfig);
+        // 2. Load verification configuration from database (NO FALLBACK)
+        VerificationConfig config = loadConfiguration(workflowConfig);
 
         // 3. Get the identifier to verify (e.g., policy_id)
         String identifier = (String) execution.getVariable(config.identifierVariable);
@@ -91,43 +89,49 @@ public class GenericMasterDataVerificationDelegate implements JavaDelegate {
     }
 
     /**
-     * Load verification configuration from workflow config or properties
+     * Load verification configuration from database - NO FALLBACK
+     * Throws exception if configuration not found
      */
-    private VerificationConfig loadConfiguration(String tenantId, JSONObject workflowConfig) throws Exception {
-        VerificationConfig config = new VerificationConfig();
-
-        // Try to load from workflow config first
-        if (workflowConfig != null && workflowConfig.has("externalAPIs")) {
-            JSONObject externalAPIs = workflowConfig.getJSONObject("externalAPIs");
-
-            if (externalAPIs.has("springAPI")) {
-                JSONObject springAPI = externalAPIs.getJSONObject("springAPI");
-                config.baseUrl = springAPI.getString("baseUrl");
-                config.apiKey = springAPI.getString("apiKey");
-
-                // Get endpoint pattern from config
-                if (springAPI.has("endpoints") && springAPI.getJSONObject("endpoints").has("accounts")) {
-                    config.endpointPattern = springAPI.getJSONObject("endpoints").getString("accounts");
-                } else {
-                    config.endpointPattern = "/accounts/{identifier}";
-                }
-
-                log.debug("Loaded master data verification config from database");
-            }
+    private VerificationConfig loadConfiguration(JSONObject workflowConfig) {
+        if (!workflowConfig.has("externalAPIs")) {
+            throw new IllegalArgumentException(
+                    "External API configuration not found in database. " +
+                            "Please ensure 'externalAPIs' section exists in ui.workflowmasters.filterparams"
+            );
         }
 
-        // Fallback to properties if not found in database
-        if (config.baseUrl == null) {
-            Properties props = ConfigurationService.getTenantProperties(tenantId);
-            config.baseUrl = props.getProperty("springapi.url");
-            config.apiKey = props.getProperty("springapi.api.key");
+        JSONObject externalAPIs = workflowConfig.getJSONObject("externalAPIs");
+
+        if (!externalAPIs.has("springAPI")) {
+            throw new IllegalArgumentException(
+                    "Spring API configuration not found in externalAPIs. " +
+                            "Please add 'springAPI' section to database configuration"
+            );
+        }
+
+        JSONObject springAPI = externalAPIs.getJSONObject("springAPI");
+
+        if (!springAPI.has("baseUrl") || !springAPI.has("apiKey")) {
+            throw new IllegalArgumentException(
+                    "Spring API configuration incomplete. Required fields: baseUrl, apiKey"
+            );
+        }
+
+        VerificationConfig config = new VerificationConfig();
+        config.baseUrl = springAPI.getString("baseUrl");
+        config.apiKey = springAPI.getString("apiKey");
+
+        // Get endpoint pattern from config
+        if (springAPI.has("endpoints") && springAPI.getJSONObject("endpoints").has("accounts")) {
+            config.endpointPattern = springAPI.getJSONObject("endpoints").getString("accounts");
+        } else {
             config.endpointPattern = "/accounts/{identifier}";
-            log.debug("Loaded master data verification config from properties (fallback)");
         }
 
         // Identifier variable name (can be made configurable)
         config.identifierVariable = "policy_id";
 
+        log.info("Loaded master data verification config from database - URL: {}", config.baseUrl);
         return config;
     }
 

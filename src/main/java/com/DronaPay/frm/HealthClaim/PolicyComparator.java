@@ -1,5 +1,6 @@
 package com.DronaPay.frm.HealthClaim;
 
+import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
 import org.json.JSONArray;
@@ -8,6 +9,7 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.util.EntityUtils;
 import lombok.extern.slf4j.Slf4j;
 
+import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -42,8 +44,16 @@ public class PolicyComparator implements JavaDelegate {
 
         log.info(">>>> PolicyComparator BUILT Request Body: " + requestBody.toString());
 
-        // 3. Call the agent
-        APIServices apiServices = new APIServices(execution.getTenantId());
+        // 3. Load workflow config and call the agent
+        Connection conn = execution.getProcessEngine()
+                .getProcessEngineConfiguration()
+                .getDataSource()
+                .getConnection();
+
+        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", execution.getTenantId(), conn);
+        conn.close();
+
+        APIServices apiServices = new APIServices(execution.getTenantId(), workflowConfig);
         CloseableHttpResponse response = apiServices.callPolicyComparatorAgent(requestBody.toString());
 
         // 4. Process the response

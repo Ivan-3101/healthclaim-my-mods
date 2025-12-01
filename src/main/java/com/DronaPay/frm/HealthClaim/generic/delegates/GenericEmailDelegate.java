@@ -8,6 +8,7 @@ import org.camunda.bpm.engine.delegate.JavaDelegate;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.sql.Connection;
 import java.util.Properties;
 
 /**
@@ -47,14 +48,23 @@ public class GenericEmailDelegate implements JavaDelegate {
 
         log.info("Sending email - Type: {}, Workflow: {}, Tenant: {}", emailType, workflowKey, tenantId);
 
-        // 3. Load email configuration
+        // 3. Load workflow configuration from database
+        Connection conn = execution.getProcessEngine()
+                .getProcessEngineConfiguration()
+                .getDataSource()
+                .getConnection();
+
+        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig(workflowKey, tenantId, conn);
+        conn.close();
+
+        // 4. Load email configuration
         EmailConfig config = loadEmailConfiguration(emailType, tenantId);
 
-        // 4. Build email request body
+        // 5. Build email request body
         JSONObject reqBody = buildEmailRequest(config, execution, tenantId);
 
-        // 5. Send email
-        APIServices apiServices = new APIServices(tenantId);
+        // 6. Send email (with workflowConfig)
+        APIServices apiServices = new APIServices(tenantId, workflowConfig);
         apiServices.sendEmailViaUiserver(reqBody, tenantId);
 
         log.info("Email sent successfully - Type: {}, Template ID: {}", emailType, config.templateId);

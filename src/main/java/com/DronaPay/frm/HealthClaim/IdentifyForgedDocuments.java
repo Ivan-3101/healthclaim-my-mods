@@ -1,10 +1,12 @@
 package com.DronaPay.frm.HealthClaim;
 
 import java.io.InputStream;
+import java.sql.Connection;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
 import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
 import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
 import org.apache.commons.io.IOUtils;
@@ -24,7 +26,6 @@ public class IdentifyForgedDocuments implements JavaDelegate {
     public void execute(DelegateExecution execution) throws Exception {
         log.info("Identify Forged Documents called by ticket id " + execution.getVariable("TicketID"));
 
-        // --- CHANGED: Retrieve from MinIO instead of FileValue ---
         String filename = (String) execution.getVariable("attachment");
         Map<String, String> documentPaths = (Map<String, String>) execution.getVariable("documentPaths");
 
@@ -37,10 +38,8 @@ public class IdentifyForgedDocuments implements JavaDelegate {
 
         log.info("Downloading document from storage: {}", storagePath);
 
-        // Download from Storage
         StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
         InputStream fileContent = storage.downloadDocument(storagePath);
-        // ---------------------------------------------------------
 
         byte[] bytes = IOUtils.toByteArray(fileContent);
         String base64 = Base64.getEncoder().encodeToString(bytes);
@@ -53,7 +52,16 @@ public class IdentifyForgedDocuments implements JavaDelegate {
         requestBody.put("data", data);
         requestBody.put("agentid", "forgeryagent");
 
-        APIServices apiServices = new APIServices(execution.getTenantId());
+        // Load workflow config
+        Connection conn = execution.getProcessEngine()
+                .getProcessEngineConfiguration()
+                .getDataSource()
+                .getConnection();
+
+        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
+        conn.close();
+
+        APIServices apiServices = new APIServices(tenantId, workflowConfig);
         CloseableHttpResponse response = apiServices.callAgent(requestBody.toString());
 
         String resp = EntityUtils.toString(response.getEntity());
@@ -82,7 +90,6 @@ public class IdentifyForgedDocuments implements JavaDelegate {
         Map<String, Map<String, Object>> fileProcessMap = (Map<String, Map<String, Object>>) execution
                 .getVariable("fileProcessMap");
 
-        // Ensure map is initialized (just in case)
         if (fileProcessMap == null) {
             fileProcessMap = new HashMap<>();
         }
