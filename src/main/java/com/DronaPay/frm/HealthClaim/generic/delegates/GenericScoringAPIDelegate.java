@@ -242,6 +242,46 @@ public class GenericScoringAPIDelegate implements JavaDelegate {
         // Store response for debugging
         execution.setVariable(scoringType + "Response", resp);
 
+        // Set display variable for FWA Review form
+        if (scoringType.equals("fwaDecisioning")) {
+            try {
+                JSONObject fwaJson = new JSONObject(resp);
+                StringBuilder analysis = new StringBuilder();
+
+                analysis.append("Status: ").append(fwaJson.optString("status", "Unknown")).append("\n");
+                analysis.append("Message: ").append(fwaJson.optString("msg", "N/A")).append("\n\n");
+
+                if (fwaJson.has("score")) {
+                    JSONObject scoreObj = fwaJson.getJSONObject("score");
+                    analysis.append("Overall Score: ").append(scoreObj.optDouble("score", 0.0)).append("\n\n");
+
+                    if (scoreObj.has("decisiondetails")) {
+                        analysis.append("Triggered Rules:\n");
+                        JSONArray details = scoreObj.getJSONArray("decisiondetails");
+
+                        for (int i = 0; i < details.length(); i++) {
+                            JSONObject rule = details.getJSONObject(i);
+                            double ruleScore = rule.optDouble("score", 0.0);
+
+                            // Only show rules that contributed to score or are explicitly flagged
+                            if (ruleScore > 0 || !rule.optBoolean("status", true)) {
+                                analysis.append("  • ").append(rule.optString("rulename", "Unknown Rule"));
+                                if (ruleScore > 0) {
+                                    analysis.append(" (Score: ").append(ruleScore).append(")");
+                                }
+                                analysis.append("\n");
+                            }
+                        }
+                    }
+                }
+
+                execution.setVariable("fwaResponse", analysis.toString());
+            } catch (Exception e) {
+                log.error("Error formatting FWA response", e);
+                execution.setVariable("fwaResponse", "Error parsing FWA analysis");
+            }
+        }
+
         if (statusCode != 200) {
             log.error("Scoring API failed with status: {}", statusCode);
 
