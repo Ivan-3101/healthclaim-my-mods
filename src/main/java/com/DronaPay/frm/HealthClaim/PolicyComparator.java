@@ -1,110 +1,141 @@
 package com.DronaPay.frm.HealthClaim;
 
-import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
+import com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentExecutorDelegate;
+import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.util.EntityUtils;
-import lombok.extern.slf4j.Slf4j;
 
-import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
 public class PolicyComparator implements JavaDelegate {
 
+    private final GenericAgentExecutorDelegate genericDelegate = new GenericAgentExecutorDelegate();
+
     @Override
     public void execute(DelegateExecution execution) throws Exception {
-        log.info("Policy Comparator service called for ticket id " + execution.getVariable("TicketID"));
+        log.debug("PolicyComparator wrapper called - delegating to generic");
 
-        // 1. Get the FHIR data from the process variables
-        String fhirData = (String) execution.getVariable("fhir_json");
+        // Build agent config for backward compatibility
+        JSONObject agentConfig = new JSONObject();
+        agentConfig.put("agentId", "policy_comp");
+        agentConfig.put("displayName", "Policy Comparator");
+        agentConfig.put("enabled", true);
+        agentConfig.put("critical", false);
 
-        log.info(">>>> PolicyComparator READ Process Variable 'fhir_json': " + fhirData);
+        JSONObject config = new JSONObject();
 
-        // 2. Construct the request payload
-        JSONObject requestBody = new JSONObject();
-        JSONObject data = new JSONObject();
+        // Input mapping - uses fhir_json process variable
+        JSONObject inputMapping = new JSONObject();
+        inputMapping.put("source", "processVariable");
+        inputMapping.put("variableName", "fhir_json");
+        config.put("inputMapping", inputMapping);
 
-        // Handle null FHIR data
-        if (fhirData == null || fhirData.trim().isEmpty()) {
-            log.error("FHIR JSON data is null or empty. Cannot proceed with Policy Comparator.");
-            execution.setVariable("policyMissingInfo", "FHIR data not available");
-            execution.setVariable("policyPotentialIssues", "Unable to compare policy - FHIR data missing");
-            execution.setVariable("policyComparatorStatus", "failed");
-            return;
-        }
+        // Output mapping - we'll extract fields manually after generic delegate runs
+        JSONObject outputMapping = new JSONObject();
+        JSONObject variablesToSet = new JSONObject();
 
-        data.put("doc_fhir", new JSONObject(fhirData));
-        requestBody.put("data", data);
-        requestBody.put("agentid", "policy_comp");
+        // Store raw answer for later processing
+        JSONObject rawMapping = new JSONObject();
+        rawMapping.put("jsonPath", "/answer");
+        rawMapping.put("dataType", "json");
+        variablesToSet.put("policyComparatorRawResponse", rawMapping);
 
-        log.info(">>>> PolicyComparator BUILT Request Body: " + requestBody.toString());
+        outputMapping.put("variablesToSet", variablesToSet);
+        config.put("outputMapping", outputMapping);
 
-        // 3. Load workflow config and call the agent
-        Connection conn = execution.getProcessEngine()
-                .getProcessEngineConfiguration()
-                .getDataSource()
-                .getConnection();
+        // Error handling
+        JSONObject errorHandling = new JSONObject();
+        errorHandling.put("onFailure", "logAndContinue");
+        errorHandling.put("continueOnError", true);
+        config.put("errorHandling", errorHandling);
 
-        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", execution.getTenantId(), conn);
-        conn.close();
+        agentConfig.put("config", config);
 
-        APIServices apiServices = new APIServices(execution.getTenantId(), workflowConfig);
-        CloseableHttpResponse response = apiServices.callPolicyComparatorAgent(requestBody.toString());
+        // Set as current agent config
+        execution.setVariable("currentAgentConfig", agentConfig);
 
-        // 4. Process the response
-        String resp = EntityUtils.toString(response.getEntity());
-        int statusCode = response.getStatusLine().getStatusCode();
-        log.info("Policy Comparator API status " + statusCode);
-        log.info("Policy Comparator API response " + resp);
+        // Execute via generic delegate - THIS WILL STORE IN MINIO
+        genericDelegate.execute(execution);
 
-        if (statusCode == 200) {
-            try {
-                JSONObject responseJson = new JSONObject(resp);
-                JSONObject answer = responseJson.getJSONObject("answer");
-                JSONArray list2 = answer.getJSONArray("List 2");
+        // Now extract policy comparison fields from the stored response
+        extractPolicyComparisonFields(execution);
 
-                List<String> potentialIssues = new ArrayList<>();
-                List<String> missingInfoItems = new ArrayList<>();
+        log.debug("PolicyComparator completed via generic delegate with MinIO storage");
+    }
 
-                for (int i = 0; i < list2.length(); i++) {
-                    JSONObject item = list2.getJSONObject(i);
-                    String status = item.optString("Status/Issue", "");
-                    String area = item.optString("Question/Area", "Unknown Area");
+    /**
+     * Extract policy comparison fields from raw response
+     * This maintains backward compatibility with existing form fields
+     */
+    private void extractPolicyComparisonFields(DelegateExecution execution) {
+        try {
+            Object rawResponseObj = execution.getVariable("policyComparatorRawResponse");
 
-                    if ("Missing information".equalsIgnoreCase(status)) {
-                        missingInfoItems.add(area);
-                    } else if (!"Match".equalsIgnoreCase(status)) {
-                        potentialIssues.add(area + ": " + status);
-                    }
-                }
-
-                // Save smaller, specific variables
-                String missingInfo = missingInfoItems.isEmpty() ? "None" : String.join(", ", missingInfoItems);
-                String issues = potentialIssues.isEmpty() ? "None" : String.join("\n", potentialIssues);
-
-                execution.setVariable("policyMissingInfo", missingInfo);
-                execution.setVariable("policyPotentialIssues", issues);
-                execution.setVariable("policyComparatorStatus", "success");
-
-                log.info(">>>> PolicyComparator SET 'policyMissingInfo': " + missingInfo);
-                log.info(">>>> PolicyComparator SET 'policyPotentialIssues': " + issues);
-
-            } catch (Exception e) {
-                log.error("Error parsing Policy Comparator response: " + e.getMessage(), e);
-                execution.setVariable("policyMissingInfo", "Error parsing response");
-                execution.setVariable("policyPotentialIssues", "Unable to extract policy comparison data");
-                execution.setVariable("policyComparatorStatus", "error");
+            if (rawResponseObj == null) {
+                log.warn("No raw response from policy comparator");
+                execution.setVariable("policyMissingInfo", "Error: No response from policy comparator");
+                execution.setVariable("policyPotentialIssues", "Unable to perform policy comparison");
+                execution.setVariable("policyComparatorStatus", "failed");
+                return;
             }
-        } else {
-            log.error("Policy Comparator API returned status code: " + statusCode);
-            execution.setVariable("policyMissingInfo", "API call failed");
-            execution.setVariable("policyPotentialIssues", "Unable to compare policy - API error " + statusCode);
-            execution.setVariable("policyComparatorStatus", "failed");
+
+            // Convert to JSONObject
+            JSONObject answer;
+            if (rawResponseObj instanceof String) {
+                answer = new JSONObject((String) rawResponseObj);
+            } else if (rawResponseObj instanceof JSONObject) {
+                answer = (JSONObject) rawResponseObj;
+            } else {
+                log.error("Unexpected response type: {}", rawResponseObj.getClass());
+                execution.setVariable("policyComparatorStatus", "error");
+                return;
+            }
+
+            // Check if "List 2" exists
+            if (!answer.has("List 2")) {
+                log.warn("Policy comparator response missing 'List 2' field");
+                execution.setVariable("policyMissingInfo", "None");
+                execution.setVariable("policyPotentialIssues", "None");
+                execution.setVariable("policyComparatorStatus", "success");
+                return;
+            }
+
+            JSONArray list2Array = answer.getJSONArray("List 2");
+
+            List<String> potentialIssues = new ArrayList<>();
+            List<String> missingInfoItems = new ArrayList<>();
+
+            for (int i = 0; i < list2Array.length(); i++) {
+                JSONObject item = list2Array.getJSONObject(i);
+                String status = item.optString("Status/Issue", "");
+                String area = item.optString("Question/Area", "Unknown Area");
+
+                if ("Missing information".equalsIgnoreCase(status)) {
+                    missingInfoItems.add(area);
+                } else if (!"Match".equalsIgnoreCase(status) && !status.isEmpty()) {
+                    potentialIssues.add(area + ": " + status);
+                }
+            }
+
+            // Set process variables for user task form
+            String missingInfo = missingInfoItems.isEmpty() ? "None" : String.join(", ", missingInfoItems);
+            String issues = potentialIssues.isEmpty() ? "None" : String.join("\n", potentialIssues);
+
+            execution.setVariable("policyMissingInfo", missingInfo);
+            execution.setVariable("policyPotentialIssues", issues);
+            execution.setVariable("policyComparatorStatus", "success");
+
+            log.info("Extracted policy comparison: Missing={}, Issues={}", missingInfo, issues);
+
+        } catch (Exception e) {
+            log.error("Error extracting policy comparison fields", e);
+            execution.setVariable("policyMissingInfo", "Error parsing response");
+            execution.setVariable("policyPotentialIssues", "Unable to extract policy comparison data");
+            execution.setVariable("policyComparatorStatus", "error");
         }
     }
 }

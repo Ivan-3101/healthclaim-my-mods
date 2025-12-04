@@ -85,7 +85,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         log.info("Agent '{}' API status: {}", displayName, statusCode);
         log.debug("Agent '{}' response: {}", displayName, resp);
 
-        // 6. Process response, extract data, and store in MinIO
+        // 6. Process response, extract data, and store in MinIO (BOTH locations)
         processAndStoreResponse(agentId, displayName, statusCode, resp, config,
                 execution, filename, critical, tenantId, ticketId);
 
@@ -160,7 +160,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
     }
 
     /**
-     * Process agent response, extract data, and store in MinIO
+     * Process agent response, extract data, and store in MinIO (BOTH locations)
      */
     @SuppressWarnings("unchecked")
     private void processAndStoreResponse(String agentId, String displayName, int statusCode, String resp,
@@ -230,16 +230,17 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
             }
         }
 
-        // Store result in MinIO
+        // Store result in MinIO - BOTH locations (document-wise AND stage-wise)
         Map<String, Object> resultToStore = AgentResultStorageService.buildResultMap(
                 agentId, statusCode, resp, extractedData
         );
 
-        String storagePath = AgentResultStorageService.storeAgentResult(
+        // This stores in BOTH locations and returns the stage-wise path as primary
+        String primaryStoragePath = AgentResultStorageService.storeAgentResultBoth(
                 tenantId, ticketId, filename, agentId, resultToStore
         );
 
-        // Update fileProcessMap with storage path
+        // Update fileProcessMap with primary storage path (stage-wise)
         Map<String, Map<String, Object>> fileProcessMap =
                 (Map<String, Map<String, Object>>) execution.getVariable("fileProcessMap");
 
@@ -249,9 +250,9 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
 
         Map<String, Object> fileResults = fileProcessMap.getOrDefault(filename, new HashMap<>());
 
-        // Store MinIO path instead of inline data
+        // Store primary path (stage-wise)
         Map<String, Object> agentResult = new HashMap<>();
-        agentResult.put("storagePath", storagePath);
+        agentResult.put("storagePath", primaryStoragePath);
         agentResult.put("statusCode", statusCode);
         agentResult.put("apiCall", statusCode == 200 ? "success" : "failed");
 
@@ -260,7 +261,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
 
         execution.setVariable("fileProcessMap", fileProcessMap);
 
-        log.info("Stored {} result in MinIO: {}", agentId, storagePath);
+        log.info("Updated fileProcessMap with {} result for {}", agentId, filename);
     }
 
     /**
