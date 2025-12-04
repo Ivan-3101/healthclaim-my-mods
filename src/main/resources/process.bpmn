@@ -385,6 +385,7 @@
     <bpmn:subProcess id="Activity_17h17ae">
       <bpmn:incoming>Flow_0hxlb17</bpmn:incoming>
       <bpmn:outgoing>Flow_0450puq</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_11ox0g4">
         <bpmn:outgoing>Flow_1c5c7cj</bpmn:outgoing>
       </bpmn:startEvent>
@@ -402,6 +403,7 @@
     <bpmn:subProcess id="Activity_1kzv5fa">
       <bpmn:incoming>Flow_0450puq</bpmn:incoming>
       <bpmn:outgoing>Flow_037ubon</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_0xxno63">
         <bpmn:outgoing>Flow_0we714j</bpmn:outgoing>
       </bpmn:startEvent>
@@ -419,6 +421,7 @@
     <bpmn:subProcess id="Activity_0dq1j5w">
       <bpmn:incoming>Flow_037ubon</bpmn:incoming>
       <bpmn:outgoing>Flow_0a99iva</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_1q9gq8u">
         <bpmn:outgoing>Flow_1tr9rb1</bpmn:outgoing>
       </bpmn:startEvent>
@@ -436,6 +439,7 @@
     <bpmn:subProcess id="Activity_1h40fkc">
       <bpmn:incoming>Flow_0a99iva</bpmn:incoming>
       <bpmn:outgoing>Flow_09f7n4i</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_01kjxh9">
         <bpmn:outgoing>Flow_1jkpgnr</bpmn:outgoing>
       </bpmn:startEvent>

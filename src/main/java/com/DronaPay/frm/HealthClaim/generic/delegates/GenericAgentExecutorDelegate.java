@@ -1,6 +1,7 @@
 package com.DronaPay.frm.HealthClaim.generic.delegates;
 
 import com.DronaPay.frm.HealthClaim.APIServices;
+import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
 import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
 import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
 import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
@@ -25,12 +26,14 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
     @Override
     public void execute(DelegateExecution execution) throws Exception {
         log.info("=== Generic Agent Executor Started ===");
-        log.info("TicketID: {}", execution.getVariable("TicketID"));
 
         String tenantId = execution.getTenantId();
+        String ticketId = String.valueOf(execution.getVariable("TicketID"));
         String filename = (String) execution.getVariable("attachment");
 
-        // 1. Get agent configuration from process variable
+        log.info("Processing: TicketID={}, File={}", ticketId, filename);
+
+        // 1. Get agent configuration
         Object agentConfigObj = execution.getVariable("currentAgentConfig");
         if (agentConfigObj == null) {
             throw new IllegalArgumentException("currentAgentConfig variable is required");
@@ -69,7 +72,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
         conn.close();
 
-        // 4. Build request based on input mapping (pass agentId)
+        // 4. Build request based on input mapping
         JSONObject requestBody = buildRequest(config, execution, filename, tenantId, agentId);
 
         // 5. Call agent API
@@ -82,8 +85,9 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         log.info("Agent '{}' API status: {}", displayName, statusCode);
         log.debug("Agent '{}' response: {}", displayName, resp);
 
-        // 6. Process response and update fileProcessMap
-        processResponse(agentId, displayName, statusCode, resp, config, execution, filename, critical);
+        // 6. Process response, extract data, and store in MinIO
+        processAndStoreResponse(agentId, displayName, statusCode, resp, config,
+                execution, filename, critical, tenantId, ticketId);
 
         log.info("=== Generic Agent Executor Completed for {} ===", displayName);
     }
@@ -148,7 +152,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         }
 
         requestBody.put("data", data);
-        requestBody.put("agentid", agentId);  // FIXED: Use agentId parameter
+        requestBody.put("agentid", agentId);
 
         log.debug("Built request for agent '{}' with {} bytes of data", agentId, requestBody.toString().length());
 
@@ -156,31 +160,18 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
     }
 
     /**
-     * Process agent response and set process variables
+     * Process agent response, extract data, and store in MinIO
      */
     @SuppressWarnings("unchecked")
-    private void processResponse(String agentId, String displayName, int statusCode, String resp,
-                                 JSONObject config, DelegateExecution execution,
-                                 String filename, boolean critical) throws Exception {
+    private void processAndStoreResponse(String agentId, String displayName, int statusCode, String resp,
+                                         JSONObject config, DelegateExecution execution,
+                                         String filename, boolean critical, String tenantId, String ticketId) throws Exception {
 
-        // Update fileProcessMap
-        Map<String, Map<String, Object>> fileProcessMap =
-                (Map<String, Map<String, Object>>) execution.getVariable("fileProcessMap");
-
-        if (fileProcessMap == null) {
-            fileProcessMap = new HashMap<>();
-        }
-
-        Map<String, Object> agentOutput = fileProcessMap.getOrDefault(filename, new HashMap<>());
-
-        Map<String, Object> outputData = new HashMap<>();
-        outputData.put(agentId + "APIResponse", resp);
-        outputData.put(agentId + "APIStatusCode", statusCode);
+        // Build result map
+        Map<String, Object> extractedData = new HashMap<>();
 
         if (statusCode == 200) {
-            outputData.put(agentId + "APICall", "success");
-
-            // Parse response and set variables based on output mapping
+            // Parse response and extract variables based on output mapping
             JSONObject outputMapping = config.optJSONObject("outputMapping");
             if (outputMapping != null && outputMapping.has("variablesToSet")) {
                 JSONObject variablesToSet = outputMapping.getJSONObject("variablesToSet");
@@ -203,23 +194,25 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
 
                             // Convert to data type
                             Object convertedValue = convertValue(value, dataType);
+
+                            // Set process variable
                             execution.setVariable(variableName, convertedValue);
-                            outputData.put(variableName, convertedValue);
+
+                            // Add to extracted data for storage
+                            extractedData.put(variableName, convertedValue);
 
                             log.info("Set variable '{}' = {}", variableName, convertedValue);
                         } else if (mapping.has("defaultValue")) {
                             Object defaultValue = convertValue(mapping.get("defaultValue"), dataType);
                             execution.setVariable(variableName, defaultValue);
-                            outputData.put(variableName, defaultValue);
+                            extractedData.put(variableName, defaultValue);
                         }
                     } catch (Exception e) {
                         log.error("Error extracting variable '{}' from path '{}'", variableName, jsonPath, e);
                     }
                 }
             }
-
         } else {
-            outputData.put(agentId + "APICall", "failed");
             log.error("Agent '{}' failed with status: {}", displayName, statusCode);
 
             // Handle error based on configuration
@@ -233,15 +226,41 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
                     throw new BpmnError(errorCode, "Agent '" + displayName + "' failed with status: " + statusCode);
                 }
             } else if (critical) {
-                // Critical agent with no error handling - throw error
                 throw new BpmnError("agentFailure", "Critical agent '" + displayName + "' failed");
             }
         }
 
-        // Store output in fileProcessMap
-        agentOutput.put(agentId + "Output", outputData);
-        fileProcessMap.put(filename, agentOutput);
+        // Store result in MinIO
+        Map<String, Object> resultToStore = AgentResultStorageService.buildResultMap(
+                agentId, statusCode, resp, extractedData
+        );
+
+        String storagePath = AgentResultStorageService.storeAgentResult(
+                tenantId, ticketId, filename, agentId, resultToStore
+        );
+
+        // Update fileProcessMap with storage path
+        Map<String, Map<String, Object>> fileProcessMap =
+                (Map<String, Map<String, Object>>) execution.getVariable("fileProcessMap");
+
+        if (fileProcessMap == null) {
+            fileProcessMap = new HashMap<>();
+        }
+
+        Map<String, Object> fileResults = fileProcessMap.getOrDefault(filename, new HashMap<>());
+
+        // Store MinIO path instead of inline data
+        Map<String, Object> agentResult = new HashMap<>();
+        agentResult.put("storagePath", storagePath);
+        agentResult.put("statusCode", statusCode);
+        agentResult.put("apiCall", statusCode == 200 ? "success" : "failed");
+
+        fileResults.put(agentId + "Output", agentResult);
+        fileProcessMap.put(filename, fileResults);
+
         execution.setVariable("fileProcessMap", fileProcessMap);
+
+        log.info("Stored {} result in MinIO: {}", agentId, storagePath);
     }
 
     /**

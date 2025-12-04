@@ -1,16 +1,16 @@
 package com.DronaPay.frm.HealthClaim;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-
+import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
+import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import lombok.extern.slf4j.Slf4j;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class ProcessAgentResponse implements JavaDelegate {
@@ -20,6 +20,8 @@ public class ProcessAgentResponse implements JavaDelegate {
     public void execute(DelegateExecution execution) throws Exception {
         log.info("=== Process Agent Response Started ===");
         log.info("TicketID: {}", execution.getVariable("TicketID"));
+
+        String tenantId = execution.getTenantId();
 
         Map<String, Map<String, Object>> fileProcessMap = (Map<String, Map<String, Object>>) execution
                 .getVariable("fileProcessMap");
@@ -38,28 +40,28 @@ public class ProcessAgentResponse implements JavaDelegate {
 
         // Process each file's agent outputs
         for (String filename : fileProcessMap.keySet()) {
-            Map<String, Object> processedOutput = fileProcessMap.get(filename);
+            Map<String, Object> fileResults = fileProcessMap.get(filename);
 
             log.debug("Processing agent outputs for file: {}", filename);
 
             // Process forgery detection output (if exists)
-            if (processedOutput.containsKey("forgeryagentOutput")) {
-                processForgeryOutput(filename, processedOutput, forgedDocs, failedForgeApiCall);
+            if (fileResults.containsKey("forgeryagentOutput")) {
+                processForgeryOutput(filename, fileResults, forgedDocs, failedForgeApiCall, tenantId);
             }
 
             // Process OCR output (if exists)
-            if (processedOutput.containsKey("openaiVisionOutput")) {
-                processOCROutput(filename, processedOutput, failedOCRCall);
+            if (fileResults.containsKey("openaiVisionOutput")) {
+                processOCROutput(filename, fileResults, failedOCRCall, tenantId);
             }
 
             // Process FHIR conversion output (if exists) - EXTRACT FHIR FIELDS
-            if (processedOutput.containsKey("ocrToFhirOutput")) {
-                processFHIROutput(filename, processedOutput, successFiles, failedFiles, execution);
+            if (fileResults.containsKey("ocrToFhirOutput")) {
+                processFHIROutput(filename, fileResults, successFiles, failedFiles, execution, tenantId);
             }
 
             // Process policy comparison output (if exists)
-            if (processedOutput.containsKey("policy_compOutput")) {
-                processPolicyOutput(processedOutput, execution);
+            if (fileResults.containsKey("policy_compOutput")) {
+                processPolicyOutput(fileResults, execution, tenantId);
             }
         }
 
@@ -76,21 +78,30 @@ public class ProcessAgentResponse implements JavaDelegate {
     }
 
     /**
-     * Process forgery detection agent output
+     * Process forgery detection agent output from MinIO
      */
     @SuppressWarnings("unchecked")
-    private void processForgeryOutput(String filename, Map<String, Object> processedOutput,
-                                      List<String> forgedDocs, List<String> failedForgeApiCall) {
+    private void processForgeryOutput(String filename, Map<String, Object> fileResults,
+                                      List<String> forgedDocs, List<String> failedForgeApiCall,
+                                      String tenantId) {
 
-        Map<String, Object> forgeOutput = (Map<String, Object>) processedOutput.get("forgeryagentOutput");
-
-        String apiCall = (String) forgeOutput.get("forgeryagentAPICall");
+        Map<String, Object> forgeOutput = (Map<String, Object>) fileResults.get("forgeryagentOutput");
+        String storagePath = (String) forgeOutput.get("storagePath");
+        String apiCall = (String) forgeOutput.get("apiCall");
 
         if ("success".equals(apiCall)) {
-            Boolean isForged = (Boolean) forgeOutput.get("isForged");
-            if (isForged != null && isForged) {
-                forgedDocs.add(filename);
-                log.warn("Document flagged as forged: {}", filename);
+            try {
+                // Load result from MinIO
+                Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, storagePath);
+
+                Boolean isForged = (Boolean) result.get("isForged");
+                if (isForged != null && isForged) {
+                    forgedDocs.add(filename);
+                    log.warn("Document flagged as forged: {}", filename);
+                }
+            } catch (Exception e) {
+                log.error("Error loading forgery result from MinIO: {}", storagePath, e);
+                failedForgeApiCall.add(filename);
             }
         } else {
             failedForgeApiCall.add(filename);
@@ -99,15 +110,14 @@ public class ProcessAgentResponse implements JavaDelegate {
     }
 
     /**
-     * Process OCR agent output
+     * Process OCR agent output from MinIO
      */
     @SuppressWarnings("unchecked")
-    private void processOCROutput(String filename, Map<String, Object> processedOutput,
-                                  List<String> failedOCRCall) {
+    private void processOCROutput(String filename, Map<String, Object> fileResults,
+                                  List<String> failedOCRCall, String tenantId) {
 
-        Map<String, Object> ocrOutput = (Map<String, Object>) processedOutput.get("openaiVisionOutput");
-
-        String apiCall = (String) ocrOutput.get("openaiVisionAPICall");
+        Map<String, Object> ocrOutput = (Map<String, Object>) fileResults.get("openaiVisionOutput");
+        String apiCall = (String) ocrOutput.get("apiCall");
 
         if (!"success".equals(apiCall)) {
             failedOCRCall.add(filename);
@@ -116,124 +126,122 @@ public class ProcessAgentResponse implements JavaDelegate {
     }
 
     /**
-     * Process FHIR conversion agent output
+     * Process FHIR conversion agent output from MinIO
      * CRITICAL: This extracts individual FHIR fields for the user task form
      */
     @SuppressWarnings("unchecked")
-    private void processFHIROutput(String filename, Map<String, Object> processedOutput,
+    private void processFHIROutput(String filename, Map<String, Object> fileResults,
                                    List<String> successFiles, List<String> failedFiles,
-                                   DelegateExecution execution) {
+                                   DelegateExecution execution, String tenantId) {
 
-        Map<String, Object> fhirOutput = (Map<String, Object>) processedOutput.get("ocrToFhirOutput");
-
-        String apiCall = (String) fhirOutput.get("ocrToFhirAPICall");
+        Map<String, Object> fhirOutput = (Map<String, Object>) fileResults.get("ocrToFhirOutput");
+        String storagePath = (String) fhirOutput.get("storagePath");
+        String apiCall = (String) fhirOutput.get("apiCall");
 
         if ("success".equals(apiCall)) {
             successFiles.add(filename);
             log.info("FHIR conversion successful for: {}", filename);
 
-            // EXTRACT FHIR FIELDS - This is critical for the user task form
-            if (fhirOutput.containsKey("ocrToFhirAPIResponse")) {
-                try {
-                    String fhirResponseStr = fhirOutput.get("ocrToFhirAPIResponse").toString();
-                    JSONObject fhirResponse = new JSONObject(fhirResponseStr);
+            try {
+                // Load result from MinIO
+                Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, storagePath);
 
-                    // Get the answer object which contains the FHIR bundle
-                    if (fhirResponse.has("answer")) {
-                        Object answerObj = fhirResponse.get("answer");
-                        JSONObject fhirBundle;
+                String apiResponseStr = (String) result.get("apiResponse");
+                JSONObject fhirResponse = new JSONObject(apiResponseStr);
 
-                        if (answerObj instanceof String) {
-                            fhirBundle = new JSONObject((String) answerObj);
-                        } else if (answerObj instanceof JSONObject) {
-                            fhirBundle = (JSONObject) answerObj;
-                        } else {
-                            log.error("Unexpected answer type: {}", answerObj.getClass());
-                            return;
-                        }
+                // Get the answer object which contains the FHIR bundle
+                if (fhirResponse.has("answer")) {
+                    Object answerObj = fhirResponse.get("answer");
+                    JSONObject fhirBundle;
 
-                        // Extract from FHIR entry array
-                        JSONArray entry = fhirBundle.optJSONArray("entry");
-
-                        if (entry != null && entry.length() > 0) {
-                            log.info("Extracting data from {} FHIR entries", entry.length());
-
-                            for (int i = 0; i < entry.length(); i++) {
-                                JSONObject entryObj = entry.getJSONObject(i);
-
-                                // Patient resource
-                                if (entryObj.optQuery("/resource/resourceType").equals("Patient")) {
-                                    setVariableSafe(execution, "patientName",
-                                            entryObj.optQuery("/resource/name/0/text"));
-                                    setVariableSafe(execution, "gender",
-                                            entryObj.optQuery("/resource/gender"));
-                                    setVariableSafe(execution, "contact",
-                                            entryObj.optQuery("/resource/telecom/0/value"));
-                                }
-
-                                // Practitioner resource
-                                if (entryObj.optQuery("/resource/resourceType").equals("Practitioner")) {
-                                    setVariableSafe(execution, "doctorIdentifier",
-                                            entryObj.optQuery("/resource/identifier/0/value"));
-                                    setVariableSafe(execution, "doctorName",
-                                            entryObj.optQuery("/resource/name/0/text"));
-                                }
-
-                                // Condition resource
-                                if (entryObj.optQuery("/resource/resourceType").equals("Condition")) {
-                                    setVariableSafe(execution, "diseaseName",
-                                            entryObj.optQuery("/resource/code/text"));
-                                }
-
-                                // Procedure resource
-                                if (entryObj.optQuery("/resource/resourceType").equals("Procedure")) {
-                                    setVariableSafe(execution, "procedure",
-                                            entryObj.optQuery("/resource/code/text"));
-                                    setVariableSafe(execution, "startDate",
-                                            entryObj.optQuery("/resource/occurrenceDateTime"));
-                                }
-
-                                // MedicationRequest resource
-                                if (entryObj.optQuery("/resource/resourceType").equals("MedicationRequest")) {
-                                    setVariableSafe(execution, "medicationName",
-                                            entryObj.optQuery("/resource/contained/0/code/coding/0/display"));
-                                    setVariableSafe(execution, "dosageInstruction",
-                                            entryObj.optQuery("/resource/dosageInstruction/0/text"));
-                                }
-
-                                // Coverage resource
-                                if (entryObj.optQuery("/resource/resourceType").equals("Coverage")) {
-                                    setVariableSafe(execution, "insuranceCompany",
-                                            entryObj.optQuery("/resource/payor/0/display"));
-                                    setVariableSafe(execution, "period",
-                                            entryObj.optQuery("/resource/period/start"));
-                                }
-
-                                // Claim resource
-                                if (entryObj.optQuery("/resource/resourceType").equals("Claim")) {
-                                    setVariableSafe(execution, "hospitalName",
-                                            entryObj.optQuery("/resource/provider/display"));
-                                    setVariableSafe(execution, "claimFor",
-                                            entryObj.optQuery("/resource/item/0/productOrService/coding/0/code"));
-                                    setVariableSafe(execution, "claimAmount",
-                                            entryObj.optQuery("/resource/total/value"));
-                                }
-                            }
-
-                            log.info("Successfully extracted FHIR fields for user task form");
-
-                        } else {
-                            log.warn("FHIR response has no entries");
-                        }
+                    if (answerObj instanceof String) {
+                        fhirBundle = new JSONObject((String) answerObj);
+                    } else if (answerObj instanceof JSONObject) {
+                        fhirBundle = (JSONObject) answerObj;
                     } else {
-                        log.warn("FHIR response missing 'answer' field");
+                        log.error("Unexpected answer type: {}", answerObj.getClass());
+                        return;
                     }
 
-                } catch (Exception e) {
-                    log.error("Error extracting FHIR fields from response", e);
+                    // Extract from FHIR entry array
+                    JSONArray entry = fhirBundle.optJSONArray("entry");
+
+                    if (entry != null && entry.length() > 0) {
+                        log.info("Extracting data from {} FHIR entries", entry.length());
+
+                        for (int i = 0; i < entry.length(); i++) {
+                            JSONObject entryObj = entry.getJSONObject(i);
+
+                            // Patient resource
+                            if (entryObj.optQuery("/resource/resourceType").equals("Patient")) {
+                                setVariableSafe(execution, "patientName",
+                                        entryObj.optQuery("/resource/name/0/text"));
+                                setVariableSafe(execution, "gender",
+                                        entryObj.optQuery("/resource/gender"));
+                                setVariableSafe(execution, "contact",
+                                        entryObj.optQuery("/resource/telecom/0/value"));
+                            }
+
+                            // Practitioner resource
+                            if (entryObj.optQuery("/resource/resourceType").equals("Practitioner")) {
+                                setVariableSafe(execution, "doctorIdentifier",
+                                        entryObj.optQuery("/resource/identifier/0/value"));
+                                setVariableSafe(execution, "doctorName",
+                                        entryObj.optQuery("/resource/name/0/text"));
+                            }
+
+                            // Condition resource
+                            if (entryObj.optQuery("/resource/resourceType").equals("Condition")) {
+                                setVariableSafe(execution, "diseaseName",
+                                        entryObj.optQuery("/resource/code/text"));
+                            }
+
+                            // Procedure resource
+                            if (entryObj.optQuery("/resource/resourceType").equals("Procedure")) {
+                                setVariableSafe(execution, "procedure",
+                                        entryObj.optQuery("/resource/code/text"));
+                                setVariableSafe(execution, "startDate",
+                                        entryObj.optQuery("/resource/occurrenceDateTime"));
+                            }
+
+                            // MedicationRequest resource
+                            if (entryObj.optQuery("/resource/resourceType").equals("MedicationRequest")) {
+                                setVariableSafe(execution, "medicationName",
+                                        entryObj.optQuery("/resource/contained/0/code/coding/0/display"));
+                                setVariableSafe(execution, "dosageInstruction",
+                                        entryObj.optQuery("/resource/dosageInstruction/0/text"));
+                            }
+
+                            // Coverage resource
+                            if (entryObj.optQuery("/resource/resourceType").equals("Coverage")) {
+                                setVariableSafe(execution, "insuranceCompany",
+                                        entryObj.optQuery("/resource/payor/0/display"));
+                                setVariableSafe(execution, "period",
+                                        entryObj.optQuery("/resource/period/start"));
+                            }
+
+                            // Claim resource
+                            if (entryObj.optQuery("/resource/resourceType").equals("Claim")) {
+                                setVariableSafe(execution, "hospitalName",
+                                        entryObj.optQuery("/resource/provider/display"));
+                                setVariableSafe(execution, "claimFor",
+                                        entryObj.optQuery("/resource/item/0/productOrService/coding/0/code"));
+                                setVariableSafe(execution, "claimAmount",
+                                        entryObj.optQuery("/resource/total/value"));
+                            }
+                        }
+
+                        log.info("Successfully extracted FHIR fields for user task form");
+
+                    } else {
+                        log.warn("FHIR response has no entries");
+                    }
+                } else {
+                    log.warn("FHIR response missing 'answer' field");
                 }
-            } else {
-                log.warn("FHIR output missing API response");
+
+            } catch (Exception e) {
+                log.error("Error extracting FHIR fields from MinIO result", e);
             }
 
         } else {
@@ -243,14 +251,12 @@ public class ProcessAgentResponse implements JavaDelegate {
     }
 
     /**
-     * Process policy comparison agent output
+     * Process policy comparison agent output from MinIO
      */
     @SuppressWarnings("unchecked")
-    private void processPolicyOutput(Map<String, Object> processedOutput, DelegateExecution execution) {
+    private void processPolicyOutput(Map<String, Object> fileResults, DelegateExecution execution, String tenantId) {
 
-        Map<String, Object> policyOutput = (Map<String, Object>) processedOutput.get("policy_compOutput");
-
-        String apiCall = (String) policyOutput.get("policy_compAPICall");
+        Map<String, Object> policyOutput = (Map<String, Object>) fileResults.get("policy_compOutput");
 
         // Policy comparison variables should already be set by GenericAgentExecutorDelegate
         // Just log the status
