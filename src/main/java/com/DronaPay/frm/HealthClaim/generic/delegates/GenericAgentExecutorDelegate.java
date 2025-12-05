@@ -20,46 +20,43 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Generic Agent Executor Delegate
+ * Executes any AI agent based on configuration passed via currentAgentConfig variable
+ */
 @Slf4j
 public class GenericAgentExecutorDelegate implements JavaDelegate {
 
+    // Maximum size for process variables to prevent VARCHAR overflow
+    private static final int MAX_PROCESS_VAR_SIZE = 3500; // Leave buffer below 4000 limit
+
     @Override
     public void execute(DelegateExecution execution) throws Exception {
-        log.info("=== Generic Agent Executor Started ===");
 
-        String tenantId = execution.getTenantId();
-        String ticketId = String.valueOf(execution.getVariable("TicketID"));
-        String filename = (String) execution.getVariable("attachment");
-
-        log.info("Processing: TicketID={}, File={}", ticketId, filename);
-
-        // 1. Get agent configuration
-        Object agentConfigObj = execution.getVariable("currentAgentConfig");
-        if (agentConfigObj == null) {
-            throw new IllegalArgumentException("currentAgentConfig variable is required");
+        // 1. Get agent configuration from process variable
+        Object configObj = execution.getVariable("currentAgentConfig");
+        if (configObj == null) {
+            throw new IllegalStateException("currentAgentConfig variable not set");
         }
 
-        JSONObject agentConfig;
-        if (agentConfigObj instanceof String) {
-            agentConfig = new JSONObject((String) agentConfigObj);
-        } else if (agentConfigObj instanceof JSONObject) {
-            agentConfig = (JSONObject) agentConfigObj;
-        } else {
-            throw new IllegalArgumentException("currentAgentConfig must be JSONObject or String");
-        }
+        JSONObject agentConfig = (JSONObject) configObj;
 
-        // 2. Extract agent details
         String agentId = agentConfig.getString("agentId");
-        String displayName = agentConfig.optString("displayName", agentId);
+        String displayName = agentConfig.getString("displayName");
         boolean enabled = agentConfig.optBoolean("enabled", true);
         boolean critical = agentConfig.optBoolean("critical", false);
 
-        log.info("Executing agent: {} ({}), Critical: {}", displayName, agentId, critical);
+        log.info("=== Generic Agent Executor Started for {} ({}) ===", displayName, agentId);
 
         if (!enabled) {
-            log.info("Agent '{}' is disabled, skipping", displayName);
+            log.info("Agent '{}' is disabled, skipping execution", displayName);
             return;
         }
+
+        // 2. Get current filename and ticket info
+        String filename = (String) execution.getVariable("attachment");
+        String ticketId = (String) execution.getVariable("TicketID");
+        String tenantId = execution.getTenantId();
 
         JSONObject config = agentConfig.getJSONObject("config");
 
@@ -195,13 +192,20 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
                             // Convert to data type
                             Object convertedValue = convertValue(value, dataType);
 
-                            // Set process variable
-                            execution.setVariable(variableName, convertedValue);
+                            // SIZE CHECK: Only set process variable if it's reasonably sized
+                            if (shouldSetProcessVariable(variableName, convertedValue)) {
+                                execution.setVariable(variableName, convertedValue);
+                                log.info("Set variable '{}' = {}", variableName,
+                                        convertedValue.toString().length() > 100 ?
+                                                convertedValue.toString().substring(0, 100) + "..." : convertedValue);
+                            } else {
+                                log.warn("Skipping process variable '{}' - size {} exceeds limit. Available in MinIO.",
+                                        variableName, convertedValue.toString().length());
+                            }
 
-                            // Add to extracted data for storage
+                            // Always add to extracted data for MinIO storage
                             extractedData.put(variableName, convertedValue);
 
-                            log.info("Set variable '{}' = {}", variableName, convertedValue);
                         } else if (mapping.has("defaultValue")) {
                             Object defaultValue = convertValue(mapping.get("defaultValue"), dataType);
                             execution.setVariable(variableName, defaultValue);
@@ -215,32 +219,32 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         } else {
             log.error("Agent '{}' failed with status: {}", displayName, statusCode);
 
-            // Handle error based on configuration
-            JSONObject errorHandling = config.optJSONObject("errorHandling");
-            if (errorHandling != null) {
-                String onFailure = errorHandling.optString("onFailure", "logAndContinue");
-                boolean continueOnError = errorHandling.optBoolean("continueOnError", !critical);
+            // Handle critical agents
+            if (critical) {
+                String errorCode = "agentFailure";
+                if (config.has("errorHandling")) {
+                    JSONObject errorHandling = config.getJSONObject("errorHandling");
+                    errorCode = errorHandling.optString("errorCode", "agentFailure");
+                    String onFailure = errorHandling.optString("onFailure", "throwError");
 
-                if (!continueOnError || onFailure.equals("throwError")) {
-                    String errorCode = errorHandling.optString("errorCode", "agentFailure");
-                    throw new BpmnError(errorCode, "Agent '" + displayName + "' failed with status: " + statusCode);
+                    if (onFailure.equals("throwError")) {
+                        throw new BpmnError(errorCode, String.format("Critical agent '%s' failed", displayName));
+                    }
                 }
-            } else if (critical) {
-                throw new BpmnError("agentFailure", "Critical agent '" + displayName + "' failed");
             }
         }
 
-        // Store result in MinIO - BOTH locations (document-wise AND stage-wise)
-        Map<String, Object> resultToStore = AgentResultStorageService.buildResultMap(
-                agentId, statusCode, resp, extractedData
-        );
+        // Store full result in MinIO (BOTH document-wise and stage-wise)
+        Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
+                agentId, statusCode, resp, extractedData);
 
-        // This stores in BOTH locations and returns the stage-wise path as primary
-        String primaryStoragePath = AgentResultStorageService.storeAgentResultBoth(
-                tenantId, ticketId, filename, agentId, resultToStore
-        );
+        // Store in BOTH locations - returns stage-wise path as primary
+        String minioPath = AgentResultStorageService.storeAgentResultBoth(
+                tenantId, ticketId, filename, agentId, fullResult);
 
-        // Update fileProcessMap with primary storage path (stage-wise)
+        log.info("Stored full result for '{}' in MinIO at: {}", agentId, minioPath);
+
+        // Update fileProcessMap with agent result
         Map<String, Map<String, Object>> fileProcessMap =
                 (Map<String, Map<String, Object>>) execution.getVariable("fileProcessMap");
 
@@ -250,10 +254,10 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
 
         Map<String, Object> fileResults = fileProcessMap.getOrDefault(filename, new HashMap<>());
 
-        // Store primary path (stage-wise)
+        // Add agent result to file results
         Map<String, Object> agentResult = new HashMap<>();
-        agentResult.put("storagePath", primaryStoragePath);
         agentResult.put("statusCode", statusCode);
+        agentResult.put("minioPath", minioPath);
         agentResult.put("apiCall", statusCode == 200 ? "success" : "failed");
 
         fileResults.put(agentId + "Output", agentResult);
@@ -262,6 +266,27 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         execution.setVariable("fileProcessMap", fileProcessMap);
 
         log.info("Updated fileProcessMap with {} result for {}", agentId, filename);
+    }
+
+    /**
+     * Check if a process variable should be set based on size constraints
+     * Large JSON responses should only be stored in MinIO, not as process variables
+     */
+    private boolean shouldSetProcessVariable(String variableName, Object value) {
+        if (value == null) {
+            return true;
+        }
+
+        String stringValue = value.toString();
+        int size = stringValue.length();
+
+        if (size > MAX_PROCESS_VAR_SIZE) {
+            log.warn("Variable '{}' size ({} chars) exceeds process variable limit ({} chars)",
+                    variableName, size, MAX_PROCESS_VAR_SIZE);
+            return false;
+        }
+
+        return true;
     }
 
     /**
