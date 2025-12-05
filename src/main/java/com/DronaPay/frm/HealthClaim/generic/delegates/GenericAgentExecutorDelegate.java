@@ -55,7 +55,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
 
         // 2. Get current filename and ticket info
         String filename = (String) execution.getVariable("attachment");
-        String ticketId = (String) execution.getVariable("TicketID");
+        String ticketId = String.valueOf(execution.getVariable("TicketID")); // Convert Long to String
         String tenantId = execution.getTenantId();
 
         JSONObject config = agentConfig.getJSONObject("config");

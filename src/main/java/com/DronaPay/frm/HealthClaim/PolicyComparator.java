@@ -76,7 +76,7 @@ public class PolicyComparator implements JavaDelegate {
         try {
             // Get tenant ID and ticket ID
             String tenantId = execution.getTenantId();
-            String ticketId = (String) execution.getVariable("TicketID");
+            String ticketId = String.valueOf(execution.getVariable("TicketID"));
             String filename = (String) execution.getVariable("attachment");
 
             // Retrieve full response from MinIO
