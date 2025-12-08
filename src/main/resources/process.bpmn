@@ -42,37 +42,28 @@
     <bpmn:userTask id="Activity_05xkaop" name="User Verification">
       <bpmn:extensionElements>
         <camunda:formData>
-          <camunda:formField id="patientName" label="Patient Name" type="string" />
-          <camunda:formField id="gender" label="Gender" type="string" />
-          <camunda:formField id="doctorIdentifier" label="Doctor Identifier" type="string" />
-          <camunda:formField id="doctorName" label="Doctor Name" type="string" />
-          <camunda:formField id="diseaseName" label="Disease Name" type="string" />
-          <camunda:formField id="procedure" label="Procedure" type="string" />
-          <camunda:formField id="startDate" label="Start Date" type="string" />
-          <camunda:formField id="medicationName" label="Medication Name" type="string" />
-          <camunda:formField id="dosageInstruction" label="Instruction For Usage" type="string" />
-          <camunda:formField id="contact" label="Patient Contact" type="string" />
-          <camunda:formField id="insuranceCompany" label="Insurance Company" type="string" />
-          <camunda:formField id="period" label="Time Period" type="string" />
-          <camunda:formField id="hospitalName" label="Hospital Name" type="string" />
-          <camunda:formField id="claimFor" label="Claim For" type="string" />
-          <camunda:formField id="claimAmount" label="Claim Amount" type="long" />
-          <camunda:formField id="policyComparatorStatus" label="Policy Comparison Status" type="string" />
-          <camunda:formField id="policyMissingInfo" label="Missing Policy Information" type="string" />
-          <camunda:formField id="policyPotentialIssues" label="Policy Issues Found" type="string" />
-          <camunda:formField id="failedForgeApiCall" label="Failed Forged Check Docs" type="string" />
-          <camunda:formField id="forgedDocs" label="Forged Docs" type="string" />
-          <camunda:formField id="failedOCRCall" label="Failed OCR On Docs" type="string" />
-          <camunda:formField id="failedFHIRCall" label="Failed OCR TO FHIR Docs" type="string" />
-          <camunda:formField id="Action" label="What action would you like to take?" type="enum">
-            <camunda:value id="approve" name="Approve" />
-            <camunda:value id="reject" name="Reject" />
-            <camunda:value id="reprocess" name="Resend For Processing" />
+          <camunda:formField id="patientName" label="Patient Name" type="string">
+            <camunda:properties>
+              <camunda:property name="readOnly" value="true" />
+            </camunda:properties>
+          </camunda:formField>
+          <camunda:formField id="diagnosis" label="Diagnosis" type="string">
+            <camunda:properties>
+              <camunda:property name="readOnly" value="true" />
+            </camunda:properties>
+          </camunda:formField>
+          <camunda:formField id="totalCost" label="Total Cost" type="string">
+            <camunda:properties>
+              <camunda:property name="readOnly" value="true" />
+            </camunda:properties>
+          </camunda:formField>
+          <camunda:formField id="hospitalName" label="Hospital Name" type="string">
+            <camunda:properties>
+              <camunda:property name="readOnly" value="true" />
+            </camunda:properties>
           </camunda:formField>
         </camunda:formData>
       </bpmn:extensionElements>
-      <bpmn:incoming>Flow_0w29skj</bpmn:incoming>
-      <bpmn:outgoing>Flow_1446qaa</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:exclusiveGateway id="Gateway_0aphohc">
       <bpmn:incoming>Flow_1446qaa</bpmn:incoming>
@@ -394,7 +385,7 @@
       </bpmn:endEvent>
       <bpmn:sequenceFlow id="Flow_0vzpcw3" sourceRef="Activity_0k7btnb" targetRef="Event_0oqarvk" />
     </bpmn:subProcess>
-    <bpmn:sequenceFlow id="Flow_0450puq" sourceRef="Activity_17h17ae" targetRef="Activity_1ecxnyz" />
+    <bpmn:sequenceFlow id="Flow_0450puq" sourceRef="Activity_17h17ae" targetRef="Activity_DocClassifier" />
     <bpmn:subProcess id="Activity_1kzv5fa">
       <bpmn:incoming>Flow_0ys2arf</bpmn:incoming>
       <bpmn:outgoing>Flow_037ubon</bpmn:outgoing>
@@ -430,11 +421,11 @@
       </bpmn:endEvent>
       <bpmn:sequenceFlow id="Flow_0kqqe14" sourceRef="Activity_17lkojt" targetRef="Event_0sjizw5" />
     </bpmn:subProcess>
-    <bpmn:sequenceFlow id="Flow_0a99iva" sourceRef="Activity_0dq1j5w" targetRef="Activity_19ty2sl" />
-    <bpmn:subProcess id="Activity_1ecxnyz">
+    <bpmn:sequenceFlow id="Flow_0a99iva" sourceRef="Activity_0dq1j5w" targetRef="Activity_FhirConsolidation" />
+    <bpmn:subProcess id="Activity_DocClassifier">
       <bpmn:incoming>Flow_0450puq</bpmn:incoming>
       <bpmn:outgoing>Flow_0ys2arf</bpmn:outgoing>
-      <bpmn:multiInstanceLoopCharacteristics isSequential="true" />
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_1dyf5j7">
         <bpmn:outgoing>Flow_1p7jmc8</bpmn:outgoing>
       </bpmn:startEvent>
@@ -443,21 +434,26 @@
         <bpmn:incoming>Flow_1thjhp7</bpmn:incoming>
       </bpmn:endEvent>
       <bpmn:sequenceFlow id="Flow_1thjhp7" sourceRef="Activity_0pz9jth" targetRef="Event_0k3yxqs" />
-      <bpmn:serviceTask id="Activity_0pz9jth" name="Doc Classifier">
+      <bpmn:serviceTask id="Activity_0pz9jth" name="Doc Classifier" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.DocumentClassifierDelegate">
         <bpmn:incoming>Flow_1p7jmc8</bpmn:incoming>
         <bpmn:outgoing>Flow_1thjhp7</bpmn:outgoing>
       </bpmn:serviceTask>
     </bpmn:subProcess>
-    <bpmn:sequenceFlow id="Flow_0ys2arf" sourceRef="Activity_1ecxnyz" targetRef="Activity_1kzv5fa" />
+    <bpmn:sequenceFlow id="Flow_0ys2arf" sourceRef="Activity_DocClassifier" targetRef="Activity_1kzv5fa" />
     <bpmn:sequenceFlow id="Flow_0t9zk1m" sourceRef="Activity_19ty2sl" targetRef="Activity_1eu27e2" />
     <bpmn:sequenceFlow id="Flow_0w29skj" sourceRef="Activity_1eu27e2" targetRef="Activity_05xkaop" />
-    <bpmn:serviceTask id="Activity_19ty2sl" name="FHIR Analyser">
-      <bpmn:incoming>Flow_0a99iva</bpmn:incoming>
+    <bpmn:serviceTask id="Activity_19ty2sl" name="FHIR Analyser" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FHIRAnalyserDelegate">
+      <bpmn:incoming>Flow_02l6f9k</bpmn:incoming>
       <bpmn:outgoing>Flow_0t9zk1m</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:serviceTask id="Activity_1eu27e2" name="UI Displayer">
+    <bpmn:serviceTask id="Activity_1eu27e2" name="Activity_UIDisplayer" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.UIDisplayerDelegate">
       <bpmn:incoming>Flow_0t9zk1m</bpmn:incoming>
       <bpmn:outgoing>Flow_0w29skj</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_02l6f9k" sourceRef="Activity_FhirConsolidation" targetRef="Activity_19ty2sl" />
+    <bpmn:serviceTask id="Activity_FhirConsolidation" name="FHIR Consolidation" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FHIRConsolidationDelegate">
+      <bpmn:incoming>Flow_0a99iva</bpmn:incoming>
+      <bpmn:outgoing>Flow_02l6f9k</bpmn:outgoing>
     </bpmn:serviceTask>
   </bpmn:process>
   <bpmn:error id="Error_1brcit7" name="forgeddoc" />
@@ -478,15 +474,15 @@
       <bpmndi:BPMNShape id="Activity_068lxij_di" bpmnElement="Activity_068lxij">
         <dc:Bounds x="290" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_19n0d2o_di" bpmnElement="Activity_1s9nenk">
-        <dc:Bounds x="470" y="800" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_1dn2bub_di" bpmnElement="Event_1dn2bub">
         <dc:Bounds x="5782" y="822" width="36" height="36" />
         <bpmndi:BPMNLabel>
           <dc:Bounds x="5828" y="833" width="61" height="14" />
         </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_19n0d2o_di" bpmnElement="Activity_1s9nenk">
+        <dc:Bounds x="470" y="800" width="100" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_0txw8dc_di" bpmnElement="Activity_04nhqma">
         <dc:Bounds x="3330" y="800" width="100" height="80" />
@@ -578,14 +574,8 @@
         <dc:Bounds x="3330" y="500" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1vzqwn9_di" bpmnElement="Activity_19ty2sl">
-        <dc:Bounds x="2450" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1349e5d_di" bpmnElement="Activity_1eu27e2">
-        <dc:Bounds x="2680" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_147tfbt_di" bpmnElement="Activity_05xkaop">
-        <dc:Bounds x="2910" y="800" width="100" height="80" />
+        <dc:Bounds x="2930" y="800" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_17h17ae_di" bpmnElement="Activity_17h17ae" isExpanded="true">
@@ -607,26 +597,6 @@
       <bpmndi:BPMNEdge id="Flow_0vzpcw3_di" bpmnElement="Flow_0vzpcw3">
         <di:waypoint x="880" y="840" />
         <di:waypoint x="932" y="840" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="Activity_1ecxnyz_di" bpmnElement="Activity_1ecxnyz" isExpanded="true">
-        <dc:Bounds x="1080" y="740" width="350" height="200" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Event_1dyf5j7_di" bpmnElement="Event_1dyf5j7">
-        <dc:Bounds x="1120" y="822" width="36" height="36" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Event_0k3yxqs_di" bpmnElement="Event_0k3yxqs">
-        <dc:Bounds x="1372" y="822" width="36" height="36" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0p36ok7_di" bpmnElement="Activity_0pz9jth">
-        <dc:Bounds x="1210" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="Flow_1p7jmc8_di" bpmnElement="Flow_1p7jmc8">
-        <di:waypoint x="1156" y="840" />
-        <di:waypoint x="1210" y="840" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_1thjhp7_di" bpmnElement="Flow_1thjhp7">
-        <di:waypoint x="1310" y="840" />
-        <di:waypoint x="1372" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="Activity_1kzv5fa_di" bpmnElement="Activity_1kzv5fa" isExpanded="true">
         <dc:Bounds x="1520" y="740" width="350" height="200" />
@@ -669,23 +639,36 @@
         <di:waypoint x="2200" y="840" />
         <di:waypoint x="2232" y="840" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="Event_15ndmjn_di" bpmnElement="Event_1wb0mkj" bioc:stroke="#831311" bioc:fill="#ffcdd2" color:background-color="#ffcdd2" color:border-color="#831311">
-        <dc:Bounds x="3362" y="862" width="36" height="36" />
+      <bpmndi:BPMNShape id="Activity_1ecxnyz_di" bpmnElement="Activity_DocClassifier" isExpanded="true">
+        <dc:Bounds x="1080" y="740" width="350" height="200" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Event_0a5hlg8_di" bpmnElement="Event_1qmso98" bioc:stroke="#831311" bioc:fill="#ffcdd2" color:background-color="#ffcdd2" color:border-color="#831311">
-        <dc:Bounds x="4152" y="782" width="36" height="36" />
+      <bpmndi:BPMNShape id="Event_1dyf5j7_di" bpmnElement="Event_1dyf5j7">
+        <dc:Bounds x="1120" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Event_1180965_di" bpmnElement="Event_0zodq4c">
-        <dc:Bounds x="4642" y="482" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="4675" y="473" width="30" height="14" />
-        </bpmndi:BPMNLabel>
+      <bpmndi:BPMNShape id="Event_0k3yxqs_di" bpmnElement="Event_0k3yxqs">
+        <dc:Bounds x="1372" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Event_0iwxnay_di" bpmnElement="Event_0jl58lu">
-        <dc:Bounds x="4592" y="522" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="4579" y="565" width="23" height="14" />
-        </bpmndi:BPMNLabel>
+      <bpmndi:BPMNShape id="Activity_0p36ok7_di" bpmnElement="Activity_0pz9jth">
+        <dc:Bounds x="1210" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_1p7jmc8_di" bpmnElement="Flow_1p7jmc8">
+        <di:waypoint x="1156" y="840" />
+        <di:waypoint x="1210" y="840" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1thjhp7_di" bpmnElement="Flow_1thjhp7">
+        <di:waypoint x="1310" y="840" />
+        <di:waypoint x="1372" y="840" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Activity_1vzqwn9_di" bpmnElement="Activity_19ty2sl">
+        <dc:Bounds x="2540" y="800" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1349e5d_di" bpmnElement="Activity_1eu27e2">
+        <dc:Bounds x="2720" y="800" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_02kh4bl_di" bpmnElement="Activity_FhirConsolidation">
+        <dc:Bounds x="2380" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_1me4x9n" bpmnElement="Event_100gl67">
         <dc:Bounds x="3512" y="522" width="36" height="36" />
@@ -697,6 +680,24 @@
         <dc:Bounds x="3562" y="482" width="36" height="36" />
         <bpmndi:BPMNLabel>
           <dc:Bounds x="3595" y="473" width="30" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_0a5hlg8_di" bpmnElement="Event_1qmso98" bioc:stroke="#831311" bioc:fill="#ffcdd2" color:background-color="#ffcdd2" color:border-color="#831311">
+        <dc:Bounds x="4152" y="782" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_15ndmjn_di" bpmnElement="Event_1wb0mkj" bioc:stroke="#831311" bioc:fill="#ffcdd2" color:background-color="#ffcdd2" color:border-color="#831311">
+        <dc:Bounds x="3362" y="862" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_1180965_di" bpmnElement="Event_0zodq4c">
+        <dc:Bounds x="4642" y="482" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="4675" y="473" width="30" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_0iwxnay_di" bpmnElement="Event_0jl58lu">
+        <dc:Bounds x="4592" y="522" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="4579" y="565" width="23" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_15rnuix_di" bpmnElement="Flow_15rnuix">
@@ -723,7 +724,7 @@
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_1446qaa_di" bpmnElement="Flow_1446qaa">
-        <di:waypoint x="3010" y="840" />
+        <di:waypoint x="3030" y="840" />
         <di:waypoint x="3175" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0xp9ktd_di" bpmnElement="Flow_0xp9ktd">
@@ -918,19 +919,23 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0a99iva_di" bpmnElement="Flow_0a99iva">
         <di:waypoint x="2320" y="840" />
-        <di:waypoint x="2450" y="840" />
+        <di:waypoint x="2380" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0ys2arf_di" bpmnElement="Flow_0ys2arf">
         <di:waypoint x="1430" y="840" />
         <di:waypoint x="1520" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0t9zk1m_di" bpmnElement="Flow_0t9zk1m">
-        <di:waypoint x="2550" y="840" />
-        <di:waypoint x="2680" y="840" />
+        <di:waypoint x="2640" y="840" />
+        <di:waypoint x="2720" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0w29skj_di" bpmnElement="Flow_0w29skj">
-        <di:waypoint x="2780" y="840" />
-        <di:waypoint x="2910" y="840" />
+        <di:waypoint x="2820" y="840" />
+        <di:waypoint x="2930" y="840" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02l6f9k_di" bpmnElement="Flow_02l6f9k">
+        <di:waypoint x="2480" y="840" />
+        <di:waypoint x="2540" y="840" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
