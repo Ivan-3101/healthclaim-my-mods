@@ -1,0 +1,39 @@
+{
+    "answer": [
+        {
+            "category": "Pre-auth form",
+            "page_number": 1,
+            "confidence_score": 0.95
+        },
+        {
+            "category": "Pre-auth form",
+            "page_number": 2,
+            "confidence_score": 0.9
+        },
+        {
+            "category": "Pre-auth form",
+            "page_number": 3,
+            "confidence_score": 0.9
+        },
+        {
+            "category": "Identity Card",
+            "page_number": 4,
+            "confidence_score": 0.85
+        },
+        {
+            "category": "Policy card",
+            "page_number": 5,
+            "confidence_score": 0.85
+        },
+        {
+            "category": "Diagnostic Report",
+            "page_number": 6,
+            "confidence_score": 0.88
+        },
+        {
+            "category": "Diagnostic Report",
+            "page_number": 7,
+            "confidence_score": 0.88
+        }
+    ]
+}

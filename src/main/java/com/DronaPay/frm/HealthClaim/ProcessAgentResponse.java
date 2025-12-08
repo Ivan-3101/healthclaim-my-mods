@@ -86,13 +86,13 @@ public class ProcessAgentResponse implements JavaDelegate {
                                       String tenantId) {
 
         Map<String, Object> forgeOutput = (Map<String, Object>) fileResults.get("forgeryagentOutput");
-        String storagePath = (String) forgeOutput.get("storagePath");
+        String minioPath = (String) forgeOutput.get("minioPath");  // Changed from storagePath
         String apiCall = (String) forgeOutput.get("apiCall");
 
         if ("success".equals(apiCall)) {
             try {
                 // Load result from MinIO
-                Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, storagePath);
+                Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, minioPath);
 
                 Boolean isForged = (Boolean) result.get("isForged");
                 if (isForged != null && isForged) {
@@ -100,7 +100,7 @@ public class ProcessAgentResponse implements JavaDelegate {
                     log.warn("Document flagged as forged: {}", filename);
                 }
             } catch (Exception e) {
-                log.error("Error loading forgery result from MinIO: {}", storagePath, e);
+                log.error("Error loading forgery result from MinIO: {}", minioPath, e);
                 failedForgeApiCall.add(filename);
             }
         } else {
@@ -135,7 +135,7 @@ public class ProcessAgentResponse implements JavaDelegate {
                                    DelegateExecution execution, String tenantId) {
 
         Map<String, Object> fhirOutput = (Map<String, Object>) fileResults.get("ocrToFhirOutput");
-        String storagePath = (String) fhirOutput.get("storagePath");
+        String minioPath = (String) fhirOutput.get("minioPath");  // Changed from storagePath
         String apiCall = (String) fhirOutput.get("apiCall");
 
         if ("success".equals(apiCall)) {
@@ -144,7 +144,7 @@ public class ProcessAgentResponse implements JavaDelegate {
 
             try {
                 // Load result from MinIO
-                Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, storagePath);
+                Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, minioPath);
 
                 String apiResponseStr = (String) result.get("apiResponse");
                 JSONObject fhirResponse = new JSONObject(apiResponseStr);
@@ -224,10 +224,33 @@ public class ProcessAgentResponse implements JavaDelegate {
                             if (entryObj.optQuery("/resource/resourceType").equals("Claim")) {
                                 setVariableSafe(execution, "hospitalName",
                                         entryObj.optQuery("/resource/provider/display"));
-                                setVariableSafe(execution, "claimFor",
-                                        entryObj.optQuery("/resource/item/0/productOrService/coding/0/code"));
-                                setVariableSafe(execution, "claimAmount",
-                                        entryObj.optQuery("/resource/total/value"));
+
+                                Object claimAmountObj = entryObj.optQuery("/resource/total/value");
+                                if (claimAmountObj != null) {
+                                    if (claimAmountObj instanceof Number) {
+                                        execution.setVariable("claimAmount", ((Number) claimAmountObj).longValue());
+                                    } else {
+                                        execution.setVariable("claimAmount", Long.parseLong(claimAmountObj.toString()));
+                                    }
+                                    log.debug("Set variable 'claimAmount' = '{}'", claimAmountObj);
+                                }
+
+                                // Extract claim items
+                                JSONArray items = (JSONArray) entryObj.optQuery("/resource/item");
+                                if (items != null && items.length() > 0) {
+                                    StringBuilder claimFor = new StringBuilder();
+                                    for (int j = 0; j < items.length(); j++) {
+                                        JSONObject item = items.getJSONObject(j);
+                                        String service = (String) item.optQuery("productOrService/coding/0/code");
+                                        if (service != null) {
+                                            if (claimFor.length() > 0) claimFor.append(", ");
+                                            claimFor.append(service);
+                                        }
+                                    }
+                                    if (claimFor.length() > 0) {
+                                        setVariableSafe(execution, "claimFor", claimFor.toString());
+                                    }
+                                }
                             }
                         }
 
@@ -258,7 +281,7 @@ public class ProcessAgentResponse implements JavaDelegate {
 
         Map<String, Object> policyOutput = (Map<String, Object>) fileResults.get("policy_compOutput");
 
-        // Policy comparison variables should already be set by GenericAgentExecutorDelegate
+        // Policy comparison variables should already be set by PolicyComparator
         // Just log the status
         String policyStatus = (String) execution.getVariable("policyComparatorStatus");
         String policyMissing = (String) execution.getVariable("policyMissingInfo");

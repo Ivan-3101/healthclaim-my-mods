@@ -1,0 +1,30 @@
+The outputs obtained in the above agent of all the pdf files i.e. ocr to fhir have to be consolidated into one single output that will be passed to this agent and the following agents as well
+
+We might have to write a code for this or something
+
+for ex:
+DOC1{
+    claim form: ...,
+    identification: ...,
+    diagnostic report: ...,
+}
+
+DOC2{
+    discharge summary: ....
+    cheque leaf:...
+}
+
+DOC3{
+    hospital bill:...
+}
+
+
+Consolidated report something like below should be obtained
+answer{
+   claim form: ...
+    identification: ...
+    diagnostic report: ...
+    discharge summary: ....
+    cheque leaf:...
+    hospital bill:...
+}

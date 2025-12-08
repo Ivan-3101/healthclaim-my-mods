@@ -1,0 +1,162 @@
+{
+    "answer": {
+        "Claim Form": {
+            "TPA_Details": {
+                "Name_of_TPA_Insurance_company": null,
+                "Toll_free_phone_number": null,
+                "Toll_free_FAX": null
+            },
+            "Insured_Patient_Details": {
+                "Patient_Name": "Mr. BHAVANATH KUMAR",
+                "Gender": "Male",
+                "Age": "36 Years Months",
+                "Date_of_Birth": null,
+                "Contact_Number": "8800375394",
+                "Contact_number_of_attending_relative": null,
+                "Insured_card_ID_number": "PT30923182",
+                "Policy_number_or_Name_of_corporate": "2-81-25-00001962-000",
+                "Employee_ID": null,
+                "Other_Mediclaim_Health_Insurance": "No",
+                "Other_Company_Name": null,
+                "Other_Insurance_Details": null,
+                "Family_Physician": "No",
+                "Family_Physician_Name": null,
+                "Family_Physician_Contact": null
+            },
+            "Treating_Doctor_Hospital_Details": {
+                "Treating_Doctor_Name": "Dr. Hari Kishan",
+                "Treating_Doctor_Contact": "8150060177",
+                "Nature_of_Illness_Disease_with_presenting_Complaints": "High grade fever with vami[t]ing / Pain Abdomen",
+                "Relevant_Clinical_Findings": "Bodyache Bp-110/70 Temp-102°F SPO2-98% PR=180/m",
+                "Duration_of_present_ailment": "7-8 Days",
+                "Date_of_first_consultation": null,
+                "Provisional_Diagnosis": "AFI / Thrombocytopenia",
+                "ICD_10_Code": "R-92",
+                "Proposed_line_of_treatment": "Medical Management",
+                "Investigation_or_Medical_Management_Details": null,
+                "Route_of_drug_administration": "IV LORAL",
+                "Surgery_Name": null,
+                "ICD_10_PCS_Code": null,
+                "Other_Treatment_Details": null,
+                "How_did_injury_occur": null
+            },
+            "Accident_Maternity_Details": {
+                "Is_RTA": "No",
+                "Date_of_Injury": null,
+                "Reported_to_Police": "No",
+                "FIR_No": null,
+                "Injury_Disease_due_to_substance_abuse_alcohol": "No",
+                "Test_conducted_to_establish": "Yes",
+                "Maternity_G": null,
+                "Maternity_P": null,
+                "Maternity_L": null,
+                "Maternity_A": null,
+                "Date_of_Delivery": null
+            },
+            "Admission_Hospitalization_Details": {
+                "Date_of_Admission": "01/11/25",
+                "Time_of_Admission": null,
+                "Hospitalization_Event_Type": "Emergency",
+                "Expected_days_stay": "4-5 Days",
+                "Room_Type": "Rs. Semi Pvt",
+                "Per_Day_Room_Rent_Nursing_Service_Charges_Patient_Diet": "Rs. 3000 x 5",
+                "Expected_cost_of_investigation_diagnostics": "Rs. 10000",
+                "ICU_Charges": null,
+                "OT_Charges": null,
+                "Professional_Fees": "Rs. 3000",
+                "Medicines_Consumables_Implant_Other_Expenses": "Rs. 15000",
+                "All_inclusive_package_charges": null,
+                "Sum_total_expected_cost_of_hospitalization": "Rs. 43,000"
+            },
+            "Past_History_of_Chronic_Illness": {
+                "Diabetes": null,
+                "Heart_Disease": null,
+                "Hypertension": null,
+                "Hyperlipidemias": null,
+                "Osteoarthritis": null,
+                "Asthma_COPD_Bronchitis": null,
+                "Cancer": null,
+                "Alcohol_or_drug_abuse": null,
+                "HIV_STD_Related_ailment": null,
+                "Any_other_Ailment": null
+            },
+            "Declaration": {
+                "Treating_Doctor_Name": "Dr. Hari Kishan",
+                "Qualification": "MBBS, MD",
+                "Registration_No_with_State_Code": "28410",
+                "Hospital_Name": "SONIA HOSPITAL",
+                "Hospital_Address": "2-15-2015/15, R.R. BHAWAN, Sudarshan Park, M G ROAD, NEW DELHI-110005",
+                "Hospital_Contact": "011-28500200"
+            },
+            "Patient_Declaration": {
+                "Patient_Name": "Mrs. Bhavanath Kumar",
+                "Contact_Number": "8803735349",
+                "Date": null,
+                "Signature": null
+            }
+        },
+        "Identity Card": {
+            "Name": "Bhavanath Kumar",
+            "Gender": "Male",
+            "DOB": "08/01/1989",
+            "Aadhar_No": null,
+            "VID": "4211 4822 5742",
+            "Address": null,
+            "Issue_Date": null,
+            "Policy_Holder_Name": "Bhavanath Kumar",
+            "Insured_Name": "Bhavanath Kumar",
+            "Policy_Number": "2.81-25-000001962-000",
+            "Policy_Start_Date": "04-01-2023",
+            "Policy_End_Date": "04-01-2025",
+            "Corporate_Name": null,
+            "Employee_ID": null,
+            "TPA_Name": null,
+            "Card_ID_Number_UHID": "BAID0160",
+            "Emergency_Contact_Number": null,
+            "Network_Hospital_Helpline": null,
+            "Toll_Free_Number": "1800 270 7000",
+            "Insurer_Name": "Aditya Birla Health Insurance Co. Ltd.",
+            "Website": "clientcare.insurance@adityabirlacapital.com"
+        },
+        "Diagnostic Report": {
+            "Patient_Information": {
+                "Patient_Name": "Bhavanath Kumar",
+                "Age": "36",
+                "Gender": null,
+                "Patient_ID": null,
+                "Referring_Doctor": null,
+                "Collection_Date_Time": null,
+                "Report_Date": null
+            },
+            "Test_Information": {
+                "Test_Name": null,
+                "Test_Code": null,
+                "Test_Category": null,
+                "Test_Result": null,
+                "Reference_Range": null,
+                "Units": null,
+                "Remarks": null,
+                "Impression": null
+            },
+            "Lab_Details": {
+                "Lab_Name": null,
+                "Lab_Address": null,
+                "Lab_Reference_Number": null
+            },
+            "Emergency_Triage_Notes": {
+                "Consultant": "Dr. [Name]",
+                "Chief_Complaints": "[Details]",
+                "Past_History": "[Details]",
+                "General_Examination": "[Details]",
+                "Vital_Signs": {
+                    "Pulse_Rate": "[Details]",
+                    "SP02": "[Details]"
+                },
+                "Systemic_Examination": null,
+                "Medicines_Administered": "[Details]",
+                "Interventions_Done": "[Details]",
+                "Signature_of_Emergency_Physician": "[Signature]"
+            }
+        }
+    }
+}

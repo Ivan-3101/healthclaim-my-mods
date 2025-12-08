@@ -1,0 +1,39 @@
+{
+    "answer": {
+        "1": {
+            "page_number": 1,
+            "classification": "<Suspicious>",
+            "remark": "Inconsistent formatting and potential alterations in personal details."
+        },
+        "2": {
+            "page_number": 2,
+            "classification": "<Suspicious>",
+            "remark": "Unusual total amounts and potential discrepancies in patient history."
+        },
+        "3": {
+            "page_number": 3,
+            "classification": "<Suspicious>",
+            "remark": "Signature appears inconsistent with standard practices."
+        },
+        "4": {
+            "page_number": 4,
+            "classification": "<Not Suspicious>",
+            "remark": "Consistent formatting and clear identification."
+        },
+        "5": {
+            "page_number": 5,
+            "classification": "<Suspicious>",
+            "remark": "Potential mismatch in policy details and formatting issues."
+        },
+        "6": {
+            "page_number": 6,
+            "classification": "<Suspicious>",
+            "remark": "Inconsistent medical details and potential alterations."
+        },
+        "7": {
+            "page_number": 7,
+            "classification": "<Suspicious>",
+            "remark": "Irregularities in vital signs and documentation."
+        }
+    }
+}
