@@ -58,6 +58,11 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         String ticketId = String.valueOf(execution.getVariable("TicketID")); // Convert Long to String
         String tenantId = execution.getTenantId();
 
+        // Log if filename is null (indicates non-document agent like FHIRAnalyser)
+        if (filename == null) {
+            log.info("Agent '{}' is processing consolidated/non-document data (filename is null)", displayName);
+        }
+
         JSONObject config = agentConfig.getJSONObject("config");
 
         // 3. Load workflow configuration
@@ -108,6 +113,11 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         if (source.equals("documentVariable")) {
             // Get document from storage and convert to base64
             Map<String, String> documentPaths = (Map<String, String>) execution.getVariable("documentPaths");
+
+            if (filename == null) {
+                throw new IllegalStateException("filename is null but agent requires documentVariable source");
+            }
+
             String storagePath = documentPaths.get(filename);
 
             StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
@@ -130,6 +140,8 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
                     data.put("ocr_text", value);
                 } else if (variableName.equals("fhir_json")) {
                     data.put("doc_fhir", new JSONObject(value.toString()));
+                } else if (variableName.equals("consolidatedFhir")) {
+                    data.put("consolidated_fhir", new JSONObject(value.toString()));
                 } else {
                     data.put(variableName, value);
                 }
@@ -244,28 +256,36 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
 
         log.info("Stored full result for '{}' in MinIO at: {}", agentId, minioPath);
 
-        // Update fileProcessMap with agent result
-        Map<String, Map<String, Object>> fileProcessMap =
-                (Map<String, Map<String, Object>>) execution.getVariable("fileProcessMap");
+        // Update fileProcessMap ONLY if filename is not null (document-based agents)
+        if (filename != null) {
+            Map<String, Map<String, Object>> fileProcessMap =
+                    (Map<String, Map<String, Object>>) execution.getVariable("fileProcessMap");
 
-        if (fileProcessMap == null) {
-            fileProcessMap = new HashMap<>();
+            if (fileProcessMap == null) {
+                fileProcessMap = new HashMap<>();
+            }
+
+            Map<String, Object> fileResults = fileProcessMap.getOrDefault(filename, new HashMap<>());
+
+            // Add agent result to file results
+            Map<String, Object> agentResult = new HashMap<>();
+            agentResult.put("statusCode", statusCode);
+            agentResult.put("minioPath", minioPath);
+            agentResult.put("apiCall", statusCode == 200 ? "success" : "failed");
+
+            fileResults.put(agentId + "Output", agentResult);
+            fileProcessMap.put(filename, fileResults);
+
+            execution.setVariable("fileProcessMap", fileProcessMap);
+
+            log.info("Updated fileProcessMap with {} result for {}", agentId, filename);
+        } else {
+            // For non-document agents (like FHIRAnalyser), store result directly in process variable
+            log.info("Agent '{}' is non-document agent, storing result path directly", agentId);
+            execution.setVariable(agentId + "MinioPath", minioPath);
+            execution.setVariable(agentId + "StatusCode", statusCode);
+            execution.setVariable(agentId + "Success", statusCode == 200);
         }
-
-        Map<String, Object> fileResults = fileProcessMap.getOrDefault(filename, new HashMap<>());
-
-        // Add agent result to file results
-        Map<String, Object> agentResult = new HashMap<>();
-        agentResult.put("statusCode", statusCode);
-        agentResult.put("minioPath", minioPath);
-        agentResult.put("apiCall", statusCode == 200 ? "success" : "failed");
-
-        fileResults.put(agentId + "Output", agentResult);
-        fileProcessMap.put(filename, fileResults);
-
-        execution.setVariable("fileProcessMap", fileProcessMap);
-
-        log.info("Updated fileProcessMap with {} result for {}", agentId, filename);
     }
 
     /**

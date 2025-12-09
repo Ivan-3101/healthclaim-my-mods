@@ -20,7 +20,7 @@ public class AgentResultStorageService {
      *
      * @param tenantId - Tenant ID
      * @param ticketId - Ticket ID
-     * @param filename - Document filename
+     * @param filename - Document filename (can be null for non-document agents)
      * @param agentId - Agent ID (e.g., "forgeryagent", "openaiVision")
      * @param result - Result object to store
      * @return MinIO storage path
@@ -31,12 +31,17 @@ public class AgentResultStorageService {
 
         StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
 
+        // Handle null filename for non-document agents (like FHIRAnalyser, PolicyComparator)
+        String safeFilename = (filename != null && !filename.isEmpty())
+                ? filename.replaceAll("[^a-zA-Z0-9.-]", "_")
+                : "consolidated";
+
         // Build storage path: {tenantId}/HealthClaim/{ticketId}/results/{filename}/{agentId}.json
         String pathPattern = "{tenantId}/HealthClaim/{ticketId}/results/{filename}/{agentId}.json";
         String storagePath = pathPattern
                 .replace("{tenantId}", tenantId)
                 .replace("{ticketId}", ticketId)
-                .replace("{filename}", filename.replaceAll("[^a-zA-Z0-9.-]", "_"))
+                .replace("{filename}", safeFilename)
                 .replace("{agentId}", agentId);
 
         // Convert result to JSON
@@ -59,7 +64,7 @@ public class AgentResultStorageService {
      *
      * @param tenantId - Tenant ID
      * @param ticketId - Ticket ID
-     * @param filename - Document filename
+     * @param filename - Document filename (can be null for non-document agents)
      * @param agentId - Agent ID (e.g., "forgeryagent", "openaiVision")
      * @param result - Result object to store
      * @return MinIO storage path
@@ -70,13 +75,18 @@ public class AgentResultStorageService {
 
         StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
 
+        // Handle null filename for non-document agents (like FHIRAnalyser, PolicyComparator)
+        String safeFilename = (filename != null && !filename.isEmpty())
+                ? filename.replaceAll("[^a-zA-Z0-9.-]", "_")
+                : "consolidated";
+
         // Build storage path: {tenantId}/HealthClaim/{ticketId}/results/{agentId}/{filename}.json
         String pathPattern = "{tenantId}/HealthClaim/{ticketId}/results/{agentId}/{filename}.json";
         String storagePath = pathPattern
                 .replace("{tenantId}", tenantId)
                 .replace("{ticketId}", ticketId)
                 .replace("{agentId}", agentId)
-                .replace("{filename}", filename.replaceAll("[^a-zA-Z0-9.-]", "_"));
+                .replace("{filename}", safeFilename);
 
         // Convert result to JSON
         JSONObject resultJson = new JSONObject(result);
@@ -96,7 +106,7 @@ public class AgentResultStorageService {
      *
      * @param tenantId - Tenant ID
      * @param ticketId - Ticket ID
-     * @param filename - Document filename
+     * @param filename - Document filename (can be null for non-document agents)
      * @param agentId - Agent ID
      * @param result - Result object to store
      * @return Primary storage path (stage-wise)
@@ -111,59 +121,138 @@ public class AgentResultStorageService {
         // Store in NEW location (stage-wise)
         String stageWisePath = storeAgentResultStageWise(tenantId, ticketId, filename, agentId, result);
 
-        log.info("Stored {} result for {} in BOTH locations", agentId, filename);
-        log.info("  - Document-wise: {}", documentWisePath);
-        log.info("  - Stage-wise: {}", stageWisePath);
+        log.info("Stored {} result in both locations - primary: {}", agentId, stageWisePath);
 
-        // Return stage-wise path as primary
         return stageWisePath;
     }
 
     /**
-     * Retrieve agent result from MinIO
+     * Retrieve agent result from MinIO by path (backward compatibility)
+     * Used by existing code that has the full MinIO path
      *
      * @param tenantId - Tenant ID
-     * @param storagePath - MinIO storage path
-     * @return Result as Map
+     * @param minioPath - Full MinIO path to result file
+     * @return Result map
      */
-    public static Map<String, Object> retrieveAgentResult(String tenantId, String storagePath) throws Exception {
-
+    public static Map<String, Object> retrieveAgentResult(String tenantId, String minioPath) throws Exception {
         StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
 
-        // Download from MinIO
-        byte[] content = storage.downloadDocument(storagePath).readAllBytes();
-        String jsonString = new String(content, StandardCharsets.UTF_8);
+        try {
+            byte[] content = storage.downloadDocument(minioPath).readAllBytes();
+            String jsonString = new String(content, StandardCharsets.UTF_8);
+            JSONObject json = new JSONObject(jsonString);
 
-        // Parse JSON
-        JSONObject resultJson = new JSONObject(jsonString);
+            Map<String, Object> result = new HashMap<>();
 
-        // Convert to Map
-        Map<String, Object> result = new HashMap<>();
-        for (String key : resultJson.keySet()) {
-            result.put(key, resultJson.get(key));
+            // Handle both old and new result structures
+            if (json.has("rawResponse")) {
+                // New structure: {agentId, statusCode, rawResponse, extractedData, timestamp}
+                result.put("agentId", json.optString("agentId"));
+                result.put("statusCode", json.optInt("statusCode"));
+                result.put("success", json.optBoolean("success"));
+                result.put("apiResponse", json.optString("rawResponse"));
+                result.put("timestamp", json.optLong("timestamp"));
+
+                if (json.has("extractedData")) {
+                    JSONObject extractedData = json.getJSONObject("extractedData");
+                    extractedData.keySet().forEach(key -> result.put(key, extractedData.get(key)));
+                }
+            } else {
+                // Legacy structure: direct JSON conversion
+                json.keySet().forEach(key -> result.put(key, json.get(key)));
+            }
+
+            log.debug("Retrieved agent result from: {}", minioPath);
+            return result;
+        } catch (Exception e) {
+            log.error("Failed to retrieve agent result from MinIO path: {}", minioPath, e);
+            throw new RuntimeException(String.format(
+                    "Could not retrieve agent result from MinIO: %s", minioPath), e);
         }
-
-        log.debug("Retrieved agent result from: {}", storagePath);
-
-        return result;
     }
 
     /**
-     * Build result map for storage
+     * Retrieve agent result from MinIO (tries stage-wise first, falls back to document-wise)
+     *
+     * @param tenantId - Tenant ID
+     * @param ticketId - Ticket ID
+     * @param filename - Document filename (can be null for non-document agents)
+     * @param agentId - Agent ID
+     * @return Result map
+     */
+    public static Map<String, Object> retrieveAgentResult(String tenantId, String ticketId,
+                                                          String filename, String agentId) throws Exception {
+
+        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+
+        // Handle null filename for non-document agents
+        String safeFilename = (filename != null && !filename.isEmpty())
+                ? filename.replaceAll("[^a-zA-Z0-9.-]", "_")
+                : "consolidated";
+
+        // Try stage-wise first (NEW structure)
+        String stageWisePath = "{tenantId}/HealthClaim/{ticketId}/results/{agentId}/{filename}.json"
+                .replace("{tenantId}", tenantId)
+                .replace("{ticketId}", ticketId)
+                .replace("{agentId}", agentId)
+                .replace("{filename}", safeFilename);
+
+        try {
+            byte[] content = storage.downloadDocument(stageWisePath).readAllBytes();
+            String jsonString = new String(content, StandardCharsets.UTF_8);
+            JSONObject json = new JSONObject(jsonString);
+
+            Map<String, Object> result = new HashMap<>();
+            json.keySet().forEach(key -> result.put(key, json.get(key)));
+
+            log.debug("Retrieved {} result from stage-wise: {}", agentId, stageWisePath);
+            return result;
+        } catch (Exception e) {
+            log.debug("Stage-wise result not found, trying document-wise: {}", e.getMessage());
+        }
+
+        // Fall back to document-wise (OLD structure)
+        String documentWisePath = "{tenantId}/HealthClaim/{ticketId}/results/{filename}/{agentId}.json"
+                .replace("{tenantId}", tenantId)
+                .replace("{ticketId}", ticketId)
+                .replace("{filename}", safeFilename)
+                .replace("{agentId}", agentId);
+
+        try {
+            byte[] content = storage.downloadDocument(documentWisePath).readAllBytes();
+            String jsonString = new String(content, StandardCharsets.UTF_8);
+            JSONObject json = new JSONObject(jsonString);
+
+            Map<String, Object> result = new HashMap<>();
+            json.keySet().forEach(key -> result.put(key, json.get(key)));
+
+            log.debug("Retrieved {} result from document-wise: {}", agentId, documentWisePath);
+            return result;
+        } catch (Exception e) {
+            log.error("Failed to retrieve {} result for {} from MinIO", agentId, filename, e);
+            throw new RuntimeException(String.format(
+                    "Could not retrieve agent result for %s/%s from MinIO", agentId, filename), e);
+        }
+    }
+
+    /**
+     * Build standard result map with common structure
+     *
+     * @param agentId - Agent ID
+     * @param statusCode - HTTP status code from agent API
+     * @param rawResponse - Raw response string from agent
+     * @param extractedData - Extracted/processed data fields
+     * @return Result map
      */
     public static Map<String, Object> buildResultMap(String agentId, int statusCode,
-                                                     String response, Map<String, Object> extractedData) {
+                                                     String rawResponse, Map<String, Object> extractedData) {
         Map<String, Object> result = new HashMap<>();
         result.put("agentId", agentId);
         result.put("statusCode", statusCode);
-        result.put("apiCall", statusCode == 200 ? "success" : "failed");
-        result.put("apiResponse", response);
+        result.put("success", statusCode == 200);
+        result.put("rawResponse", rawResponse);
+        result.put("extractedData", extractedData);
         result.put("timestamp", System.currentTimeMillis());
-
-        // Add extracted data
-        if (extractedData != null && !extractedData.isEmpty()) {
-            result.putAll(extractedData);
-        }
 
         return result;
     }
