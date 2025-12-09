@@ -387,9 +387,9 @@
     </bpmn:subProcess>
     <bpmn:sequenceFlow id="Flow_0450puq" sourceRef="Activity_17h17ae" targetRef="Activity_DocClassifier" />
     <bpmn:subProcess id="Activity_1kzv5fa">
-      <bpmn:incoming>Flow_0emkwnz</bpmn:incoming>
+      <bpmn:incoming>Flow_1edsz88</bpmn:incoming>
       <bpmn:outgoing>Flow_037ubon</bpmn:outgoing>
-      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${splitDocumentVars}" camunda:elementVariable="" />
       <bpmn:startEvent id="Event_0xxno63">
         <bpmn:outgoing>Flow_0we714j</bpmn:outgoing>
       </bpmn:startEvent>
@@ -407,7 +407,7 @@
     <bpmn:subProcess id="Activity_0dq1j5w">
       <bpmn:incoming>Flow_037ubon</bpmn:incoming>
       <bpmn:outgoing>Flow_0a99iva</bpmn:outgoing>
-      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${splitDocumentVars}" camunda:elementVariable="" />
       <bpmn:startEvent id="Event_1q9gq8u">
         <bpmn:outgoing>Flow_1tr9rb1</bpmn:outgoing>
       </bpmn:startEvent>
@@ -439,7 +439,7 @@
         <bpmn:outgoing>Flow_1thjhp7</bpmn:outgoing>
       </bpmn:serviceTask>
     </bpmn:subProcess>
-    <bpmn:sequenceFlow id="Flow_0ys2arf" sourceRef="Activity_DocClassifier" targetRef="Activity_1yte3fe" />
+    <bpmn:sequenceFlow id="Flow_0ys2arf" sourceRef="Activity_DocClassifier" targetRef="Activity_00o37kp" />
     <bpmn:sequenceFlow id="Flow_0t9zk1m" sourceRef="Activity_19ty2sl" targetRef="Activity_1eu27e2" />
     <bpmn:sequenceFlow id="Flow_0w29skj" sourceRef="Activity_1eu27e2" targetRef="Activity_05xkaop" />
     <bpmn:serviceTask id="Activity_19ty2sl" name="FHIR Analyser" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FHIRAnalyserDelegate">
@@ -455,24 +455,11 @@
       <bpmn:incoming>Flow_0a99iva</bpmn:incoming>
       <bpmn:outgoing>Flow_02l6f9k</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:subProcess id="Activity_1yte3fe">
+    <bpmn:sequenceFlow id="Flow_1edsz88" sourceRef="Activity_00o37kp" targetRef="Activity_1kzv5fa" />
+    <bpmn:serviceTask id="Activity_00o37kp" name="DocTypeSplitter" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.DocTypeSplitterDelegate">
       <bpmn:incoming>Flow_0ys2arf</bpmn:incoming>
-      <bpmn:outgoing>Flow_0emkwnz</bpmn:outgoing>
-      <bpmn:multiInstanceLoopCharacteristics isSequential="true" />
-      <bpmn:startEvent id="Event_05qivf3">
-        <bpmn:outgoing>Flow_0xrep49</bpmn:outgoing>
-      </bpmn:startEvent>
-      <bpmn:task id="Activity_027bkg3" name="DOC Type Splitter" camunda:asyncBefore="true" camunda:asyncAfter="true">
-        <bpmn:incoming>Flow_0xrep49</bpmn:incoming>
-        <bpmn:outgoing>Flow_0msw6pm</bpmn:outgoing>
-      </bpmn:task>
-      <bpmn:sequenceFlow id="Flow_0xrep49" sourceRef="Event_05qivf3" targetRef="Activity_027bkg3" />
-      <bpmn:endEvent id="Event_13b6xuy">
-        <bpmn:incoming>Flow_0msw6pm</bpmn:incoming>
-      </bpmn:endEvent>
-      <bpmn:sequenceFlow id="Flow_0msw6pm" sourceRef="Activity_027bkg3" targetRef="Event_13b6xuy" />
-    </bpmn:subProcess>
-    <bpmn:sequenceFlow id="Flow_0emkwnz" sourceRef="Activity_1yte3fe" targetRef="Activity_1kzv5fa" />
+      <bpmn:outgoing>Flow_1edsz88</bpmn:outgoing>
+    </bpmn:serviceTask>
   </bpmn:process>
   <bpmn:error id="Error_1brcit7" name="forgeddoc" />
   <bpmn:message id="Message_3r951pg" name="policyHolderResponse" />
@@ -607,6 +594,10 @@
       <bpmndi:BPMNShape id="Activity_02kh4bl_di" bpmnElement="Activity_FhirConsolidation">
         <dc:Bounds x="2760" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0s72swl_di" bpmnElement="Activity_00o37kp">
+        <dc:Bounds x="1600" y="800" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_17h17ae_di" bpmnElement="Activity_17h17ae" isExpanded="true">
         <dc:Bounds x="670" y="740" width="330" height="200" />
       </bpmndi:BPMNShape>
@@ -687,27 +678,6 @@
       <bpmndi:BPMNEdge id="Flow_0kqqe14_di" bpmnElement="Flow_0kqqe14">
         <di:waypoint x="2580" y="840" />
         <di:waypoint x="2612" y="840" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="Activity_1yte3fe_di" bpmnElement="Activity_1yte3fe" isExpanded="true">
-        <dc:Bounds x="1490" y="740" width="350" height="200" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Event_05qivf3_di" bpmnElement="Event_05qivf3">
-        <dc:Bounds x="1530" y="822" width="36" height="36" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_027bkg3_di" bpmnElement="Activity_027bkg3">
-        <dc:Bounds x="1620" y="800" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Event_13b6xuy_di" bpmnElement="Event_13b6xuy">
-        <dc:Bounds x="1782" y="822" width="36" height="36" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="Flow_0xrep49_di" bpmnElement="Flow_0xrep49">
-        <di:waypoint x="1566" y="840" />
-        <di:waypoint x="1620" y="840" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_0msw6pm_di" bpmnElement="Flow_0msw6pm">
-        <di:waypoint x="1720" y="840" />
-        <di:waypoint x="1782" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="Event_15ndmjn_di" bpmnElement="Event_1wb0mkj" bioc:stroke="#831311" bioc:fill="#ffcdd2" color:background-color="#ffcdd2" color:border-color="#831311">
         <dc:Bounds x="3742" y="862" width="36" height="36" />
@@ -962,7 +932,7 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0ys2arf_di" bpmnElement="Flow_0ys2arf">
         <di:waypoint x="1430" y="840" />
-        <di:waypoint x="1490" y="840" />
+        <di:waypoint x="1600" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0t9zk1m_di" bpmnElement="Flow_0t9zk1m">
         <di:waypoint x="3020" y="840" />
@@ -976,8 +946,8 @@
         <di:waypoint x="2860" y="840" />
         <di:waypoint x="2920" y="840" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_0emkwnz_di" bpmnElement="Flow_0emkwnz">
-        <di:waypoint x="1840" y="840" />
+      <bpmndi:BPMNEdge id="Flow_1edsz88_di" bpmnElement="Flow_1edsz88">
+        <di:waypoint x="1700" y="840" />
         <di:waypoint x="1900" y="840" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
