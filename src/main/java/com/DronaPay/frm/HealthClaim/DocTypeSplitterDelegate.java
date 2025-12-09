@@ -15,16 +15,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.*;
 
-/**
- * Document Type Splitter Delegate
- *
- * Takes document classifier output and splits multi-page PDFs by document type.
- * Groups pages by category (e.g., Pre-auth form, Identity Card, Diagnostic Report)
- * and creates separate PDFs for each type.
- *
- * Input: fileProcessMap with Document_ClassifierOutput
- * Output: splitDocumentVars (list of filenames), documentPaths updated with split docs
- */
 @Slf4j
 public class DocTypeSplitterDelegate implements JavaDelegate {
 
@@ -32,7 +22,7 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
     public void execute(DelegateExecution execution) throws Exception {
         log.info("=== Doc Type Splitter Started ===");
 
-        String ticketId = (String) execution.getVariable("TicketID");
+        String ticketId = String.valueOf(execution.getVariable("TicketID"));
         String tenantId = execution.getTenantId();
 
         @SuppressWarnings("unchecked")
@@ -48,7 +38,7 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
             throw new RuntimeException("fileProcessMap is null or empty");
         }
 
-        // Group pages by document type across all uploaded files
+        // Group pages by document type
         Map<String, List<PageInfo>> docTypePages = new LinkedHashMap<>();
 
         // Process each file's classifier output
@@ -126,20 +116,44 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
 
             log.info("Creating split document: {} with {} pages", splitFilename, pages.size());
 
-            // Extract pages from source PDFs and merge
+            // Create new merged document
             PDDocument mergedDoc = new PDDocument();
 
             try {
-                for (PageInfo pageInfo : pages) {
-                    try (InputStream stream = storage.downloadDocument(pageInfo.storagePath);
-                         PDDocument sourceDoc = PDDocument.load(stream)) {
+                // Load all source documents first and keep them open
+                Map<String, PDDocument> openDocs = new HashMap<>();
 
+                for (PageInfo pageInfo : pages) {
+                    // Only load each document once
+                    if (!openDocs.containsKey(pageInfo.storagePath)) {
+                        try {
+                            InputStream stream = storage.downloadDocument(pageInfo.storagePath);
+                            PDDocument doc = PDDocument.load(stream);
+                            stream.close();
+                            openDocs.put(pageInfo.storagePath, doc);
+                            log.debug("Loaded source document: {}", pageInfo.filename);
+                        } catch (Exception e) {
+                            log.error("Error loading document {}", pageInfo.filename, e);
+                        }
+                    }
+                }
+
+                // Now extract pages (all source docs are still open)
+                for (PageInfo pageInfo : pages) {
+                    PDDocument sourceDoc = openDocs.get(pageInfo.storagePath);
+                    if (sourceDoc == null) {
+                        log.warn("Source document not loaded for {}", pageInfo.filename);
+                        continue;
+                    }
+
+                    try {
                         // PDF pages are 0-indexed, but classifier returns 1-indexed
                         int pageIndex = pageInfo.pageNumber - 1;
 
                         if (pageIndex >= 0 && pageIndex < sourceDoc.getNumberOfPages()) {
                             PDPage page = sourceDoc.getPage(pageIndex);
                             mergedDoc.addPage(page);
+
                             log.debug("Added page {} from {} to {}",
                                     pageInfo.pageNumber, pageInfo.filename, splitFilename);
                         } else {
@@ -148,34 +162,46 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
                                     sourceDoc.getNumberOfPages());
                         }
                     } catch (Exception e) {
-                        log.error("Error extracting page {} from {}",
+                        log.error("Error adding page {} from {}",
                                 pageInfo.pageNumber, pageInfo.filename, e);
-                        // Continue with other pages
                     }
                 }
 
                 if (mergedDoc.getNumberOfPages() == 0) {
-                    log.warn("No pages extracted for document type: {}, skipping", docType);
-                    mergedDoc.close();
+                    log.warn("No pages added for document type: {}, skipping", docType);
+                    // Close all open source documents
+                    for (PDDocument doc : openDocs.values()) {
+                        try {
+                            doc.close();
+                        } catch (Exception e) {
+                            log.warn("Error closing document", e);
+                        }
+                    }
                     continue;
                 }
 
-                // Save merged document to MinIO
+                // Save merged document BEFORE closing source documents
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 mergedDoc.save(baos);
                 byte[] pdfBytes = baos.toByteArray();
+                baos.close();
 
+                // NOW close all source documents
+                for (PDDocument doc : openDocs.values()) {
+                    try {
+                        doc.close();
+                    } catch (Exception e) {
+                        log.warn("Error closing document", e);
+                    }
+                }
+
+                // Upload to MinIO
                 String splitStoragePath = tenantId + "/HealthClaim/" + ticketId +
                         "/split/" + splitFilename;
                 storage.uploadDocument(splitStoragePath, pdfBytes, "application/pdf");
 
-                // Add to split document list
                 splitDocumentVars.add(splitFilename);
-
-                // Update documentPaths with split document (so downstream agents can access it)
                 documentPaths.put(splitFilename, splitStoragePath);
-
-                // Initialize fileProcessMap entry for this split document
                 fileProcessMap.put(splitFilename, new HashMap<>());
 
                 log.info("Created split document: {} at {} ({} pages, {} bytes)",
@@ -192,19 +218,15 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
             throw new RuntimeException("Failed to create any split documents");
         }
 
-        // Set process variables
         execution.setVariable("splitDocumentVars", splitDocumentVars);
-        execution.setVariable("documentPaths", documentPaths); // Updated with split docs
-        execution.setVariable("fileProcessMap", fileProcessMap); // Updated with split doc entries
+        execution.setVariable("documentPaths", documentPaths);
+        execution.setVariable("fileProcessMap", fileProcessMap);
 
         log.info("=== Doc Type Splitter Completed: {} split documents created ===",
                 splitDocumentVars.size());
         log.info("Split documents: {}", splitDocumentVars);
     }
 
-    /**
-     * Helper class to track page information
-     */
     private static class PageInfo {
         final String filename;
         final String storagePath;
