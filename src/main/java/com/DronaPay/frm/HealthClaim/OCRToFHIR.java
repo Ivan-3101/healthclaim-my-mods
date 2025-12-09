@@ -95,7 +95,7 @@ public class OCRToFHIR implements JavaDelegate {
 
         // Build agent config
         JSONObject agentConfig = new JSONObject();
-        agentConfig.put("agentId", "ocrTostatic");
+        agentConfig.put("agentId", "ocrToFhir");  // FIXED: Changed from "ocrTostatic" to "ocrToFhir"
         agentConfig.put("displayName", "OCR to FHIR");
         agentConfig.put("enabled", true);
         agentConfig.put("critical", true);

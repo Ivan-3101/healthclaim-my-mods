@@ -81,6 +81,12 @@ public class FHIRConsolidationDelegate implements JavaDelegate {
                         AgentResultStorageService.retrieveAgentResult(tenantId, minioPath);
 
                 String apiResponseStr = (String) result.get("apiResponse");
+                if (apiResponseStr == null || apiResponseStr.trim().isEmpty()) {
+                    log.error("Empty API response for: {}", filename);
+                    failedDocuments++;
+                    continue;
+                }
+
                 JSONObject apiResponse = new JSONObject(apiResponseStr);
 
                 // Extract the answer object
@@ -121,6 +127,11 @@ public class FHIRConsolidationDelegate implements JavaDelegate {
         // Convert consolidated map to JSON string
         JSONObject consolidatedJson = new JSONObject(consolidated);
         String consolidatedFhir = consolidatedJson.toString(2);
+
+        log.info("Consolidated FHIR output ({} bytes): {}",
+                consolidatedFhir.length(),
+                consolidatedFhir.length() > 500 ?
+                        consolidatedFhir.substring(0, 500) + "..." : consolidatedFhir);
 
         // Set process variable
         execution.setVariable("consolidatedFhir", consolidatedFhir);
