@@ -1,39 +1,6 @@
 {
-    "answer": [
-        {
-            "page_number": 1,
-            "category": "Claim Form",
-            "ocr_text": "DETAILS OF THE THIRD PARTY ADMINISTRATOR (To be filled in block letters)\nName: Mrs. Bhavanath Kumar\nForm No: 36\nPhone: 8803735349\nT30923182\n2-91-25-000001962-000\n\nTO BE FILLED BY THE TREATING DOCTOR\nName of the Hospital: Sonia Hospital\nAddress: 1st Floor, 1/2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100\n\nSignature: Dr. Hari Kishan"
-        },
-        {
-            "page_number": 2,
-            "category": "Claim Form",
-            "ocr_text": "Details of the patient admitted:\nDate of admission: 11/12/15\nDate of discharge: 4/5/15\nDiagnosis: Semi Pit\n\nDetails of expenses:\nRoom Rent: 3000\nICU: 18000\nTotal: 43000\n\nMandatory Past History of any illness, if any: None\n\nSignature: Dr. Hari Kishan"
-        },
-        {
-            "page_number": 3,
-            "category": "Claim Form",
-            "ocr_text": "DECLARATION BY THE PATIENT/REPRESENTATIVE:\nI hereby declare that the information provided is true to the best of my knowledge. I agree to abide by the rules of the hospital and the insurer. I also agree to pay all expenses and charges incurred during my stay in the hospital.\n\nPatient's Name: Mrs. Bhavanath Kumar\nContact Number: 8803735349\n\nSignature: ____________________"
-        },
-        {
-            "page_number": 4,
-            "category": "Identity Card",
-            "ocr_text": "Government of India\n\nBhavanath Kumar\nGender: Male\nDOB: 08/01/1989\n\nAadhaar Number: 4211 4822 5742\nVID: 9146 4053 4890 7701\n\nAditya Birla Health Insurance\nToll Free No: 1800 270 7000\nWebsite: clientcare.insurance@adityabirla.com"
-        },
-        {
-            "page_number": 5,
-            "category": "Identity Card",
-            "ocr_text": "Unique Identification Authority of India\n\nAadhaar Number: 4211 4822 5742\nVID: 9146 4053 4890 7701\n\nPolicy No: 2.81-25-000001962.00\nSHREE BAIDYANATH AYURVED BHAWAN PRIVATE LIMITED\nPolicy Start Date: 04-01-2023\nPolicy End Date: 04-01-2026"
-        },
-        {
-            "page_number": 6,
-            "category": "Diagnostic Report",
-            "ocr_text": "Emergency cum Triage Notes\n\nPatient Name: Bhavanath Kumar\nAge: 36\nDate: 11/12/15\nConsultant: Dr. Hari Kishan\n\nChief Complaints: 1. Wight loss 2. Fever\nPast History: No known allergies\n\nGeneral Examination: Normal"
-        },
-        {
-            "page_number": 7,
-            "category": "Diagnostic Report",
-            "ocr_text": "Vital Signs\n\nPulse Rate: 80\nSP02: 98%\nTemperature: 98.6°F\n\nSystemic Examination\n\nMedications Administered: \n1. Antibiotic\n2. Pain relief\n\nSignature of Emergency Physician: Dr. Hari Kishan"
-        }
-    ]
+    "answer": {
+        "doctype": "preauth form",
+        "ocr_text": "DETAILS OF THE THIRD PARTY ADMINISTRATOR (To be filled in block letters)\n\nName: Mrs. Bhavanath Kumar\nForm No: 36\nAddress: Vasant Vihar\nPhone: 8803735349\nT309273184\n2-91-25-000001962-000\n\nTO BE FILLED BY THE TREATING DOCTOR (Please fill in block letters)\n\nName of the Hospital:  DB-Hari Kishan\nAddress:  1-7-1 Highschool Road, Venkatramapuram,  RR 201210, Telangana\nPhone:  040- 12345678\n\nDetails of the patient admitted:\nDate of admission:  11/12/25\nDate of discharge:  4/5/25\nDiagnosis:  Semi Pit\n\nRoom Rent:  3000\nICU Room Rent:  3000\nTotal:  18000\n\nMandatory Past History of any illness, if any: Yes (please specify)\n\nDECLARATION BY THE PATIENT/REPRESENTATIVE:\nI hereby declare that I have understood the Declaration of the Insurer. I agree to assign the hospital to discharge my obligations to the Insurer. I also agree to provide all necessary information to the Insurer.\n\nPatient's Name/Guardian's Name:  Mrs. Bhavanath Kumar\nContact Number:  8803735349\n\nHOSPITAL DECLARATION\n\nI, the undersigned, hereby declare that the information provided is true to the best of my knowledge.\n\nDoctor's Signature:  Dr. Hari Kishan\n\nDate:  28/10"
+    }
 }

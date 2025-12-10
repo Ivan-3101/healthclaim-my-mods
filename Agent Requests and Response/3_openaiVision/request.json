@@ -1,38 +1,7 @@
 {
-    "data": {
-        "base64_img": "<pdf converted to a base64 and pasted here>",
-        "doc_structure": {
-            "answer": [
-                {
-                    "category": "Claim Form",
-                    "page_number": 1
-                },
-                {
-                    "category": "Claim Form",
-                    "page_number": 2
-                },
-                {
-                    "category": "Claim Form",
-                    "page_number": 3
-                },
-                {
-                    "category": "Identity Card",
-                    "page_number": 4
-                },
-                {
-                    "category": "Identity Card",
-                    "page_number": 5
-                },
-                {
-                    "category": "Diagnostic Report",
-                    "page_number": 6
-                },
-                {
-                    "category": "Diagnostic Report",
-                    "page_number": 7
-                }
-            ]
-        }
-    },
-    "agentid": "openaiVision"
+  "data": {
+    "base64_img": "<base64  content to be passed here of the relevant doctype obtained in the previous DOCtype splitter taks>",
+    "doctype": "<doctype of the document being passed >"
+  },
+  "agentid": "openaiVision"
 }
