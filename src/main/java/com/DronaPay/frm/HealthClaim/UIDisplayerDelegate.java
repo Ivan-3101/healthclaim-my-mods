@@ -54,10 +54,14 @@ public class UIDisplayerDelegate implements JavaDelegate {
                     // Add doctype header
                     uiFields.put("--- " + doctype + " ---", "");
 
-                    // Extract fields from answer
-                    if (answer.has("doctype")) {
+                    // Extract fields from answer - CHANGED: doctype -> doc_type
+                    if (answer.has("doc_type")) {
+                        uiFields.put(doctype + " - Document Type", answer.getString("doc_type"));
+                    } else if (answer.has("doctype")) {
+                        // Backward compatibility: support old format
                         uiFields.put(doctype + " - Document Type", answer.getString("doctype"));
                     }
+
                     if (answer.has("ocr_text")) {
                         String ocrText = answer.getString("ocr_text");
                         // Truncate if too long

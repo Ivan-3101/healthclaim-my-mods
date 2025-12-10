@@ -58,7 +58,7 @@ public class OCROnDoc implements JavaDelegate {
         String base64Content = Base64.getEncoder().encodeToString(pdfBytes);
         log.info("Converted document to base64 ({} bytes)", pdfBytes.length);
 
-        // Get AI agent URL from database - FIXED PATH
+        // Get AI agent URL from database
         Connection conn = execution.getProcessEngine()
                 .getProcessEngineConfiguration()
                 .getDataSource()
@@ -67,7 +67,6 @@ public class OCROnDoc implements JavaDelegate {
         JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
         conn.close();
 
-        // FIXED: Use correct JSON path from your database
         if (!workflowConfig.has("externalAPIs")) {
             throw new RuntimeException("externalAPIs not configured in database for tenant: " + tenantId);
         }
@@ -84,15 +83,15 @@ public class OCROnDoc implements JavaDelegate {
 
         log.info("Using agent API URL: {}", agentApiUrl);
 
-        // Build request body
+        // Build request body - CHANGED: doctype -> doc_type
         JSONObject requestBody = new JSONObject();
         JSONObject data = new JSONObject();
         data.put("base64_img", base64Content);
-        data.put("doctype", doctype);
+        data.put("doc_type", doctype); // CHANGED: was "doctype"
         requestBody.put("data", data);
         requestBody.put("agentid", "openaiVision");
 
-        log.info("Calling openaiVision agent for doctype: {}", doctype);
+        log.info("Calling openaiVision agent for doc_type: {}", doctype);
 
         // Call agent using Apache HttpClient
         CloseableHttpClient httpClient = HttpClients.createDefault();
