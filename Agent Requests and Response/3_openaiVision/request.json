@@ -1,7 +1,7 @@
 {
   "data": {
-    "base64_img": "<base64  content to be passed here of the relevant doctype obtained in the previous DOCtype splitter taks>",
-    "doctype": "<doctype of the document being passed >"
+    "base64_img": "<base64 content>",
+    "doc_type": "<doc type>"
   },
   "agentid": "openaiVision"
 }
