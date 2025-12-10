@@ -75,7 +75,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         conn.close();
 
         // 4. Build request based on input mapping
-        JSONObject requestBody = buildRequest(config, execution, filename, tenantId, agentId, ticketId);
+        JSONObject requestBody = buildRequest(config, execution, filename, tenantId, agentId);
 
         // 5. Call agent API
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
@@ -99,7 +99,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
      */
     @SuppressWarnings("unchecked")
     private JSONObject buildRequest(JSONObject config, DelegateExecution execution,
-                                    String filename, String tenantId, String agentId, String ticketId) throws Exception {
+                                    String filename, String tenantId, String agentId) throws Exception {
 
         JSONObject requestBody = new JSONObject();
         JSONObject data = new JSONObject();
@@ -128,26 +128,6 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
                 String base64 = Base64.getEncoder().encodeToString(bytes);
                 data.put("base64_img", base64);
             }
-
-            requestBody.put("data", data);
-            requestBody.put("agentid", agentId);
-
-        } else if (source.equals("chainedOutput")) {
-            // Get output from previous agent in the chain
-            String chainFrom = inputMapping.getString("chainFrom");
-
-            log.info("Chaining from agent '{}' for agent '{}'", chainFrom, agentId);
-
-            // Retrieve the chained agent's result from MinIO
-            JSONObject chainedResult = retrieveChainedAgentResult(chainFrom, filename, tenantId, ticketId, execution);
-
-            if (chainedResult == null) {
-                throw new BpmnError("CHAINED_OUTPUT_NOT_FOUND",
-                        String.format("Could not find output from agent '%s' to chain to '%s'", chainFrom, agentId));
-            }
-
-            // Apply transformation on the chained result
-            applyInputTransformation(transformation, chainedResult, requestBody, agentId);
 
         } else if (source.equals("processVariable")) {
             // Get data from process variable
@@ -178,111 +158,14 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
                     }
                 }
             }
-
-            requestBody.put("data", data);
-            requestBody.put("agentid", agentId);
         }
+
+        requestBody.put("data", data);
+        requestBody.put("agentid", agentId);
 
         log.debug("Built request for agent '{}' with {} bytes of data", agentId, requestBody.toString().length());
 
         return requestBody;
-    }
-
-    /**
-     * Retrieve the result of a previous agent from MinIO storage
-     */
-    @SuppressWarnings("unchecked")
-    private JSONObject retrieveChainedAgentResult(String chainFromAgentId, String filename,
-                                                  String tenantId, String ticketId,
-                                                  DelegateExecution execution) throws Exception {
-
-        // First try to get from fileProcessMap (for document-based agents)
-        if (filename != null) {
-            Map<String, Map<String, Object>> fileProcessMap =
-                    (Map<String, Map<String, Object>>) execution.getVariable("fileProcessMap");
-
-            if (fileProcessMap != null && fileProcessMap.containsKey(filename)) {
-                Map<String, Object> fileResults = fileProcessMap.get(filename);
-                Map<String, Object> agentResult = (Map<String, Object>) fileResults.get(chainFromAgentId + "Output");
-
-                if (agentResult != null && agentResult.containsKey("minioPath")) {
-                    String minioPath = (String) agentResult.get("minioPath");
-                    log.info("Found chained agent '{}' result in fileProcessMap at: {}", chainFromAgentId, minioPath);
-
-                    // Retrieve from MinIO
-                    StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
-                    InputStream resultStream = storage.downloadDocument(minioPath);
-                    String resultJson = IOUtils.toString(resultStream, "UTF-8");
-
-                    JSONObject fullResult = new JSONObject(resultJson);
-
-                    // Extract the API response from the stored result
-                    if (fullResult.has("apiResponse")) {
-                        return new JSONObject(fullResult.getString("apiResponse"));
-                    }
-                }
-            }
-        }
-
-        log.error("Could not retrieve chained result for agent '{}' and filename '{}'", chainFromAgentId, filename);
-        return null;
-    }
-
-    /**
-     * Apply input transformation on chained agent result
-     */
-    private void applyInputTransformation(String transformation, JSONObject chainedResult,
-                                          JSONObject requestBody, String agentId) {
-
-        log.info("Applying transformation '{}' for agent '{}'", transformation, agentId);
-
-        switch (transformation) {
-            case "wrapAnswerInData":
-                // Extract the "answer" field from chained result and put it in "data"
-                if (chainedResult != null && chainedResult.has("answer")) {
-                    requestBody.put("data", chainedResult.get("answer"));
-                    requestBody.put("agentid", agentId);
-                    log.info("Applied wrapAnswerInData transformation - extracted 'answer' field");
-                } else {
-                    throw new BpmnError("TRANSFORMATION_ERROR",
-                            "Chained result missing 'answer' field for wrapAnswerInData transformation");
-                }
-                break;
-
-            case "wrapInOcrText":
-                // Extract doc_type and ocr_text from answer and wrap appropriately
-                if (chainedResult != null && chainedResult.has("answer")) {
-                    JSONObject answer = chainedResult.getJSONObject("answer");
-                    JSONObject data = new JSONObject();
-
-                    if (answer.has("doc_type")) {
-                        data.put("doc_type", answer.getString("doc_type"));
-                    }
-                    if (answer.has("ocr_text")) {
-                        data.put("ocr_text", answer.getString("ocr_text"));
-                    }
-
-                    requestBody.put("data", data);
-                    requestBody.put("agentid", agentId);
-                    log.info("Applied wrapInOcrText transformation");
-                } else {
-                    throw new BpmnError("TRANSFORMATION_ERROR",
-                            "Chained result missing 'answer' field for wrapInOcrText transformation");
-                }
-                break;
-
-            case "none":
-                // Pass through as-is
-                requestBody.put("data", chainedResult);
-                requestBody.put("agentid", agentId);
-                break;
-
-            default:
-                log.warn("Unknown transformation '{}', passing through as-is", transformation);
-                requestBody.put("data", chainedResult);
-                requestBody.put("agentid", agentId);
-                break;
-        }
     }
 
     /**

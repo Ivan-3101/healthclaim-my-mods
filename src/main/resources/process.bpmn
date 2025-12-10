@@ -436,7 +436,7 @@
     <bpmn:subProcess id="Activity_0c8yvg3">
       <bpmn:incoming>Flow_037ubon</bpmn:incoming>
       <bpmn:outgoing>Flow_1rugnkq</bpmn:outgoing>
-      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${documents}" camunda:elementVariable="attachment" />
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${splitDocumentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_1x0b3zu">
         <bpmn:outgoing>Flow_084cttl</bpmn:outgoing>
       </bpmn:startEvent>
@@ -445,7 +445,7 @@
         <bpmn:incoming>Flow_0xnnumq</bpmn:incoming>
       </bpmn:endEvent>
       <bpmn:sequenceFlow id="Flow_0xnnumq" sourceRef="Activity_0u7ed5l" targetRef="Event_1pojsp1" />
-      <bpmn:serviceTask id="Activity_0u7ed5l" name="OCR to Static" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:delegateExpression="${genericAgentExecutorDelegate}">
+      <bpmn:serviceTask id="Activity_0u7ed5l" name="OCR to Static" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.OcrToStaticDelegate">
         <bpmn:incoming>Flow_084cttl</bpmn:incoming>
         <bpmn:outgoing>Flow_0xnnumq</bpmn:outgoing>
       </bpmn:serviceTask>
