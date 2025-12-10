@@ -31,24 +31,11 @@ public class OcrToStaticDelegate implements JavaDelegate {
 
         log.info("=== OcrToStatic Started for file: {} ===", filename);
 
-        // 1. Get MinIO path from fileProcessMap (already stored by openaiVision)
-        Map<String, Map<String, Object>> fileProcessMap =
-                (Map<String, Map<String, Object>>) execution.getVariable("fileProcessMap");
+        // 1. Construct MinIO path where OCROnDoc stores results
+        // OCROnDoc stores at: {tenantId}/HealthClaim/{ticketId}/ocr/{filename_without_extension}.json
+        String filenameWithoutExt = filename.replace(".pdf", "");
+        String minioPath = String.format("%s/HealthClaim/%s/ocr/%s.json", tenantId, ticketId, filenameWithoutExt);
 
-        if (fileProcessMap == null || !fileProcessMap.containsKey(filename)) {
-            throw new BpmnError("MISSING_FILE_PROCESS_MAP",
-                    "fileProcessMap is null or missing entry for: " + filename);
-        }
-
-        Map<String, Object> fileResults = fileProcessMap.get(filename);
-        Map<String, Object> openaiVisionResult = (Map<String, Object>) fileResults.get("openaiVisionOutput");
-
-        if (openaiVisionResult == null || !openaiVisionResult.containsKey("minioPath")) {
-            throw new BpmnError("MISSING_OPENAIVISION_RESULT",
-                    "openaiVision result not found in fileProcessMap for: " + filename);
-        }
-
-        String minioPath = (String) openaiVisionResult.get("minioPath");
         log.info("Fetching openaiVision result from MinIO: {}", minioPath);
 
         // 2. Load workflow config
@@ -60,24 +47,18 @@ public class OcrToStaticDelegate implements JavaDelegate {
         JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
         conn.close();
 
-        // 3. Fetch openaiVision output from MinIO using the stored path
+        // 3. Fetch openaiVision output from MinIO
         StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
         InputStream resultStream = storage.downloadDocument(minioPath);
         String resultJson = IOUtils.toString(resultStream, "UTF-8");
 
-        JSONObject openaiVisionStoredResult = new JSONObject(resultJson);
+        JSONObject openaiVisionResult = new JSONObject(resultJson);
 
-        if (!openaiVisionStoredResult.has("apiResponse")) {
-            throw new BpmnError("MISSING_API_RESPONSE", "openaiVision result missing apiResponse field");
+        if (!openaiVisionResult.has("answer")) {
+            throw new BpmnError("MISSING_ANSWER", "openaiVision result missing answer field");
         }
 
-        JSONObject apiResponse = new JSONObject(openaiVisionStoredResult.getString("apiResponse"));
-
-        if (!apiResponse.has("answer")) {
-            throw new BpmnError("MISSING_ANSWER", "openaiVision apiResponse missing answer field");
-        }
-
-        JSONObject answer = apiResponse.getJSONObject("answer");
+        JSONObject answer = openaiVisionResult.getJSONObject("answer");
 
         log.info("Retrieved openaiVision answer with doc_type: {}", answer.optString("doc_type", "unknown"));
 
@@ -109,17 +90,6 @@ public class OcrToStaticDelegate implements JavaDelegate {
                 tenantId, ticketId, filename, "ocrToStatic", fullResult);
 
         log.info("Stored ocrToStatic result at: {}", storedPath);
-
-        // 7. Update fileProcessMap
-        Map<String, Object> agentResult = new HashMap<>();
-        agentResult.put("statusCode", statusCode);
-        agentResult.put("minioPath", storedPath);
-        agentResult.put("apiCall", "success");
-
-        fileResults.put("ocrToStaticOutput", agentResult);
-        fileProcessMap.put(filename, fileResults);
-
-        execution.setVariable("fileProcessMap", fileProcessMap);
 
         log.info("=== OcrToStatic Completed for file: {} ===", filename);
     }
