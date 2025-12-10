@@ -1,0 +1,43 @@
+{
+    "answer": {
+        "documents": [
+            {
+                "doc_type": "pre-auth_form",
+                "fields": {
+                    "third_party_administrator": {
+                        "name": "Mrs. Bhavanath Kumar",
+                        "form_no": "36",
+                        "address": "Vasant Vihar",
+                        "phone": "8803735349",
+                        "tpa_id": "T30923182",
+                        "policy_no": "2-91-25-00001962-000"
+                    },
+                    "treating_doctor_section": {
+                        "hospital_name": null,
+                        "date_of_admission": "11/12/25",
+                        "date_of_discharge": null,
+                        "patient_details": null,
+                        "type_of_admission": null,
+                        "injury_disease_condition": null,
+                        "nature_of_illness": null,
+                        "details_of_treatment": null,
+                        "room_rent": null,
+                        "icu_room_rent": null,
+                        "total_charges": null,
+                        "past_history_of_illness": null
+                    },
+                    "patient_declaration": {
+                        "patient_name": "Mrs. Bhavanath Kumar",
+                        "contact_number": "8803735349"
+                    },
+                    "hospital_declaration": {
+                        "hospital_name": "SOHA HOSPITAL",
+                        "authorized_signatory": null,
+                        "date": null,
+                        "signature": null
+                    }
+                }
+            }
+        ]
+    }
+}
