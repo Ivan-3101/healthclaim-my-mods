@@ -246,12 +246,12 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
             }
         }
 
-        // Store full result in MinIO (BOTH document-wise and stage-wise)
+        // Store full result in MinIO (stage-wise only)
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 agentId, statusCode, resp, extractedData);
 
-        // Store in BOTH locations - returns stage-wise path as primary
-        String minioPath = AgentResultStorageService.storeAgentResultBoth(
+        // Store in stage-wise location only - no more duplication
+        String minioPath = AgentResultStorageService.storeAgentResultStageWise(
                 tenantId, ticketId, filename, agentId, fullResult);
 
         log.info("Stored full result for '{}' in MinIO at: {}", agentId, minioPath);
