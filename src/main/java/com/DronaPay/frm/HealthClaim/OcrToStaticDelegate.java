@@ -32,7 +32,6 @@ public class OcrToStaticDelegate implements JavaDelegate {
         log.info("=== OcrToStatic Started for file: {} ===", filename);
 
         // 1. Construct MinIO path where OCROnDoc stores results
-        // OCROnDoc stores at: {tenantId}/HealthClaim/{ticketId}/ocr/{filename_without_extension}.json
         String filenameWithoutExt = filename.replace(".pdf", "");
         String minioPath = String.format("%s/HealthClaim/%s/ocr/%s.json", tenantId, ticketId, filenameWithoutExt);
 
@@ -62,12 +61,13 @@ public class OcrToStaticDelegate implements JavaDelegate {
 
         log.info("Retrieved openaiVision answer with doc_type: {}", answer.optString("doc_type", "unknown"));
 
-        // 4. Build request for ocrToStatic
+        // 4. Build request for ocrToStatic - NOTE: lowercase 's' in agentid
         JSONObject requestBody = new JSONObject();
         requestBody.put("data", answer);
-        requestBody.put("agentid", "ocrToStatic");
+        requestBody.put("agentid", "ocrTostatic");  // ← CHANGED: lowercase 's'
 
-        log.info("Calling ocrToStatic API");
+        log.info("Calling ocrToStatic API with agentid: ocrTostatic");
+        log.debug("Request body: {}", requestBody.toString());
 
         // 5. Call API
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
@@ -77,6 +77,7 @@ public class OcrToStaticDelegate implements JavaDelegate {
         int statusCode = response.getStatusLine().getStatusCode();
 
         log.info("OcrToStatic API status: {}", statusCode);
+        log.debug("OcrToStatic API response: {}", resp);
 
         if (statusCode != 200) {
             throw new BpmnError("ocrToStaticFailed", "OcrToStatic agent failed with status: " + statusCode);
