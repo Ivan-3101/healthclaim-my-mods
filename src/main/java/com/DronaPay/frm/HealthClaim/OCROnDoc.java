@@ -1,54 +1,126 @@
 package com.DronaPay.frm.HealthClaim;
 
-import com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentExecutorDelegate;
+import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
+import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
+import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.IOUtils;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
 import org.json.JSONObject;
 
+import java.io.InputStream;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.util.Base64;
+import java.util.Map;
+
 @Slf4j
 public class OCROnDoc implements JavaDelegate {
 
-    private final GenericAgentExecutorDelegate genericDelegate = new GenericAgentExecutorDelegate();
-
     @Override
     public void execute(DelegateExecution execution) throws Exception {
-        log.debug("OCROnDoc wrapper called - delegating to generic");
+        log.info("=== OCR on Documents Started ===");
 
-        JSONObject agentConfig = new JSONObject();
-        agentConfig.put("agentId", "openaiVision");
-        agentConfig.put("displayName", "OCR Extraction");
-        agentConfig.put("enabled", true);
-        agentConfig.put("critical", true);
+        String filename = (String) execution.getVariable("attachment");
+        String ticketId = String.valueOf(execution.getVariable("TicketID"));
+        String tenantId = execution.getTenantId();
 
-        JSONObject config = new JSONObject();
+        @SuppressWarnings("unchecked")
+        Map<String, String> documentPaths = (Map<String, String>) execution.getVariable("documentPaths");
 
-        JSONObject inputMapping = new JSONObject();
-        inputMapping.put("source", "documentVariable");
-        inputMapping.put("transformation", "toBase64");
-        config.put("inputMapping", inputMapping);
+        if (documentPaths == null || !documentPaths.containsKey(filename)) {
+            throw new RuntimeException("Document path not found for: " + filename);
+        }
 
-        JSONObject outputMapping = new JSONObject();
-        JSONObject variablesToSet = new JSONObject();
-        JSONObject ocrTextMapping = new JSONObject();
-        ocrTextMapping.put("jsonPath", "/answer");
-        ocrTextMapping.put("dataType", "string");
-        variablesToSet.put("ocr_text", ocrTextMapping);
-        outputMapping.put("variablesToSet", variablesToSet);
-        config.put("outputMapping", outputMapping);
+        String storagePath = documentPaths.get(filename);
+        log.info("Processing file: {} from path: {}", filename, storagePath);
 
-        JSONObject errorHandling = new JSONObject();
-        errorHandling.put("onFailure", "throwError");
-        errorHandling.put("continueOnError", false);
-        errorHandling.put("errorCode", "failedOcr");
-        config.put("errorHandling", errorHandling);
+        // Extract doctype from filename (e.g., diagnostic_report.pdf -> diagnostic_report)
+        String doctype = filename.substring(0, filename.lastIndexOf("."));
+        log.info("Extracted doctype: {}", doctype);
 
-        agentConfig.put("config", config);
+        // Download document from MinIO
+        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+        byte[] pdfBytes;
+        try (InputStream fileContent = storage.downloadDocument(storagePath)) {
+            pdfBytes = IOUtils.toByteArray(fileContent);
+        }
 
-        execution.setVariable("currentAgentConfig", agentConfig);
+        // Convert to base64
+        String base64Content = Base64.getEncoder().encodeToString(pdfBytes);
+        log.info("Converted document to base64 ({} bytes)", pdfBytes.length);
 
-        genericDelegate.execute(execution);
+        // Get AI agent URL from database
+        Connection conn = execution.getProcessEngine()
+                .getProcessEngineConfiguration()
+                .getDataSource()
+                .getConnection();
 
-        log.debug("OCROnDoc completed via generic delegate");
+        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
+        conn.close();
+
+        if (!workflowConfig.has("externalApi") || !workflowConfig.getJSONObject("externalApi").has("agentApiUrl")) {
+            throw new RuntimeException("Agent API URL not configured in database for tenant: " + tenantId);
+        }
+
+        String agentApiUrl = workflowConfig.getJSONObject("externalApi").getString("agentApiUrl");
+        log.info("Using agent API URL: {}", agentApiUrl);
+
+        // Build request body
+        JSONObject requestBody = new JSONObject();
+        JSONObject data = new JSONObject();
+        data.put("base64_img", base64Content);
+        data.put("doctype", doctype);
+        requestBody.put("data", data);
+        requestBody.put("agentid", "openaiVision");
+
+        log.info("Calling openaiVision agent for doctype: {}", doctype);
+
+        // Call agent using Apache HttpClient
+        CloseableHttpClient httpClient = HttpClients.createDefault();
+        HttpPost httpPost = new HttpPost(new URI(agentApiUrl + "/agent"));
+        httpPost.setHeader("Content-Type", "application/json");
+
+        // Add Basic Auth if configured
+        if (workflowConfig.getJSONObject("externalApi").has("agentApiUsername") &&
+                workflowConfig.getJSONObject("externalApi").has("agentApiPassword")) {
+
+            String username = workflowConfig.getJSONObject("externalApi").getString("agentApiUsername");
+            String password = workflowConfig.getJSONObject("externalApi").getString("agentApiPassword");
+            String auth = username + ":" + password;
+            String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
+            httpPost.setHeader("Authorization", "Basic " + encodedAuth);
+        }
+
+        httpPost.setEntity(new StringEntity(requestBody.toString(), StandardCharsets.UTF_8));
+
+        CloseableHttpResponse response = httpClient.execute(httpPost);
+        int statusCode = response.getStatusLine().getStatusCode();
+        String responseBody = EntityUtils.toString(response.getEntity());
+
+        response.close();
+        httpClient.close();
+
+        if (statusCode != 200) {
+            throw new RuntimeException("Agent call failed with status: " + statusCode + ", body: " + responseBody);
+        }
+
+        log.info("Received response from openaiVision agent (status: {})", statusCode);
+
+        // Save response JSON to MinIO as {doctype}.json
+        String outputPath = tenantId + "/HealthClaim/" + ticketId + "/ocr/" + doctype + ".json";
+        byte[] jsonBytes = responseBody.getBytes(StandardCharsets.UTF_8);
+        storage.uploadDocument(outputPath, jsonBytes, "application/json");
+
+        log.info("Saved OCR result to: {}", outputPath);
+        log.info("=== OCR on Documents Completed for {} ===", filename);
     }
 }
