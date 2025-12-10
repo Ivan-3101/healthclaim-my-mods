@@ -58,7 +58,7 @@ public class OCROnDoc implements JavaDelegate {
         String base64Content = Base64.getEncoder().encodeToString(pdfBytes);
         log.info("Converted document to base64 ({} bytes)", pdfBytes.length);
 
-        // Get AI agent URL from database
+        // Get AI agent URL from database - FIXED PATH
         Connection conn = execution.getProcessEngine()
                 .getProcessEngineConfiguration()
                 .getDataSource()
@@ -67,11 +67,21 @@ public class OCROnDoc implements JavaDelegate {
         JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
         conn.close();
 
-        if (!workflowConfig.has("externalApi") || !workflowConfig.getJSONObject("externalApi").has("agentApiUrl")) {
-            throw new RuntimeException("Agent API URL not configured in database for tenant: " + tenantId);
+        // FIXED: Use correct JSON path from your database
+        if (!workflowConfig.has("externalAPIs")) {
+            throw new RuntimeException("externalAPIs not configured in database for tenant: " + tenantId);
         }
 
-        String agentApiUrl = workflowConfig.getJSONObject("externalApi").getString("agentApiUrl");
+        JSONObject externalAPIs = workflowConfig.getJSONObject("externalAPIs");
+        if (!externalAPIs.has("agentAPI")) {
+            throw new RuntimeException("agentAPI not configured in externalAPIs for tenant: " + tenantId);
+        }
+
+        JSONObject agentAPI = externalAPIs.getJSONObject("agentAPI");
+        String agentApiUrl = agentAPI.getString("baseUrl");
+        String username = agentAPI.getString("username");
+        String password = agentAPI.getString("password");
+
         log.info("Using agent API URL: {}", agentApiUrl);
 
         // Build request body
@@ -89,16 +99,10 @@ public class OCROnDoc implements JavaDelegate {
         HttpPost httpPost = new HttpPost(new URI(agentApiUrl + "/agent"));
         httpPost.setHeader("Content-Type", "application/json");
 
-        // Add Basic Auth if configured
-        if (workflowConfig.getJSONObject("externalApi").has("agentApiUsername") &&
-                workflowConfig.getJSONObject("externalApi").has("agentApiPassword")) {
-
-            String username = workflowConfig.getJSONObject("externalApi").getString("agentApiUsername");
-            String password = workflowConfig.getJSONObject("externalApi").getString("agentApiPassword");
-            String auth = username + ":" + password;
-            String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
-            httpPost.setHeader("Authorization", "Basic " + encodedAuth);
-        }
+        // Add Basic Auth
+        String auth = username + ":" + password;
+        String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
+        httpPost.setHeader("Authorization", "Basic " + encodedAuth);
 
         httpPost.setEntity(new StringEntity(requestBody.toString(), StandardCharsets.UTF_8));
 
