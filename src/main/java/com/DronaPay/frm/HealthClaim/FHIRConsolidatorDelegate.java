@@ -58,9 +58,9 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
                 Map<String, Object> result =
                         AgentResultStorageService.retrieveAgentResult(tenantId, minioPath);
 
-                String rawResponse = (String) result.get("rawResponse");
+                String rawResponse = (String) result.get("apiResponse");  // KEY FIX: It's "apiResponse" not "rawResponse"
                 if (rawResponse == null || rawResponse.trim().isEmpty()) {
-                    log.error("Empty rawResponse for file: {}, skipping", filename);
+                    log.error("Empty apiResponse for file: {}, skipping", filename);
                     failCount++;
                     continue;
                 }
