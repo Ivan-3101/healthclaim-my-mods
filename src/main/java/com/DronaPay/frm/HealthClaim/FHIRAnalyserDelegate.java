@@ -49,15 +49,26 @@ public class FHIRAnalyserDelegate implements JavaDelegate {
         JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
         conn.close();
 
-        // 2. Get consolidated FHIR request from process variable
-        String consolidatedRequest = (String) execution.getVariable("fhirConsolidatedRequest");
+        // 2. Get consolidated FHIR request from MinIO (not from process variable - too large)
+        String consolidatorMinioPath = (String) execution.getVariable("fhirConsolidatorMinioPath");
 
-        if (consolidatedRequest == null || consolidatedRequest.trim().isEmpty()) {
-            log.error("No consolidated FHIR request found in process variables");
-            throw new BpmnError("fhirAnalyserFailed", "Missing consolidated FHIR request");
+        if (consolidatorMinioPath == null || consolidatorMinioPath.trim().isEmpty()) {
+            log.error("No fhirConsolidatorMinioPath found in process variables");
+            throw new BpmnError("fhirAnalyserFailed", "Missing fhirConsolidatorMinioPath");
         }
 
-        log.info("Using consolidated FHIR request ({} bytes)", consolidatedRequest.length());
+        log.info("Retrieving consolidated FHIR request from MinIO: {}", consolidatorMinioPath);
+
+        // Retrieve from MinIO
+        Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, consolidatorMinioPath);
+        String consolidatedRequest = (String) result.get("rawResponse");
+
+        if (consolidatedRequest == null || consolidatedRequest.trim().isEmpty()) {
+            log.error("Empty consolidated request retrieved from MinIO");
+            throw new BpmnError("fhirAnalyserFailed", "Empty consolidated FHIR request in MinIO");
+        }
+
+        log.info("Retrieved consolidated FHIR request ({} bytes) from MinIO", consolidatedRequest.length());
 
         // 3. Call FHIR_Analyser agent
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
@@ -79,16 +90,16 @@ public class FHIRAnalyserDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "FHIR_Analyser", statusCode, resp, new HashMap<>());
 
-        String minioPath = AgentResultStorageService.storeAgentResultStageWise(
+        String analyserMinioPath = AgentResultStorageService.storeAgentResultStageWise(
                 tenantId, ticketId, "consolidated", "FHIR_Analyser", fullResult);
 
-        log.info("Stored FHIR_Analyser result at: {}", minioPath);
+        log.info("Stored FHIR_Analyser result at: {}", analyserMinioPath);
 
         // 5. Extract key fields from response and set as process variables
         extractAndSetProcessVariables(execution, resp);
 
         // 6. Set MinIO path for reference
-        execution.setVariable("fhirAnalyserMinioPath", minioPath);
+        execution.setVariable("fhirAnalyserMinioPath", analyserMinioPath);
         execution.setVariable("fhirAnalyserSuccess", true);
 
         log.info("=== FHIR Analyser Completed ===");

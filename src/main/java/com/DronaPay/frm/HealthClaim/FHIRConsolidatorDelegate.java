@@ -112,25 +112,25 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
         consolidatedRequest.put("agentid", "FHIR_Analyser");
 
         String consolidatedJson = consolidatedRequest.toString(2);
-        log.info("Consolidated FHIR request ({} bytes): {}",
-                consolidatedJson.length(),
-                consolidatedJson.length() > 500 ?
-                        consolidatedJson.substring(0, 500) + "..." : consolidatedJson);
+        log.info("Consolidated FHIR request ({} bytes) ready for FHIR_Analyser",
+                consolidatedJson.length());
 
         // Store consolidated request in MinIO
-        storeConsolidatedRequest(tenantId, ticketId, consolidatedRequest);
+        String minioPath = storeConsolidatedRequest(tenantId, ticketId, consolidatedRequest);
 
-        // Set process variable for easy access
-        execution.setVariable("fhirConsolidatedRequest", consolidatedJson);
+        // CRITICAL: Don't set the large JSON as process variable (exceeds varchar(4000) limit)
+        // Instead, just store the MinIO path
+        execution.setVariable("fhirConsolidatorMinioPath", minioPath);
 
         log.info("=== FHIR Consolidator Completed ===");
     }
 
     /**
      * Store consolidated FHIR request in MinIO
+     * @return MinIO path where the consolidated request was stored
      */
-    private void storeConsolidatedRequest(String tenantId, String ticketId,
-                                          JSONObject consolidatedRequest) {
+    private String storeConsolidatedRequest(String tenantId, String ticketId,
+                                            JSONObject consolidatedRequest) {
         try {
             Map<String, Object> resultMap = new java.util.HashMap<>();
             resultMap.put("agentId", "fhirConsolidator");
@@ -146,6 +146,7 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
             );
 
             log.info("Stored consolidated FHIR request at: {}", minioPath);
+            return minioPath;
 
         } catch (Exception e) {
             log.error("Failed to store consolidated FHIR request in MinIO", e);
