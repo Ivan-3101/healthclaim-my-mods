@@ -1,0 +1,37 @@
+{
+    "claim_status": "Review Required",
+    "claim_summary": "The claim requires further review due to inconsistencies in patient names and missing details in the insurance policy.",
+    "validation_checks": [
+        {
+            "check": "Patient name consistency",
+            "status": "Fail",
+            "details": "Patient name on pre-auth form (Mrs. Bhavanath Kumar) does not match identification document (Bhavath Kumar)."
+        },
+        {
+            "check": "Policy number consistency",
+            "status": "Fail",
+            "details": "Policy number on pre-auth form (2-91-25-00001962-000) does not match insurance policy (2.81-25.000.162.000)."
+        },
+        {
+            "check": "Date of birth consistency",
+            "status": "Fail",
+            "details": "DOB of insured is missing in the insurance policy, which is critical for validation."
+        },
+        {
+            "check": "Contact number consistency",
+            "status": "Success",
+            "details": "Contact number on pre-auth form matches the declaration."
+        }
+    ],
+    "sequenced_groups": [
+        {
+            "group_name": "Claim Submission",
+            "documents": [
+                "pre-auth_form",
+                "insurance_policy",
+                "identification"
+            ]
+        }
+    ],
+    "final_recommendation": "Further investigation is needed to resolve discrepancies in patient identification and policy details."
+}
