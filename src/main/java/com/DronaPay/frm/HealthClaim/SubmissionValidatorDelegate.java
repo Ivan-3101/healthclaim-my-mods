@@ -68,9 +68,16 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
 
         log.info("Retrieved consolidated FHIR request ({} bytes) from MinIO", consolidatedRequest.length());
 
-        // 3. Call Submission_Validator agent
+        // 3. Change agentid to Submission_Validator
+        JSONObject requestJson = new JSONObject(consolidatedRequest);
+        requestJson.put("agentid", "Submission_Validator");
+        String modifiedRequest = requestJson.toString();
+
+        log.info("Modified agentid to Submission_Validator");
+
+        // 4. Call Submission_Validator agent
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
-        CloseableHttpResponse response = apiServices.callAgent(consolidatedRequest);
+        CloseableHttpResponse response = apiServices.callAgent(modifiedRequest);
 
         String resp = EntityUtils.toString(response.getEntity());
         int statusCode = response.getStatusLine().getStatusCode();
@@ -84,7 +91,7 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
                     "Submission_Validator agent failed with status: " + statusCode);
         }
 
-        // 4. Store result in MinIO
+        // 5. Store result in MinIO
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "Submission_Validator", statusCode, resp, new HashMap<>());
 
@@ -93,10 +100,10 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
 
         log.info("Stored Submission_Validator result at: {}", validatorMinioPath);
 
-        // 5. Extract missing documents and set as process variable
+        // 6. Extract missing documents and set as process variable
         extractAndSetProcessVariables(execution, resp);
 
-        // 6. Set MinIO path for reference
+        // 7. Set MinIO path for reference
         execution.setVariable("submissionValidatorMinioPath", validatorMinioPath);
         execution.setVariable("submissionValidatorSuccess", true);
 
