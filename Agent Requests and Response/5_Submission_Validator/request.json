@@ -1,0 +1,87 @@
+{
+    "data": {
+        "doc_fhir": [
+            {
+                "doc_type": "pre-auth_form",
+                "fields": {
+                    "third_party_administrator": {
+                        "name": "Mrs. Bhavanath Kumar",
+                        "form_no": "36",
+                        "address": "Vasant Vihar",
+                        "phone": "880-373-5349",
+                        "tpa_id": "T30923182",
+                        "policy_no": "2-91-25-00001962-000"
+                    },
+                    "treating_doctor_section": {
+                        "hospital_name": null,
+                        "hospital_address": null,
+                        "date_of_admission": null,
+                        "date_of_discharge": null,
+                        "patient_details": null,
+                        "date_of_injury": null,
+                        "nature_of_illness_injury": null,
+                        "treatment_details": null,
+                        "surgical_procedure": null,
+                        "patient_id": null,
+                        "cost_of_room_rent": "3000",
+                        "cost_of_college_charges": "18000",
+                        "total_cost": "43000",
+                        "past_history_of_illness": null
+                    },
+                    "declaration": {
+                        "patient_name": "Mrs. Bhavanath Kumar",
+                        "contact_number": "880-373-5349"
+                    },
+                    "hospital_declaration": {
+                        "hospital_name": null,
+                        "authorized_signatory": null,
+                        "date": null,
+                        "signature": null
+                    }
+                }
+            },
+            {
+                "doc_type": "insurance_policy",
+                "Proposer Name": "SHREE BAIDYANATH AYURVED BHAWAN PRIVATE LIMITED",
+                "Insured Name(s)": "Bhushan Kumar",
+                "Relationship to Proposer": "Self",
+                "DOB of Insured": null,
+                "Gender of Insured": null,
+                "Contact Number": null,
+                "Address": null,
+                "Policy Number": "2.81-25.000.162.000",
+                "Policy Type": null,
+                "Policy Period (Start Date / End Date)": "04-01-2023 / 04-01-2025",
+                "Sum Insured": null,
+                "Sub-limits (if mentioned)": null,
+                "Room Rent Limit": null,
+                "Co-Payment Clause": null,
+                "Deductible": null,
+                "Waiting Periods": null,
+                "Pre-existing Disease Coverage": null,
+                "Policy Terms & Conditions": null,
+                "Insurer Name": "Aditya Birla Capital",
+                "TPA Name": null,
+                "Toll Free Number": null,
+                "Grievance Cell Contact": null,
+                "Corporate Name": "SHREE BAIDYANATH AYURVED BHAWAN PRIVATE LIMITED",
+                "Employee ID": null,
+                "Corporate Address": null
+            },
+            {
+                "doc_type": "identification",
+                "fields": {
+                    "Name": "Bhavath Kumar",
+                    "DOB": "08/01/1989",
+                    "Gender": "MALE",
+                    "Issue Date": null,
+                    "Aadhar No.": "4211 4822 5742",
+                    "VID": "9146 4053 4809 7701",
+                    "Address": null
+                }
+            }
+        ]
+    },
+    "agentid": "Submission_Validator"
+}
+

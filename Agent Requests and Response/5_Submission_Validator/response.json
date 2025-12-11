@@ -1,0 +1,12 @@
+{
+    "answer": {
+        "missing_documents": [
+            "medical_bill",
+            "claim_form",
+            "discharge_summary",
+            "policy_card",
+            "cheque_leaf",
+            "diagnostic_report"
+        ]
+    }
+}

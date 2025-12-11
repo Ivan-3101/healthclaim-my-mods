@@ -196,9 +196,24 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
                         Object value = responseJson.optQuery(jsonPath);
 
                         if (value != null) {
-                            // Apply transformation
+// Apply transformation
                             if (transformationFn.equals("mapSuspiciousToBoolean")) {
-                                value = !value.toString().equals("<Not Suspicious>");
+                                // value is JSONObject with pages: {"1": {...}, "2": {...}}
+                                boolean isForged = false;
+                                if (value instanceof org.json.JSONObject) {
+                                    org.json.JSONObject pages = (org.json.JSONObject) value;
+                                    for (String pageKey : pages.keySet()) {
+                                        org.json.JSONObject page = pages.getJSONObject(pageKey);
+                                        String classification = page.optString("classification", "");
+                                        // Check if page is suspicious (but NOT "Not Suspicious")
+                                        if (classification.contains("Suspicious") &&
+                                                !classification.contains("<Not Suspicious>")) {
+                                            isForged = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                value = isForged;
                             }
 
                             // Convert to data type
