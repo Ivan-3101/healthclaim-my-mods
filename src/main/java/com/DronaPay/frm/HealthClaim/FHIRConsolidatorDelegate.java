@@ -37,7 +37,7 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
         log.info("=== FHIR Consolidator Started ===");
 
         String tenantId = execution.getTenantId();
-        String ticketId = (String) execution.getVariable("TicketID");
+        String ticketId = String.valueOf(execution.getVariable("TicketID"));
 
         log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
 
