@@ -450,14 +450,14 @@
         <bpmn:outgoing>Flow_0xnnumq</bpmn:outgoing>
       </bpmn:serviceTask>
     </bpmn:subProcess>
-    <bpmn:sequenceFlow id="Flow_1rugnkq" sourceRef="Activity_0c8yvg3" targetRef="Activity_0m6gu2z" />
-    <bpmn:sequenceFlow id="Flow_0oa3vkg" sourceRef="Activity_0m6gu2z" targetRef="Activity_04ttvzo" />
-    <bpmn:sequenceFlow id="Flow_1y4cq5x" sourceRef="Activity_04ttvzo" targetRef="Activity_1eu27e2" />
-    <bpmn:serviceTask id="Activity_04ttvzo" name="FHIR Analyzer">
+    <bpmn:sequenceFlow id="Flow_1rugnkq" sourceRef="Activity_0c8yvg3" targetRef="FHIR_Consolidator" />
+    <bpmn:sequenceFlow id="Flow_0oa3vkg" sourceRef="FHIR_Consolidator" targetRef="FHIR_Analyzer" />
+    <bpmn:sequenceFlow id="Flow_1y4cq5x" sourceRef="FHIR_Analyzer" targetRef="Activity_1eu27e2" />
+    <bpmn:serviceTask id="FHIR_Analyzer" name="FHIR Analyzer" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FHIRAnalyserDelegate">
       <bpmn:incoming>Flow_0oa3vkg</bpmn:incoming>
       <bpmn:outgoing>Flow_1y4cq5x</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:serviceTask id="Activity_0m6gu2z" name="FHIR Consolidator">
+    <bpmn:serviceTask id="FHIR_Consolidator" name="FHIR Consolidator" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FHIRConsolidatorDelegate">
       <bpmn:incoming>Flow_1rugnkq</bpmn:incoming>
       <bpmn:outgoing>Flow_0oa3vkg</bpmn:outgoing>
     </bpmn:serviceTask>
@@ -588,10 +588,10 @@
         <dc:Bounds x="3200" y="800" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1gr5j3s_di" bpmnElement="Activity_04ttvzo">
+      <bpmndi:BPMNShape id="Activity_1gr5j3s_di" bpmnElement="FHIR_Analyzer">
         <dc:Bounds x="2990" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1pe8iyi_di" bpmnElement="Activity_0m6gu2z">
+      <bpmndi:BPMNShape id="Activity_1pe8iyi_di" bpmnElement="FHIR_Consolidator">
         <dc:Bounds x="2780" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_17h17ae_di" bpmnElement="Activity_17h17ae" isExpanded="true">

@@ -1,106 +1,144 @@
 package com.DronaPay.frm.HealthClaim;
 
-import com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentExecutorDelegate;
+import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
+import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.util.EntityUtils;
+import org.camunda.bpm.engine.delegate.BpmnError;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;
 import org.json.JSONObject;
 
+import java.sql.Connection;
+import java.util.HashMap;
+import java.util.Map;
+
 /**
- * FHIR Analyser - Validates and analyzes consolidated FHIR data
+ * FHIR Analyser Delegate
  *
- * Input: consolidatedFhir variable (merged FHIR data from all documents)
- * Output: FHIR validation results and analysis
+ * Calls the FHIR_Analyser agent with the consolidated FHIR request.
+ *
+ * Input: Consolidated FHIR request from MinIO (built by FHIRConsolidatorDelegate)
+ * Output: FHIR analysis response with validation checks and recommendations
+ *
+ * Stores the response in MinIO and sets process variables:
+ * - claimStatus: Overall claim status (Approved/Review Required/Rejected)
+ * - claimSummary: Summary of the analysis
+ * - validationChecks: JSON array of validation results
+ * - finalRecommendation: Final recommendation from the agent
  */
 @Slf4j
 public class FHIRAnalyserDelegate implements JavaDelegate {
-
-    private final GenericAgentExecutorDelegate genericDelegate = new GenericAgentExecutorDelegate();
 
     @Override
     public void execute(DelegateExecution execution) throws Exception {
         log.info("=== FHIR Analyser Started ===");
 
-        // Check if consolidated FHIR data exists
-        String consolidatedFhir = (String) execution.getVariable("consolidatedFhir");
-        if (consolidatedFhir == null || consolidatedFhir.isEmpty()) {
-            log.error("No consolidated FHIR data available");
-            execution.setVariable("fhirAnalysisStatus", "failed");
-            execution.setVariable("fhirAnalysisError", "No consolidated FHIR data");
-            return;
+        String tenantId = execution.getTenantId();
+        String ticketId = (String) execution.getVariable("TicketID");
+
+        log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
+
+        // 1. Load workflow configuration
+        Connection conn = execution.getProcessEngine()
+                .getProcessEngineConfiguration()
+                .getDataSource()
+                .getConnection();
+
+        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
+        conn.close();
+
+        // 2. Get consolidated FHIR request from process variable
+        String consolidatedRequest = (String) execution.getVariable("fhirConsolidatedRequest");
+
+        if (consolidatedRequest == null || consolidatedRequest.trim().isEmpty()) {
+            log.error("No consolidated FHIR request found in process variables");
+            throw new BpmnError("fhirAnalyserFailed", "Missing consolidated FHIR request");
         }
 
-        // Build agent config for FHIR Analyser
-        JSONObject agentConfig = new JSONObject();
-        agentConfig.put("agentId", "fhirAnalyser");
-        agentConfig.put("displayName", "FHIR Analyser");
-        agentConfig.put("enabled", true);
-        agentConfig.put("critical", false);
+        log.info("Using consolidated FHIR request ({} bytes)", consolidatedRequest.length());
 
-        JSONObject config = new JSONObject();
+        // 3. Call FHIR_Analyser agent
+        APIServices apiServices = new APIServices(tenantId, workflowConfig);
+        CloseableHttpResponse response = apiServices.callAgent(consolidatedRequest);
 
-        // Input mapping - uses consolidatedFhir process variable
-        JSONObject inputMapping = new JSONObject();
-        inputMapping.put("source", "processVariable");
-        inputMapping.put("variableName", "consolidatedFhir");
-        inputMapping.put("transformation", "none"); // Already JSON
-        config.put("inputMapping", inputMapping);
+        String resp = EntityUtils.toString(response.getEntity());
+        int statusCode = response.getStatusLine().getStatusCode();
 
-        // Output mapping - extract validation results
-        JSONObject outputMapping = new JSONObject();
-        JSONObject variablesToSet = new JSONObject();
+        log.info("FHIR_Analyser API status: {}", statusCode);
+        log.debug("FHIR_Analyser API response: {}", resp);
 
-        // Extract claim status
-        JSONObject claimStatusMapping = new JSONObject();
-        claimStatusMapping.put("jsonPath", "/claim_status");
-        claimStatusMapping.put("dataType", "string");
-        variablesToSet.put("fhirClaimStatus", claimStatusMapping);
-
-        // Extract claim summary
-        JSONObject claimSummaryMapping = new JSONObject();
-        claimSummaryMapping.put("jsonPath", "/claim_summary");
-        claimSummaryMapping.put("dataType", "string");
-        variablesToSet.put("fhirClaimSummary", claimSummaryMapping);
-
-        // Extract validation checks (will be stored in MinIO, summary in variable)
-        JSONObject validationMapping = new JSONObject();
-        validationMapping.put("jsonPath", "/validation_checks");
-        validationMapping.put("dataType", "json");
-        variablesToSet.put("fhirValidationChecks", validationMapping);
-
-        // Extract final recommendation
-        JSONObject recommendationMapping = new JSONObject();
-        recommendationMapping.put("jsonPath", "/final_recommendation");
-        recommendationMapping.put("dataType", "string");
-        variablesToSet.put("fhirRecommendation", recommendationMapping);
-
-        outputMapping.put("variablesToSet", variablesToSet);
-        config.put("outputMapping", outputMapping);
-
-        // Error handling
-        JSONObject errorHandling = new JSONObject();
-        errorHandling.put("onFailure", "logAndContinue");
-        errorHandling.put("continueOnError", true);
-        config.put("errorHandling", errorHandling);
-
-        agentConfig.put("config", config);
-
-        // Set as current agent config
-        execution.setVariable("currentAgentConfig", agentConfig);
-
-        // Execute via generic delegate
-        genericDelegate.execute(execution);
-
-        // Set analysis status
-        String claimStatus = (String) execution.getVariable("fhirClaimStatus");
-        if (claimStatus != null && !claimStatus.isEmpty()) {
-            execution.setVariable("fhirAnalysisStatus", "success");
-            log.info("FHIR Analysis completed with status: {}", claimStatus);
-        } else {
-            execution.setVariable("fhirAnalysisStatus", "failed");
-            log.warn("FHIR Analysis did not return claim status");
+        if (statusCode != 200) {
+            log.error("FHIR_Analyser agent failed with status: {}", statusCode);
+            throw new BpmnError("fhirAnalyserFailed",
+                    "FHIR_Analyser agent failed with status: " + statusCode);
         }
+
+        // 4. Store result in MinIO
+        Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
+                "FHIR_Analyser", statusCode, resp, new HashMap<>());
+
+        String minioPath = AgentResultStorageService.storeAgentResultStageWise(
+                tenantId, ticketId, "consolidated", "FHIR_Analyser", fullResult);
+
+        log.info("Stored FHIR_Analyser result at: {}", minioPath);
+
+        // 5. Extract key fields from response and set as process variables
+        extractAndSetProcessVariables(execution, resp);
+
+        // 6. Set MinIO path for reference
+        execution.setVariable("fhirAnalyserMinioPath", minioPath);
+        execution.setVariable("fhirAnalyserSuccess", true);
 
         log.info("=== FHIR Analyser Completed ===");
+    }
+
+    /**
+     * Extract key fields from FHIR Analyser response and set as process variables
+     */
+    private void extractAndSetProcessVariables(DelegateExecution execution, String response) {
+        try {
+            JSONObject responseJson = new JSONObject(response);
+
+            // Extract claim_status
+            if (responseJson.has("claim_status")) {
+                String claimStatus = responseJson.getString("claim_status");
+                execution.setVariable("claimStatus", claimStatus);
+                log.info("Claim Status: {}", claimStatus);
+            }
+
+            // Extract claim_summary
+            if (responseJson.has("claim_summary")) {
+                String claimSummary = responseJson.getString("claim_summary");
+                execution.setVariable("claimSummary", claimSummary);
+                log.info("Claim Summary: {}", claimSummary);
+            }
+
+            // Extract validation_checks (as JSON string)
+            if (responseJson.has("validation_checks")) {
+                String validationChecks = responseJson.getJSONArray("validation_checks").toString(2);
+                execution.setVariable("validationChecks", validationChecks);
+                log.debug("Validation Checks: {}", validationChecks);
+            }
+
+            // Extract final_recommendation
+            if (responseJson.has("final_recommendation")) {
+                String finalRecommendation = responseJson.getString("final_recommendation");
+                execution.setVariable("finalRecommendation", finalRecommendation);
+                log.info("Final Recommendation: {}", finalRecommendation);
+            }
+
+            // Extract sequenced_groups (as JSON string)
+            if (responseJson.has("sequenced_groups")) {
+                String sequencedGroups = responseJson.getJSONArray("sequenced_groups").toString(2);
+                execution.setVariable("sequencedGroups", sequencedGroups);
+                log.debug("Sequenced Groups: {}", sequencedGroups);
+            }
+
+        } catch (Exception e) {
+            log.error("Error extracting process variables from FHIR Analyser response", e);
+            // Don't throw - we've stored the full response in MinIO
+        }
     }
 }
