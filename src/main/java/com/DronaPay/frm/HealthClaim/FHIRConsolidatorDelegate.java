@@ -85,7 +85,7 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
                     }
                 } else {
                     // Format 2: {answer: {doc_type: "...", fields: {...}}}
-                    docFhirList.add(answer.toMap());
+                    docFhirList.add(answer);
                 }
 
                 successCount++;

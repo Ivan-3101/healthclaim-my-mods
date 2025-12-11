@@ -61,7 +61,7 @@ public class FHIRAnalyserDelegate implements JavaDelegate {
 
         // Retrieve from MinIO
         Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, consolidatorMinioPath);
-        String consolidatedRequest = (String) result.get("rawResponse");
+        String consolidatedRequest = (String) result.get("apiResponse");  // KEY FIX: retrieveAgentResult maps to "apiResponse"
 
         if (consolidatedRequest == null || consolidatedRequest.trim().isEmpty()) {
             log.error("Empty consolidated request retrieved from MinIO");
