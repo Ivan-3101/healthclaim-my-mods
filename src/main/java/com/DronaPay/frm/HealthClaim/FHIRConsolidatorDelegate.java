@@ -8,26 +8,14 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * FHIR Consolidator Delegate
+ * FHIR Consolidator Delegate - SIMPLIFIED VERSION
  *
- * Consolidates all ocrToStatic outputs into a single request for FHIR Analyser.
- * Builds the request in the format:
- * {
- *   "data": {
- *     "doc_fhir": [
- *       {...doc1 fields...},
- *       {...doc2 fields...}
- *     ]
- *   },
- *   "agentid": "FHIR_Analyser"
- * }
- *
- * Stores the consolidated request in MinIO for FHIR Analyser to consume.
+ * Fetches ocrToStatic results directly from MinIO using predictable paths.
+ * No need for fileProcessMap.
  */
 @Slf4j
 public class FHIRConsolidatorDelegate implements JavaDelegate {
@@ -41,53 +29,29 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
 
         log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
 
-        // Get fileProcessMap which contains all agent results
+        // Get list of processed files
         @SuppressWarnings("unchecked")
-        Map<String, Map<String, Object>> fileProcessMap =
-                (Map<String, Map<String, Object>>) execution.getVariable("fileProcessMap");
+        List<String> splitDocumentVars = (List<String>) execution.getVariable("splitDocumentVars");
 
-        if (fileProcessMap == null || fileProcessMap.isEmpty()) {
-            log.error("fileProcessMap is null or empty");
-            throw new RuntimeException("No document processing results found");
+        if (splitDocumentVars == null || splitDocumentVars.isEmpty()) {
+            log.error("No split documents found");
+            throw new RuntimeException("No documents to consolidate");
         }
 
-        log.info("Processing {} documents for FHIR consolidation", fileProcessMap.size());
+        log.info("Processing {} documents for FHIR consolidation", splitDocumentVars.size());
 
         // Build consolidated doc_fhir array
         List<Object> docFhirList = new ArrayList<>();
         int successCount = 0;
         int failCount = 0;
 
-        for (Map.Entry<String, Map<String, Object>> entry : fileProcessMap.entrySet()) {
-            String filename = entry.getKey();
-            Map<String, Object> fileResults = entry.getValue();
-
+        for (String filename : splitDocumentVars) {
             log.debug("Processing file: {}", filename);
 
-            // Get ocrToStatic output
-            if (!fileResults.containsKey("ocrToStaticOutput")) {
-                log.warn("No ocrToStatic output for file: {}, skipping", filename);
-                failCount++;
-                continue;
-            }
-
-            @SuppressWarnings("unchecked")
-            Map<String, Object> ocrToStaticOutput =
-                    (Map<String, Object>) fileResults.get("ocrToStaticOutput");
-
-            String apiCall = (String) ocrToStaticOutput.get("apiCall");
-            if (!"success".equals(apiCall)) {
-                log.warn("ocrToStatic failed for file: {}, skipping", filename);
-                failCount++;
-                continue;
-            }
-
-            String minioPath = (String) ocrToStaticOutput.get("minioPath");
-            if (minioPath == null) {
-                log.error("No MinIO path for file: {}, skipping", filename);
-                failCount++;
-                continue;
-            }
+            // Construct MinIO path directly (predictable pattern)
+            // Pattern: {tenantId}/HealthClaim/{ticketId}/results/ocrToStatic/{filename}.json
+            String minioPath = String.format("%s/HealthClaim/%s/results/ocrToStatic/%s.json",
+                    tenantId, ticketId, filename);
 
             try {
                 // Retrieve ocrToStatic result from MinIO
@@ -168,12 +132,12 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
     private void storeConsolidatedRequest(String tenantId, String ticketId,
                                           JSONObject consolidatedRequest) {
         try {
-            Map<String, Object> resultMap = new HashMap<>();
+            Map<String, Object> resultMap = new java.util.HashMap<>();
             resultMap.put("agentId", "fhirConsolidator");
             resultMap.put("statusCode", 200);
             resultMap.put("success", true);
             resultMap.put("rawResponse", consolidatedRequest.toString());
-            resultMap.put("extractedData", new HashMap<>());
+            resultMap.put("extractedData", new java.util.HashMap<>());
             resultMap.put("timestamp", System.currentTimeMillis());
 
             // Store in stage-wise structure
