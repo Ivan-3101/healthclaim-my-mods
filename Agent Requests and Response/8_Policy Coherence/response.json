@@ -1,0 +1,200 @@
+{
+    "answer": {
+        "List 1": [
+            {
+                "Question/Area from Policy Condition": "Is the patient's name mentioned in the discharge summary?",
+                "Comment based on data from FHIR documents": "Yes, the patient's name is mentioned as 'ABC'."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the gender of the patient mentioned in the discharge summary?",
+                "Comment based on data from FHIR documents": "Yes, the gender is mentioned as 'FEMALE'."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the date of admission provided in the claim form?",
+                "Comment based on data from FHIR documents": "Yes, the date of admission is '11/12/25'."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the date of discharge provided in the claim form?",
+                "Comment based on data from FHIR documents": "Yes, the date of discharge is '4/5/25'."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the hospital name mentioned in the claim form?",
+                "Comment based on data from FHIR documents": "Yes, the hospital name is 'SONY HOSPITAL'."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the treating doctor's name mentioned in the claim form?",
+                "Comment based on data from FHIR documents": "Yes, the doctor's name is 'Dr. Hari Kishan'."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the total bill amount provided in the pre-auth form?",
+                "Comment based on data from FHIR documents": "Yes, the total bill is '43000'."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the policy number mentioned in the insurance policy document?",
+                "Comment based on data from FHIR documents": "Yes, the policy number is '2.81-25.000.162.000'."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the proposer name mentioned in the insurance policy document?",
+                "Comment based on data from FHIR documents": "Yes, the proposer name is 'SHREE BAIDYANATH AYURVED BHAWAN PRIVATE LIMITED'."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the insured name mentioned in the insurance policy document?",
+                "Comment based on data from FHIR documents": "Yes, the insured name is 'Bhushan Kumar'."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the relationship to the proposer mentioned in the insurance policy document?",
+                "Comment based on data from FHIR documents": "Yes, the relationship is 'Self'."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the date of birth of the insured mentioned in the insurance policy document?",
+                "Comment based on data from FHIR documents": "No, the date of birth is not mentioned."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the gender of the insured mentioned in the insurance policy document?",
+                "Comment based on data from FHIR documents": "No, the gender is not mentioned."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the contact number of the insured mentioned in the insurance policy document?",
+                "Comment based on data from FHIR documents": "No, the contact number is not mentioned."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the address of the insured mentioned in the insurance policy document?",
+                "Comment based on data from FHIR documents": "No, the address is not mentioned."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the policy period mentioned in the insurance policy document?",
+                "Comment based on data from FHIR documents": "Yes, the policy period is '04-01-2023 / 04-01-2025'."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the sum insured mentioned in the insurance policy document?",
+                "Comment based on data from FHIR documents": "No, the sum insured is not mentioned."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there a mention of sub-limits in the insurance policy document?",
+                "Comment based on data from FHIR documents": "No, sub-limits are not mentioned."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there a mention of co-payment clause in the insurance policy document?",
+                "Comment based on data from FHIR documents": "No, the co-payment clause is not mentioned."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there a mention of deductible in the insurance policy document?",
+                "Comment based on data from FHIR documents": "No, the deductible is not mentioned."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there a mention of waiting periods in the insurance policy document?",
+                "Comment based on data from FHIR documents": "No, waiting periods are not mentioned."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the patient's identification information provided?",
+                "Comment based on data from FHIR documents": "Yes, the Aadhar number is '4211 4822 5742'."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the patient's date of birth provided in the identification document?",
+                "Comment based on data from FHIR documents": "Yes, the date of birth is '08/01/1989'."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the patient's gender provided in the identification document?",
+                "Comment based on data from FHIR documents": "Yes, the gender is 'MALE'."
+            },
+            {
+                "Question/Area from Policy Condition": "Is the patient's unique ID provided in the identification document?",
+                "Comment based on data from FHIR documents": "Yes, the unique ID is '9146 4053 4809 7701'."
+            }
+        ],
+        "List 2": [
+            {
+                "Question/Area from Policy Condition": "Is there any mention of exclusions related to cosmetic surgery?",
+                "Comment based on data from FHIR documents": "Yes, cosmetic surgery is excluded."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of exclusions related to suicide?",
+                "Comment based on data from FHIR documents": "Yes, treatment related to suicide is excluded."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of exclusions related to war/riot?",
+                "Comment based on data from FHIR documents": "Yes, treatment related to war/riot is excluded."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of exclusions related to substance abuse?",
+                "Comment based on data from FHIR documents": "Yes, treatment for substance abuse is excluded."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of exclusions related to dental/eyewear?",
+                "Comment based on data from FHIR documents": "Yes, dental and eyewear treatments are excluded."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of exclusions related to pre-existing conditions?",
+                "Comment based on data from FHIR documents": "Yes, pre-existing conditions are subject to waiting periods."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of exclusions related to non-medical expenses?",
+                "Comment based on data from FHIR documents": "Yes, non-medical expenses are excluded."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of exclusions related to maternity?",
+                "Comment based on data from FHIR documents": "Yes, maternity expenses are excluded."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of exclusions related to outpatient treatments?",
+                "Comment based on data from FHIR documents": "Yes, outpatient treatments are excluded."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of minimum entry age for coverage?",
+                "Comment based on data from FHIR documents": "No, minimum entry age is not mentioned."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of dependents covered under the policy?",
+                "Comment based on data from FHIR documents": "No, dependents coverage is not mentioned."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of residency requirements?",
+                "Comment based on data from FHIR documents": "Yes, coverage is limited to treatment taken within India."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of misrepresentation or fraud?",
+                "Comment based on data from FHIR documents": "Yes, misrepresentation can lead to policy cancellation."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of renewal conditions?",
+                "Comment based on data from FHIR documents": "Yes, renewal is subject to certain conditions."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of portability options?",
+                "Comment based on data from FHIR documents": "Yes, portability options are available."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of cancellation policy?",
+                "Comment based on data from FHIR documents": "Yes, cancellation can occur on grounds of misrepresentation."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of grievance redressal procedures?",
+                "Comment based on data from FHIR documents": "Yes, grievance redressal procedures are outlined."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of taxes or regulatory compliance?",
+                "Comment based on data from FHIR documents": "No, taxes or regulatory compliance are not mentioned."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of cashless payment options?",
+                "Comment based on data from FHIR documents": "Yes, cashless payment options are available at network providers."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of submission of documents required for claims?",
+                "Comment based on data from FHIR documents": "Yes, submission of documents is required for claims."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of waiting periods for specific conditions?",
+                "Comment based on data from FHIR documents": "Yes, waiting periods for specific conditions are mentioned."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of deductibles in the policy?",
+                "Comment based on data from FHIR documents": "No, deductibles are not mentioned."
+            },
+            {
+                "Question/Area from Policy Condition": "Is there any mention of co-payment clauses in the policy?",
+                "Comment based on data from FHIR documents": "No, co-payment clauses are not mentioned."
+            }
+        ]
+    }
+}

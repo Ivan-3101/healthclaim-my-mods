@@ -1,0 +1,47 @@
+{
+    "claimSummary": "Claim for treatment expenses related to Mrs. Bhavanath Kumar.",
+    "reviewQuestions": {
+        "third_party_administrator": [
+            "What is the TPA ID for the third-party administrator?",
+            "What is the contact number for the third-party administrator?",
+            "What is the address of the third-party administrator?",
+            "What is the policy number associated with the third-party administrator?",
+            "What is the name of the third-party administrator?"
+        ],
+        "treating_doctor_section": [
+            "What is the name of the treating doctor?",
+            "What is the hospital name where the treatment was provided?",
+            "What are the dates of admission and discharge?",
+            "What is the nature of the illness or injury?",
+            "What are the treatment details provided?"
+        ],
+        "declaration": [
+            "What is the contact number of the patient?",
+            "What is the name of the patient?",
+            "Is there any additional information required for the declaration?",
+            "Is the declaration signed?",
+            "What is the relationship of the patient to the proposer?"
+        ],
+        "hospital_declaration": [
+            "What is the name of the hospital in the hospital declaration?",
+            "Who is the authorized signatory for the hospital declaration?",
+            "What is the date of the hospital declaration?",
+            "Is there a signature provided in the hospital declaration?",
+            "Is there any additional information required for the hospital declaration?"
+        ],
+        "insurance_policy": [
+            "What is the policy number for the insurance policy?",
+            "What is the name of the insurer?",
+            "What is the policy period for the insurance policy?",
+            "What is the sum insured under the policy?",
+            "What are the terms and conditions of the policy?"
+        ]
+    },
+    "remark": {
+        "third_party_administrator": "The TPA ID is T30923182, and the contact number is 880-373-5349. The address is Vasant Vihar.",
+        "treating_doctor_section": "The treating doctor and hospital details are not provided in the documents. Additional information is needed.",
+        "declaration": "The patient's name is Mrs. Bhavanath Kumar, and the contact number is 880-373-5349. The declaration is not signed.",
+        "hospital_declaration": "The hospital name and authorized signatory are not provided. Additional information is needed.",
+        "insurance_policy": "The policy number is 2.81-25.000.162.000, and the insurer is Aditya Birla Capital. The policy period is from 04-01-2023 to 04-01-2025."
+    }
+}
