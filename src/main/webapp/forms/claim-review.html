@@ -1,235 +1,96 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Claim Review</title>
+<form name="claimReviewForm">
+    <script cam-script type="text/form-script">
+        $scope.loadFields = function() {
+          var fieldsJson = camForm.variableManager.variableValue('uiFieldsJson');
+
+          if (!fieldsJson) {
+            $scope.fields = [];
+            return;
+          }
+
+          try {
+            $scope.fields = JSON.parse(fieldsJson);
+          } catch(e) {
+            console.error('Error parsing fields:', e);
+            $scope.fields = [];
+          }
+        };
+
+        camForm.on('form-loaded', function() {
+          $scope.loadFields();
+        });
+    </script>
+
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        h2 {
-            color: #333;
-            border-bottom: 2px solid #007bff;
-            padding-bottom: 10px;
-        }
         .field-group {
-            margin-bottom: 15px;
-            padding: 10px;
-            background: #f9f9f9;
-            border-left: 3px solid #007bff;
+          margin-bottom: 15px;
+          padding: 12px;
+          background: #f9f9f9;
+          border-left: 3px solid #007bff;
+          border-radius: 4px;
         }
         .field-label {
-            font-weight: bold;
-            color: #555;
-            font-size: 14px;
-            margin-bottom: 5px;
+          font-weight: bold;
+          color: #555;
+          font-size: 13px;
+          margin-bottom: 5px;
         }
         .field-value {
-            color: #333;
-            font-size: 15px;
-            padding: 8px;
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+          color: #333;
+          font-size: 14px;
+          padding: 8px;
+          background: white;
+          border: 1px solid #ddd;
+          border-radius: 3px;
+          word-wrap: break-word;
         }
         .doc-type {
-            font-size: 12px;
-            color: #666;
-            font-style: italic;
-            margin-top: 3px;
-        }
-        .action-section {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 2px solid #ddd;
-        }
-        select {
-            width: 100%;
-            padding: 10px;
-            font-size: 16px;
-            border: 2px solid #007bff;
-            border-radius: 4px;
-            background: white;
-        }
-        button {
-            width: 100%;
-            padding: 12px;
-            margin-top: 15px;
-            font-size: 16px;
-            font-weight: bold;
-            color: white;
-            background: #007bff;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        button:hover {
-            background: #0056b3;
+          font-size: 11px;
+          color: #666;
+          font-style: italic;
+          margin-top: 4px;
         }
         .no-data {
-            text-align: center;
-            padding: 40px;
-            color: #999;
+          text-align: center;
+          padding: 30px;
+          color: #999;
+          font-style: italic;
+        }
+        h3 {
+          color: #333;
+          border-bottom: 2px solid #007bff;
+          padding-bottom: 8px;
+          margin-bottom: 20px;
+        }
+        .form-group {
+          margin-top: 25px;
+          padding-top: 20px;
+          border-top: 2px solid #ddd;
         }
     </style>
-</head>
-<body>
-<div class="container">
-    <h2>Claim Review - Extracted Information</h2>
 
-    <div id="fieldsContainer"></div>
+    <h3>Claim Review - Extracted Information</h3>
 
-    <div class="action-section">
-        <div class="field-group">
-            <div class="field-label">Decision *</div>
-            <select id="actionSelect" name="Action">
-                <option value="">-- Select Action --</option>
-                <option value="approve">Approve</option>
-                <option value="reject">Reject</option>
-            </select>
-        </div>
-
-        <button type="submit" onclick="completeTask()">Submit</button>
+    <div ng-if="fields.length === 0" class="no-data">
+        No fields extracted from documents
     </div>
-</div>
 
-<script src="camunda-bpm-sdk-js/camunda-bpm-sdk-angular.js"></script>
-<script>
-    var camForm = CamSDK.Form;
+    <div ng-repeat="field in fields" class="field-group">
+        <div class="field-label">{{field.label}}</div>
+        <div class="field-value">{{field.value}}</div>
+        <div class="doc-type" ng-if="field.docType">Source: {{field.docType}}</div>
+    </div>
 
-    camForm.sdk.load(function(err, camClient) {
-        if (err) {
-            console.error('Error loading Camunda SDK:', err);
-            return;
-        }
-
-        var taskService = new camClient.resource('task');
-        var taskId = getTaskIdFromUrl();
-
-        // Load task and render form
-        taskService.form(taskId, function(err, taskFormInfo) {
-            if (err) {
-                console.error('Error loading task form:', err);
-                return;
-            }
-
-            // Get variables
-            taskService.formVariables(taskId, function(err, variables) {
-                if (err) {
-                    console.error('Error loading variables:', err);
-                    return;
-                }
-
-                renderFields(variables);
-            });
-        });
-    });
-
-    function getTaskIdFromUrl() {
-        var urlParams = new URLSearchParams(window.location.search);
-        return urlParams.get('taskId');
-    }
-
-    function renderFields(variables) {
-        var fieldsJson = variables.uiFieldsJson ? variables.uiFieldsJson.value : '[]';
-        var fields = JSON.parse(fieldsJson);
-
-        var container = document.getElementById('fieldsContainer');
-
-        if (fields.length === 0) {
-            container.innerHTML = '<div class="no-data">No fields extracted from documents</div>';
-            return;
-        }
-
-        var html = '';
-        fields.forEach(function(field) {
-            html += '<div class="field-group">';
-            html += '<div class="field-label">' + escapeHtml(field.label) + '</div>';
-            html += '<div class="field-value">' + escapeHtml(field.value) + '</div>';
-            if (field.docType) {
-                html += '<div class="doc-type">Source: ' + escapeHtml(field.docType) + '</div>';
-            }
-            html += '</div>';
-        });
-
-        container.innerHTML = html;
-    }
-
-    function completeTask() {
-        var action = document.getElementById('actionSelect').value;
-
-        if (!action) {
-            alert('Please select an action');
-            return;
-        }
-
-        var taskId = getTaskIdFromUrl();
-        var taskService = camForm.client.resource('task');
-
-        var variables = {
-            Action: { value: action, type: 'String' }
-        };
-
-        taskService.submitForm(taskId, { variables: variables }, function(err) {
-            if (err) {
-                alert('Error submitting form: ' + err.message);
-            } else {
-                window.location.href = '/camunda/app/tasklist/';
-            }
-        });
-    }
-
-    function escapeHtml(text) {
-        var map = {
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#039;'
-        };
-        return text.replace(/[&<>"']/g, function(m) { return map[m]; });
-    }
-</script>
-</body>
-</html>
-```
-
-## 3. **BPMN Changes**
-
-### Add Script Task BEFORE User Verification:
-
-1. Add new **Service Task** between `Activity_UIDisplayer` and `Activity_05xkaop`
-- **ID:** `Activity_LoadUIFields`
-- **Name:** `Load UI Fields`
-- **Type:** Service Task
-- **Implementation:** Java Class
-- **Class:** `com.DronaPay.frm.HealthClaim.LoadUIFieldsDelegate`
-- **Async Before:** true
-
-### Update User Verification Task:
-
-1. Select `Activity_05xkaop` (User Verification)
-2. Remove ALL existing form fields
-3. Set **Form Key:** `embedded:app:forms/claim-review.html`
-4. Remove any task listeners
-
-### Update Sequence Flow:
-
-Change:
-```
-Activity_UIDisplayer → Activity_05xkaop
-```
-
-To:
-```
-Activity_UIDisplayer → Activity_LoadUIFields → Activity_05xkaop
+    <div class="form-group">
+        <label for="action">Decision *</label>
+        <select cam-variable-name="Action"
+                cam-variable-type="String"
+                id="action"
+                class="form-control"
+                required>
+            <option value="">-- Select Action --</option>
+            <option value="approve">Approve</option>
+            <option value="reject">Reject</option>
+        </select>
+    </div>
+</form>
