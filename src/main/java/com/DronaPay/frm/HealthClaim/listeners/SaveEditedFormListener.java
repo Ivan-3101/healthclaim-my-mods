@@ -53,41 +53,39 @@ public class SaveEditedFormListener implements ExecutionListener {
 
             int updatedCount = 0;
 
-            // 3. Update with edited values from process variables
+            // 3. Update ALL fields with edited values from process variables
             for (int i = 0; i < answerArray.length(); i++) {
                 JSONObject field = answerArray.getJSONObject(i);
                 String fieldName = field.getString("field_name");
-                String fetchStatus = field.optString("fetch_status", "No");
 
                 JSONObject updatedField = new JSONObject(field.toString());
 
-                // Check if field was displayed and get edited value
-                if ("Yes".equalsIgnoreCase(fetchStatus)) {
-                    String varName = "ui_" + fieldName
-                            .toLowerCase()
-                            .replaceAll("[^a-z0-9]", "_")
-                            .replaceAll("_+", "_")
-                            .replaceAll("^_|_$", "");
+                // Get edited value for ALL fields
+                String varName = "ui_" + fieldName
+                        .toLowerCase()
+                        .replaceAll("[^a-z0-9]", "_")
+                        .replaceAll("_+", "_")
+                        .replaceAll("^_|_$", "");
 
-                    Object editedValue = execution.getVariable(varName);
+                Object editedValue = execution.getVariable(varName);
 
-                    if (editedValue != null) {
-                        String originalValue = field.opt("value") != null ? field.opt("value").toString() : "";
-                        String newValue = editedValue.toString();
+                if (editedValue != null) {
+                    String originalValue = field.opt("value") != null ? field.opt("value").toString() : "";
+                    String newValue = editedValue.toString();
 
-                        // Update value
-                        updatedField.put("value", newValue);
-                        updatedField.put("user_edited", true);
-                        updatedField.put("original_value", originalValue);
+                    // Update value
+                    updatedField.put("value", newValue);
+                    updatedField.put("user_edited", true);
+                    updatedField.put("original_value", originalValue);
 
-                        // Track if actually changed
-                        if (!originalValue.equals(newValue)) {
-                            updatedCount++;
-                            log.info("Field '{}' updated: '{}' -> '{}'", fieldName, originalValue, newValue);
-                        }
+                    // Track if actually changed (including null -> value)
+                    if (!originalValue.equals(newValue)) {
+                        updatedCount++;
+                        log.info("Field '{}' updated: '{}' -> '{}'", fieldName,
+                                originalValue.isEmpty() ? "[empty]" : originalValue, newValue);
                     }
                 } else {
-                    // Keep original value for non-displayed fields
+                    // Keep original value for fields not edited
                     updatedField.put("user_edited", false);
                 }
 

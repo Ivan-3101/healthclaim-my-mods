@@ -37,7 +37,7 @@ public class LoadUIFieldsDelegate implements JavaDelegate {
             return;
         }
 
-        // Parse and filter fields
+        // Parse and include ALL fields (even with fetch_status="No" or null values)
         JSONObject responseJson = new JSONObject(rawResponse);
         JSONArray answerArray = responseJson.getJSONArray("answer");
         JSONArray displayFields = new JSONArray();
@@ -47,20 +47,27 @@ public class LoadUIFieldsDelegate implements JavaDelegate {
             String fetchStatus = field.optString("fetch_status", "No");
             Object valueObj = field.opt("value");
 
-            // Only include fields with fetch_status="Yes" and non-null values
-            if ("Yes".equalsIgnoreCase(fetchStatus) && valueObj != null && !JSONObject.NULL.equals(valueObj)) {
-                JSONObject displayField = new JSONObject();
-                displayField.put("label", field.getString("field_name"));
+            // Include ALL fields regardless of fetch_status or value
+            JSONObject displayField = new JSONObject();
+            displayField.put("label", field.getString("field_name"));
+
+            // Handle null values - display empty string
+            if (valueObj == null || JSONObject.NULL.equals(valueObj)) {
+                displayField.put("value", "");
+            } else {
                 displayField.put("value", valueObj.toString());
-                displayField.put("docType", field.optString("doc_type", ""));
-                displayFields.put(displayField);
             }
+
+            displayField.put("docType", field.optString("doc_type", ""));
+            displayField.put("fetchStatus", fetchStatus);
+
+            displayFields.put(displayField);
         }
 
         // Set as process variable
         String fieldsJson = displayFields.toString();
         execution.setVariable("uiFieldsJson", fieldsJson);
 
-        log.info("Loaded {} UI fields for display", displayFields.length());
+        log.info("Loaded {} UI fields for display (all fields included)", displayFields.length());
     }
 }
