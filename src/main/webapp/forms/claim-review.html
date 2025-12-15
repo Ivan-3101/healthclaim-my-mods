@@ -14,7 +14,7 @@
               var parsed = JSON.parse(fieldsJsonVar.value);
               $scope.fields = parsed;
 
-              // Create process variables for each field
+              // Create or update process variables for each field
               parsed.forEach(function(field) {
                 var varName = 'ui_' + field.label
                   .toLowerCase()
@@ -24,12 +24,19 @@
 
                 field.varName = varName;
 
-                // Set initial value in variable manager
-                camForm.variableManager.createVariable({
-                  name: varName,
-                  type: 'String',
-                  value: field.value || ''
-                });
+                // Use variableValue() instead of createVariable() to avoid duplicates
+                var existingVar = camForm.variableManager.variable(varName);
+                if (!existingVar) {
+                  // Variable doesn't exist, create it
+                  camForm.variableManager.createVariable({
+                    name: varName,
+                    type: 'String',
+                    value: field.value || ''
+                  });
+                } else {
+                  // Variable exists, update its value
+                  camForm.variableManager.variableValue(varName, field.value || '');
+                }
               });
 
               console.log('Loaded fields:', $scope.fields);
