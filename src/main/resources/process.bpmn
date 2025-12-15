@@ -452,11 +452,11 @@
     </bpmn:serviceTask>
     <bpmn:sequenceFlow id="Flow_1f6ntx5" sourceRef="Policy_Coherence" targetRef="Medical_Coherence" />
     <bpmn:sequenceFlow id="Flow_1hfmdqo" sourceRef="Medical_Coherence" targetRef="Gateway_0aphohc" />
-    <bpmn:serviceTask id="Medical_Coherence" name="Medical Coherence" camunda:asyncBefore="true" camunda:asyncAfter="true">
+    <bpmn:serviceTask id="Medical_Coherence" name="Medical Coherence" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.MedicalCoherenceDelegate Async">
       <bpmn:incoming>Flow_1f6ntx5</bpmn:incoming>
       <bpmn:outgoing>Flow_1hfmdqo</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:serviceTask id="Policy_Coherence" name="Policy Coherence" camunda:asyncBefore="true" camunda:asyncAfter="true">
+    <bpmn:serviceTask id="Policy_Coherence" name="Policy Coherence" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.PolicyCoherenceDelegate">
       <bpmn:incoming>Flow_1446qaa</bpmn:incoming>
       <bpmn:outgoing>Flow_1f6ntx5</bpmn:outgoing>
     </bpmn:serviceTask>
