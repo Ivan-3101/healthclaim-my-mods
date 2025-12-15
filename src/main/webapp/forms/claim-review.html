@@ -1,96 +1,130 @@
 <form name="claimReviewForm">
     <script cam-script type="text/form-script">
-        $scope.loadFields = function() {
-          var fieldsJson = camForm.variableManager.variableValue('uiFieldsJson');
-
-          if (!fieldsJson) {
-            $scope.fields = [];
-            return;
-          }
-
-          try {
-            $scope.fields = JSON.parse(fieldsJson);
-          } catch(e) {
-            console.error('Error parsing fields:', e);
-            $scope.fields = [];
-          }
-        };
+        $scope.fields = [];
 
         camForm.on('form-loaded', function() {
-          $scope.loadFields();
+          camForm.variableManager.fetchVariable('uiFieldsJson');
+        });
+
+        camForm.on('variables-fetched', function() {
+          var fieldsJsonVar = camForm.variableManager.variables.uiFieldsJson;
+
+          console.log('All variables:', camForm.variableManager.variables);
+          console.log('uiFieldsJson variable:', fieldsJsonVar);
+
+          if (fieldsJsonVar && fieldsJsonVar.value) {
+            console.log('uiFieldsJson value:', fieldsJsonVar.value);
+            try {
+              var parsed = JSON.parse(fieldsJsonVar.value);
+              $scope.fields = parsed;
+              console.log('Parsed fields:', $scope.fields);
+              $scope.$apply();
+            } catch(e) {
+              console.error('Error parsing fields:', e);
+            }
+          } else {
+            console.error('No uiFieldsJson variable found');
+          }
         });
     </script>
 
     <style>
+        .container {
+          max-width: 900px;
+          margin: 20px auto;
+          font-family: Arial, sans-serif;
+        }
         .field-group {
-          margin-bottom: 15px;
-          padding: 12px;
-          background: #f9f9f9;
+          margin-bottom: 12px;
+          padding: 12px 15px;
+          background: #ffffff;
+          border: 1px solid #e0e0e0;
           border-left: 3px solid #007bff;
           border-radius: 4px;
         }
         .field-label {
-          font-weight: bold;
-          color: #555;
+          font-weight: 600;
+          color: #333;
           font-size: 13px;
-          margin-bottom: 5px;
+          margin-bottom: 6px;
         }
         .field-value {
-          color: #333;
+          color: #555;
           font-size: 14px;
-          padding: 8px;
-          background: white;
-          border: 1px solid #ddd;
+          padding: 6px 8px;
+          background: #f9f9f9;
+          border: 1px solid #e8e8e8;
           border-radius: 3px;
           word-wrap: break-word;
         }
         .doc-type {
           font-size: 11px;
-          color: #666;
+          color: #888;
           font-style: italic;
-          margin-top: 4px;
+          margin-top: 5px;
         }
         .no-data {
           text-align: center;
-          padding: 30px;
+          padding: 40px 20px;
           color: #999;
           font-style: italic;
+          background: #fafafa;
+          border: 1px dashed #ddd;
+          border-radius: 4px;
+          margin: 20px 0;
         }
         h3 {
-          color: #333;
+          color: #222;
           border-bottom: 2px solid #007bff;
-          padding-bottom: 8px;
+          padding-bottom: 10px;
           margin-bottom: 20px;
+          font-size: 18px;
         }
-        .form-group {
-          margin-top: 25px;
+        .action-section {
+          margin-top: 30px;
           padding-top: 20px;
-          border-top: 2px solid #ddd;
+          border-top: 2px solid #e0e0e0;
+        }
+        label {
+          font-weight: 600;
+          color: #333;
+          margin-bottom: 8px;
+          display: block;
+        }
+        select.form-control {
+          width: 100%;
+          padding: 10px;
+          font-size: 15px;
+          border: 2px solid #007bff;
+          border-radius: 4px;
+          background: white;
         }
     </style>
 
-    <h3>Claim Review - Extracted Information</h3>
+    <div class="container">
+        <h3>Claim Review - Extracted Information</h3>
 
-    <div ng-if="fields.length === 0" class="no-data">
-        No fields extracted from documents
-    </div>
+        <div ng-if="fields.length === 0" class="no-data">
+            Loading fields...
+        </div>
 
-    <div ng-repeat="field in fields" class="field-group">
-        <div class="field-label">{{field.label}}</div>
-        <div class="field-value">{{field.value}}</div>
-        <div class="doc-type" ng-if="field.docType">Source: {{field.docType}}</div>
-    </div>
+        <div ng-repeat="field in fields" class="field-group">
+            <div class="field-label">{{field.label}}</div>
+            <div class="field-value">{{field.value}}</div>
+            <div class="doc-type" ng-if="field.docType">Source: {{field.docType}}</div>
+        </div>
 
-    <div class="form-group">
-        <label for="action">Decision *</label>
-        <select cam-variable-name="Action"
-                cam-variable-type="String"
-                id="action"
-                class="form-control"
-                required>
-            <option value="">-- Select Action --</option>
-            <option value="approve">Approve</option>
-            <option value="reject">Reject</option>
-        </select>
+        <div class="action-section">
+            <label for="action">Decision *</label>
+            <select cam-variable-name="Action"
+                    cam-variable-type="String"
+                    id="action"
+                    class="form-control"
+                    required>
+                <option value="">-- Select Action --</option>
+                <option value="approve">Approve</option>
+                <option value="reject">Reject</option>
+            </select>
+        </div>
     </div>
 </form>
