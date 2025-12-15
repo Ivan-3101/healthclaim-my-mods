@@ -1,0 +1,68 @@
+{
+    "answer": [
+        {
+            "field_name": "Estimate cost",
+            "doc_type": "Pre-Auth Form",
+            "value": "43000",
+            "datatype": "String",
+            "fetch_status": "Yes",
+            "confidence_score": 0.9
+        },
+        {
+            "field_name": "Pre-existing disease",
+            "doc_type": "Pre-Auth Form",
+            "value": null,
+            "datatype": "String",
+            "fetch_status": "No",
+            "confidence_score": 0.0
+        },
+        {
+            "field_name": "Name",
+            "doc_type": "Aadhar card/Identification ID",
+            "value": "Bhavath Kumar",
+            "datatype": "String",
+            "fetch_status": "Yes",
+            "confidence_score": 0.9
+        },
+        {
+            "field_name": "Address",
+            "doc_type": "Aadhar card/Identification ID",
+            "value": null,
+            "datatype": "String",
+            "fetch_status": "No",
+            "confidence_score": 0.0
+        },
+        {
+            "field_name": "Unique Id",
+            "doc_type": "Aadhar card/Identification ID",
+            "value": "4211 4822 5742",
+            "datatype": "String",
+            "fetch_status": "Yes",
+            "confidence_score": 0.9
+        },
+        {
+            "field_name": "Holder Name",
+            "doc_type": "Policy card",
+            "value": "SHREE BAIDYANATH AYURVED BHAWAN PRIVATE LIMITED",
+            "datatype": "String",
+            "fetch_status": "Yes",
+            "confidence_score": 0.9
+        },
+        {
+            "field_name": "Policy id",
+            "doc_type": "Policy card",
+            "value": "2.81-25.000.162.000",
+            "datatype": "String",
+            "fetch_status": "Yes",
+            "confidence_score": 0.9
+        },
+        {
+            "field_name": "Employee id",
+            "doc_type": "Policy card",
+            "value": null,
+            "datatype": "String",
+            "fetch_status": "No",
+            "confidence_score": 0.0
+        }
+    ]
+}
