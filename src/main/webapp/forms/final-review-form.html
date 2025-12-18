@@ -1,66 +1,219 @@
-<form role="form" name="finalReviewForm">
-    <!-- UI Displayer Fields -->
-    <h3>Extracted Data (Editable)</h3>
-    <div ng-repeat="field in $root.finalReviewFields">
-        <div class="form-group">
-            <label>{{field.label}} ({{field.docType}})</label>
+<form name="finalReviewForm">
+    <script cam-script type="text/form-script">
+        $scope.uiFields = [];
+        $scope.policyCoherence = '';
+        $scope.medicalCoherence = '';
+
+        camForm.on('form-loaded', function() {
+          camForm.variableManager.fetchVariable('finalReviewFields');
+          camForm.variableManager.fetchVariable('policyCoherenceOutput');
+          camForm.variableManager.fetchVariable('medicalCoherenceOutput');
+        });
+
+        camForm.on('variables-fetched', function() {
+          // Load UI fields
+          var fieldsVar = camForm.variableManager.variables.finalReviewFields;
+          if (fieldsVar && fieldsVar.value) {
+            try {
+              var parsed = JSON.parse(fieldsVar.value);
+              $scope.uiFields = parsed;
+
+              // Create individual process variables for each field
+              parsed.forEach(function(field) {
+                var varName = 'final_' + field.label
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]/g, '_')
+                  .replace(/_+/g, '_')
+                  .replace(/^_|_$/g, '');
+
+                field.varName = varName;
+
+                var existingVar = camForm.variableManager.variable(varName);
+                if (!existingVar) {
+                  camForm.variableManager.createVariable({
+                    name: varName,
+                    type: 'String',
+                    value: field.value || ''
+                  });
+                } else {
+                  camForm.variableManager.variableValue(varName, field.value || '');
+                }
+              });
+            } catch(e) {
+              console.error('Error parsing UI fields:', e);
+              $scope.uiFields = [];
+            }
+          }
+
+          // Load coherence outputs as strings for display
+          var policyVar = camForm.variableManager.variables.policyCoherenceOutput;
+          if (policyVar && policyVar.value) {
+            $scope.policyCoherence = JSON.stringify(JSON.parse(policyVar.value), null, 2);
+          }
+
+          var medicalVar = camForm.variableManager.variables.medicalCoherenceOutput;
+          if (medicalVar && medicalVar.value) {
+            $scope.medicalCoherence = JSON.stringify(JSON.parse(medicalVar.value), null, 2);
+          }
+        });
+
+        // Save modified values before submission
+        camForm.on('submit', function() {
+          $scope.uiFields.forEach(function(field) {
+            var inputValue = document.getElementById(field.varName).value;
+            camForm.variableManager.variableValue(field.varName, inputValue);
+          });
+        });
+    </script>
+
+    <style>
+        .container {
+          max-width: 900px;
+          margin: 20px auto;
+          font-family: Arial, sans-serif;
+        }
+        .field-group {
+          margin-bottom: 12px;
+          padding: 12px 15px;
+          background: #ffffff;
+          border: 1px solid #e0e0e0;
+          border-left: 3px solid #28a745;
+          border-radius: 4px;
+        }
+        .field-label {
+          font-weight: 600;
+          color: #333;
+          font-size: 13px;
+          margin-bottom: 6px;
+        }
+        .field-input {
+          width: 100%;
+          padding: 8px 10px;
+          font-size: 14px;
+          color: #333;
+          background: #fff;
+          border: 1px solid #ccc;
+          border-radius: 3px;
+          box-sizing: border-box;
+        }
+        .field-input:focus {
+          outline: none;
+          border-color: #28a745;
+          box-shadow: 0 0 0 2px rgba(40,167,69,0.1);
+        }
+        .doc-type {
+          font-size: 11px;
+          color: #888;
+          font-style: italic;
+          margin-top: 5px;
+        }
+        .coherence-section {
+          margin: 30px 0;
+          padding: 15px;
+          background: #f8f9fa;
+          border: 1px solid #dee2e6;
+          border-radius: 4px;
+        }
+        .coherence-section h3 {
+          color: #495057;
+          border-bottom: 2px solid #6c757d;
+          padding-bottom: 10px;
+          margin-bottom: 15px;
+          font-size: 16px;
+        }
+        .coherence-output {
+          width: 100%;
+          padding: 10px;
+          font-family: 'Courier New', monospace;
+          font-size: 12px;
+          background: #fff;
+          border: 1px solid #ced4da;
+          border-radius: 3px;
+          resize: vertical;
+          min-height: 200px;
+        }
+        h3.main-title {
+          color: #222;
+          border-bottom: 2px solid #28a745;
+          padding-bottom: 10px;
+          margin-bottom: 20px;
+          font-size: 18px;
+        }
+        .action-section {
+          margin-top: 30px;
+          padding-top: 20px;
+          border-top: 2px solid #e0e0e0;
+        }
+        label.action-label {
+          font-weight: 600;
+          color: #333;
+          margin-bottom: 8px;
+          display: block;
+        }
+        select.form-control {
+          width: 100%;
+          padding: 10px;
+          font-size: 15px;
+          border: 2px solid #28a745;
+          border-radius: 4px;
+          background: white;
+        }
+        .no-data {
+          text-align: center;
+          padding: 40px 20px;
+          color: #999;
+          font-style: italic;
+          background: #fafafa;
+          border: 1px dashed #ddd;
+          border-radius: 4px;
+        }
+    </style>
+
+    <div class="container">
+        <h3 class="main-title">Final Review - Complete Analysis</h3>
+
+        <!-- UI Displayer Fields (Editable) -->
+        <div ng-if="uiFields.length === 0" class="no-data">
+            Loading fields...
+        </div>
+
+        <div ng-repeat="field in uiFields" class="field-group">
+            <label class="field-label">{{field.label}}</label>
             <input type="text"
-                   class="form-control"
-                   cam-variable-name="final_{{field.label.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')}}"
-                   cam-variable-type="String"
+                   class="field-input"
+                   id="{{field.varName}}"
                    ng-model="field.value" />
-            <small class="text-muted">Fetch Status: {{field.fetchStatus}}</small>
+            <div class="doc-type" ng-if="field.docType">Source: {{field.docType}}</div>
+        </div>
+
+        <!-- Policy Coherence Output (Read-only) -->
+        <div class="coherence-section">
+            <h3>Policy Coherence Analysis</h3>
+            <textarea class="coherence-output"
+                      ng-model="policyCoherence"
+                      readonly></textarea>
+        </div>
+
+        <!-- Medical Coherence Output (Read-only) -->
+        <div class="coherence-section">
+            <h3>Medical Coherence Analysis</h3>
+            <textarea class="coherence-output"
+                      ng-model="medicalCoherence"
+                      readonly></textarea>
+        </div>
+
+        <!-- Action -->
+        <div class="action-section">
+            <label class="action-label" for="finalAction">Final Decision *</label>
+            <select cam-variable-name="FinalAction"
+                    cam-variable-type="String"
+                    id="finalAction"
+                    class="form-control"
+                    required>
+                <option value="">-- Select Action --</option>
+                <option value="approve">Approve</option>
+                <option value="reject">Reject</option>
+            </select>
         </div>
     </div>
-
-    <!-- Policy Coherence Output (Read-only) -->
-    <hr>
-    <h3>Policy Coherence Analysis</h3>
-    <div class="form-group">
-        <label>Policy Coherence Results</label>
-        <textarea class="form-control"
-                  rows="10"
-                  ng-model="$root.policyCoherenceOutput"
-                  readonly></textarea>
-    </div>
-
-    <!-- Medical Coherence Output (Read-only) -->
-    <hr>
-    <h3>Medical Coherence Analysis</h3>
-    <div class="form-group">
-        <label>Medical Coherence Results</label>
-        <textarea class="form-control"
-                  rows="10"
-                  ng-model="$root.medicalCoherenceOutput"
-                  readonly></textarea>
-    </div>
-
-    <!-- Action -->
-    <hr>
-    <div class="form-group">
-        <label>Final Action</label>
-        <select class="form-control"
-                cam-variable-name="FinalAction"
-                cam-variable-type="String"
-                required>
-            <option value="approve">Approve</option>
-            <option value="reject">Reject</option>
-        </select>
-    </div>
 </form>
-
-<script cam-script type="text/form-script">
-    camForm.on('form-loaded', function() {
-        camForm.variableManager.fetchVariable('finalReviewFields');
-        camForm.variableManager.fetchVariable('policyCoherenceOutput');
-        camForm.variableManager.fetchVariable('medicalCoherenceOutput');
-    });
-
-    camForm.on('variables-fetched', function() {
-        $scope.$root.finalReviewFields = camForm.variableManager.variableValue('finalReviewFields')
-            ? JSON.parse(camForm.variableManager.variableValue('finalReviewFields'))
-            : [];
-        $scope.$root.policyCoherenceOutput = camForm.variableManager.variableValue('policyCoherenceOutput') || '{}';
-        $scope.$root.medicalCoherenceOutput = camForm.variableManager.variableValue('medicalCoherenceOutput') || '{}';
-    });
-</script>
