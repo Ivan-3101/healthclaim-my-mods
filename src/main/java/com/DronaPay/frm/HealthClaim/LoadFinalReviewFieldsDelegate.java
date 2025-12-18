@@ -18,7 +18,7 @@ public class LoadFinalReviewFieldsDelegate implements JavaDelegate {
 
         String tenantId = execution.getTenantId();
 
-        // 1. Get UI Displayer data (edited if available, otherwise original)
+        // Get UI Displayer data (edited if available, otherwise original)
         String uiDisplayerData = getUIDisplayerData(execution, tenantId);
 
         if (uiDisplayerData != null) {
@@ -52,37 +52,9 @@ public class LoadFinalReviewFieldsDelegate implements JavaDelegate {
             log.warn("No UI displayer data found");
         }
 
-        // 2. Get Policy Coherence output
-        String policyCoherenceMinioPath = (String) execution.getVariable("policyCoherenceMinioPath");
-        if (policyCoherenceMinioPath != null && !policyCoherenceMinioPath.trim().isEmpty()) {
-            Map<String, Object> policyResult = AgentResultStorageService.retrieveAgentResult(tenantId, policyCoherenceMinioPath);
-            String policyResponse = (String) policyResult.get("apiResponse");
-
-            if (policyResponse != null && !policyResponse.trim().isEmpty()) {
-                JSONObject policyJson = new JSONObject(policyResponse);
-                execution.setVariable("policyCoherenceOutput", policyJson.toString());
-                log.info("Loaded Policy Coherence output");
-            }
-        } else {
-            execution.setVariable("policyCoherenceOutput", "{}");
-            log.warn("No Policy Coherence output found");
-        }
-
-        // 3. Get Medical Coherence output
-        String medicalCoherenceMinioPath = (String) execution.getVariable("medicalCoherenceMinioPath");
-        if (medicalCoherenceMinioPath != null && !medicalCoherenceMinioPath.trim().isEmpty()) {
-            Map<String, Object> medicalResult = AgentResultStorageService.retrieveAgentResult(tenantId, medicalCoherenceMinioPath);
-            String medicalResponse = (String) medicalResult.get("apiResponse");
-
-            if (medicalResponse != null && !medicalResponse.trim().isEmpty()) {
-                JSONObject medicalJson = new JSONObject(medicalResponse);
-                execution.setVariable("medicalCoherenceOutput", medicalJson.toString());
-                log.info("Loaded Medical Coherence output");
-            }
-        } else {
-            execution.setVariable("medicalCoherenceOutput", "{}");
-            log.warn("No Medical Coherence output found");
-        }
+        // DO NOT store the full output - paths are already set by the delegates
+        log.info("Policy Coherence Path: {}", execution.getVariable("policyCoherenceMinioPath"));
+        log.info("Medical Coherence Path: {}", execution.getVariable("medicalCoherenceMinioPath"));
 
         log.info("=== Load Final Review Fields Completed ===");
     }

@@ -1,13 +1,13 @@
 <form name="finalReviewForm">
     <script cam-script type="text/form-script">
         $scope.uiFields = [];
-        $scope.policyCoherence = '';
-        $scope.medicalCoherence = '';
+        $scope.policyCoherencePath = '';
+        $scope.medicalCoherencePath = '';
 
         camForm.on('form-loaded', function() {
           camForm.variableManager.fetchVariable('finalReviewFields');
-          camForm.variableManager.fetchVariable('policyCoherenceOutput');
-          camForm.variableManager.fetchVariable('medicalCoherenceOutput');
+          camForm.variableManager.fetchVariable('policyCoherenceMinioPath');
+          camForm.variableManager.fetchVariable('medicalCoherenceMinioPath');
         });
 
         camForm.on('variables-fetched', function() {
@@ -45,16 +45,12 @@
             }
           }
 
-          // Load coherence outputs as strings for display
-          var policyVar = camForm.variableManager.variables.policyCoherenceOutput;
-          if (policyVar && policyVar.value) {
-            $scope.policyCoherence = JSON.stringify(JSON.parse(policyVar.value), null, 2);
-          }
+          // Get MinIO paths
+          var policyPathVar = camForm.variableManager.variables.policyCoherenceMinioPath;
+          $scope.policyCoherencePath = policyPathVar ? policyPathVar.value : 'Not available';
 
-          var medicalVar = camForm.variableManager.variables.medicalCoherenceOutput;
-          if (medicalVar && medicalVar.value) {
-            $scope.medicalCoherence = JSON.stringify(JSON.parse(medicalVar.value), null, 2);
-          }
+          var medicalPathVar = camForm.variableManager.variables.medicalCoherenceMinioPath;
+          $scope.medicalCoherencePath = medicalPathVar ? medicalPathVar.value : 'Not available';
         });
 
         // Save modified values before submission
@@ -121,16 +117,15 @@
           margin-bottom: 15px;
           font-size: 16px;
         }
-        .coherence-output {
-          width: 100%;
+        .minio-path {
           padding: 10px;
-          font-family: 'Courier New', monospace;
-          font-size: 12px;
           background: #fff;
           border: 1px solid #ced4da;
           border-radius: 3px;
-          resize: vertical;
-          min-height: 200px;
+          font-family: 'Courier New', monospace;
+          font-size: 12px;
+          color: #495057;
+          word-break: break-all;
         }
         h3.main-title {
           color: #222;
@@ -167,6 +162,12 @@
           border: 1px dashed #ddd;
           border-radius: 4px;
         }
+        .info-note {
+          font-size: 12px;
+          color: #6c757d;
+          margin-top: 8px;
+          font-style: italic;
+        }
     </style>
 
     <div class="container">
@@ -186,20 +187,18 @@
             <div class="doc-type" ng-if="field.docType">Source: {{field.docType}}</div>
         </div>
 
-        <!-- Policy Coherence Output (Read-only) -->
+        <!-- Policy Coherence (Path only) -->
         <div class="coherence-section">
             <h3>Policy Coherence Analysis</h3>
-            <textarea class="coherence-output"
-                      ng-model="policyCoherence"
-                      readonly></textarea>
+            <div class="minio-path">{{policyCoherencePath}}</div>
+            <p class="info-note">View full analysis in MinIO at the path above</p>
         </div>
 
-        <!-- Medical Coherence Output (Read-only) -->
+        <!-- Medical Coherence (Path only) -->
         <div class="coherence-section">
             <h3>Medical Coherence Analysis</h3>
-            <textarea class="coherence-output"
-                      ng-model="medicalCoherence"
-                      readonly></textarea>
+            <div class="minio-path">{{medicalCoherencePath}}</div>
+            <p class="info-note">View full analysis in MinIO at the path above</p>
         </div>
 
         <!-- Action -->
