@@ -2,9 +2,9 @@ package com.DronaPay.frm.HealthClaim;
 
 import com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailDelegate;
 import lombok.extern.slf4j.Slf4j;
-import org.camunda.bpm.engine.delegate.DelegateExecution;
-import org.camunda.bpm.engine.delegate.JavaDelegate;
-import org.camunda.bpm.engine.RuntimeService;
+import org.cibseven.bpm.engine.delegate.DelegateExecution;
+import org.cibseven.bpm.engine.delegate.JavaDelegate;
+import org.cibseven.bpm.engine.RuntimeService;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;

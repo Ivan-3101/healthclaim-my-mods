@@ -7,10 +7,10 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
-import org.camunda.bpm.engine.delegate.DelegateExecution;
-import org.camunda.bpm.engine.delegate.JavaDelegate;
-import org.camunda.bpm.engine.variable.Variables;
-import org.camunda.bpm.engine.variable.value.ObjectValue;
+import org.cibseven.bpm.engine.delegate.DelegateExecution;
+import org.cibseven.bpm.engine.delegate.JavaDelegate;
+import org.cibseven.bpm.engine.variable.Variables;
+import org.cibseven.bpm.engine.variable.value.ObjectValue;
 import org.json.JSONObject;
 
 import java.net.URI;

@@ -432,11 +432,11 @@
     <bpmn:sequenceFlow id="Flow_1rugnkq" sourceRef="Activity_0c8yvg3" targetRef="FHIR_Consolidator" />
     <bpmn:sequenceFlow id="Flow_0oa3vkg" sourceRef="FHIR_Consolidator" targetRef="Submission_Validator" />
     <bpmn:sequenceFlow id="Flow_1y4cq5x" sourceRef="FHIR_Analyzer" targetRef="Activity_1eu27e2" />
-    <bpmn:serviceTask id="FHIR_Analyzer" name="FHIR Analyzer" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FHIRAnalyserDelegate">
+    <bpmn:serviceTask id="FHIR_Analyzer" name="Submission Consistency Analyzer" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FHIRAnalyserDelegate">
       <bpmn:incoming>Flow_0e8mxy3</bpmn:incoming>
       <bpmn:outgoing>Flow_1y4cq5x</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:serviceTask id="FHIR_Consolidator" name="FHIR Consolidator" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FHIRConsolidatorDelegate">
+    <bpmn:serviceTask id="FHIR_Consolidator" name="Document&#10; Consolidator" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FHIRConsolidatorDelegate">
       <bpmn:incoming>Flow_1rugnkq</bpmn:incoming>
       <bpmn:outgoing>Flow_0oa3vkg</bpmn:outgoing>
     </bpmn:serviceTask>
@@ -500,7 +500,7 @@
         <dc:Bounds x="3620" y="800" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0wm5iil_di" bpmnElement="Medical_Coherence">
+      <bpmndi:BPMNShape id="Activity_0wm5iil_di" bpmnElement="Medical_Coherence" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="3960" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_1dn2bub_di" bpmnElement="Event_1dn2bub">
@@ -613,7 +613,7 @@
       <bpmndi:BPMNShape id="Event_11ox0g4_di" bpmnElement="Event_11ox0g4">
         <dc:Bounds x="702" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0n9gc57_di" bpmnElement="Activity_0k7btnb">
+      <bpmndi:BPMNShape id="Activity_0n9gc57_di" bpmnElement="Activity_0k7btnb" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="780" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_0oqarvk_di" bpmnElement="Event_0oqarvk">
@@ -633,7 +633,7 @@
       <bpmndi:BPMNShape id="Event_0xxno63_di" bpmnElement="Event_0xxno63">
         <dc:Bounds x="1940" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1yzgvj0_di" bpmnElement="Activity_17tvvhm">
+      <bpmndi:BPMNShape id="Activity_1yzgvj0_di" bpmnElement="Activity_17tvvhm" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="2030" y="800" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
@@ -657,7 +657,7 @@
       <bpmndi:BPMNShape id="Event_0k3yxqs_di" bpmnElement="Event_0k3yxqs">
         <dc:Bounds x="1372" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0p36ok7_di" bpmnElement="Activity_0pz9jth">
+      <bpmndi:BPMNShape id="Activity_0p36ok7_di" bpmnElement="Activity_0pz9jth" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="1210" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_1p7jmc8_di" bpmnElement="Flow_1p7jmc8">
@@ -672,7 +672,7 @@
         <dc:Bounds x="1600" y="800" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1349e5d_di" bpmnElement="Activity_1eu27e2">
+      <bpmndi:BPMNShape id="Activity_1349e5d_di" bpmnElement="Activity_1eu27e2" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="3280" y="800" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
@@ -685,7 +685,7 @@
       <bpmndi:BPMNShape id="Event_1pojsp1_di" bpmnElement="Event_1pojsp1">
         <dc:Bounds x="2642" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0ilyu2a_di" bpmnElement="Activity_0u7ed5l">
+      <bpmndi:BPMNShape id="Activity_0ilyu2a_di" bpmnElement="Activity_0u7ed5l" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="2480" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_084cttl_di" bpmnElement="Flow_084cttl">
@@ -696,19 +696,21 @@
         <di:waypoint x="2580" y="840" />
         <di:waypoint x="2642" y="840" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="Activity_1gr5j3s_di" bpmnElement="FHIR_Analyzer">
+      <bpmndi:BPMNShape id="Activity_1gr5j3s_di" bpmnElement="FHIR_Analyzer" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="3110" y="800" width="100" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_1pe8iyi_di" bpmnElement="FHIR_Consolidator">
         <dc:Bounds x="2780" y="800" width="100" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1e353uy_di" bpmnElement="Submission_Validator">
+      <bpmndi:BPMNShape id="Activity_1e353uy_di" bpmnElement="Submission_Validator" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="2940" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_0p3hr0z_di" bpmnElement="Activity_LoadUIFields">
         <dc:Bounds x="3450" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1so80se_di" bpmnElement="Policy_Coherence">
+      <bpmndi:BPMNShape id="Activity_1so80se_di" bpmnElement="Policy_Coherence" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="3800" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_15ndmjn_di" bpmnElement="Event_1wb0mkj" bioc:stroke="#831311" bioc:fill="#ffcdd2" color:background-color="#ffcdd2" color:border-color="#831311">

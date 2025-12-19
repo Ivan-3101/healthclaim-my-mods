@@ -2,8 +2,8 @@ package com.DronaPay.frm.HealthClaim.generic.services;
 
 import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
 import lombok.extern.slf4j.Slf4j;
-import org.camunda.bpm.engine.variable.Variables;
-import org.camunda.bpm.engine.variable.value.FileValue;
+import org.cibseven.bpm.engine.variable.Variables;
+import org.cibseven.bpm.engine.variable.value.FileValue;
 import org.json.JSONArray;
 import org.json.JSONObject;
 

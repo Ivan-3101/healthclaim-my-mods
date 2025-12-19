@@ -11,8 +11,8 @@ import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
-import org.camunda.bpm.engine.delegate.DelegateExecution;
-import org.camunda.bpm.engine.delegate.JavaDelegate;
+import org.cibseven.bpm.engine.delegate.DelegateExecution;
+import org.cibseven.bpm.engine.delegate.JavaDelegate;
 import org.json.JSONObject;
 
 import java.io.InputStream;

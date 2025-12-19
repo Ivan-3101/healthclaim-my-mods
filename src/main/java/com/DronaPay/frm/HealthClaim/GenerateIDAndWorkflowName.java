@@ -2,8 +2,8 @@ package com.DronaPay.frm.HealthClaim;
 
 import com.DronaPay.frm.HealthClaim.generic.delegates.GenericIDGeneratorDelegate;
 import lombok.extern.slf4j.Slf4j;
-import org.camunda.bpm.engine.delegate.DelegateExecution;
-import org.camunda.bpm.engine.delegate.JavaDelegate;
+import org.cibseven.bpm.engine.delegate.DelegateExecution;
+import org.cibseven.bpm.engine.delegate.JavaDelegate;
 
 /**
  * Wrapper delegate for Generate ID functionality

@@ -2,8 +2,8 @@ package com.DronaPay.frm.HealthClaim;
 
 import java.util.logging.Logger;
 
-import org.camunda.bpm.engine.delegate.DelegateExecution;
-import org.camunda.bpm.engine.delegate.JavaDelegate;
+import org.cibseven.bpm.engine.delegate.DelegateExecution;
+import org.cibseven.bpm.engine.delegate.JavaDelegate;
 
 /**
  * This is an easy adapter implementation
