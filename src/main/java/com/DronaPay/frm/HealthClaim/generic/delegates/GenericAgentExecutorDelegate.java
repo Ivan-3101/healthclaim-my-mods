@@ -17,6 +17,7 @@ import org.json.JSONObject;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -71,11 +72,19 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
 
         JSONObject config = agentConfig.getJSONObject("config");
 
-        // 3. Build request
-        JSONObject workflowConfig = ConfigurationService.getWorkflowConfig(workflowKey, tenantId);
+        // 3. Load workflow config from database
+        Connection conn = execution.getProcessEngine()
+                .getProcessEngineConfiguration()
+                .getDataSource()
+                .getConnection();
+
+        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig(workflowKey, tenantId, conn);
+        conn.close();
+
+        // 4. Build request
         JSONObject requestBody = buildRequest(config, execution, filename, tenantId, agentId);
 
-        // 4. Call agent API
+        // 5. Call agent API
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
         CloseableHttpResponse response = apiServices.callAgent(requestBody.toString());
 
@@ -85,7 +94,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         log.info("Agent '{}' API status: {}", displayName, statusCode);
         log.debug("Agent '{}' response: {}", displayName, resp);
 
-        // 5. Process response and store in new MinIO structure
+        // 6. Process response and store in new MinIO structure
         processAndStoreResponse(agentId, displayName, statusCode, resp, config,
                 execution, filename, critical, tenantId, ticketId, workflowKey, stageNumber, taskName);
 
