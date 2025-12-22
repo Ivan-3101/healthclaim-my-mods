@@ -18,6 +18,7 @@ public class WorkflowStageMapping {
         // Stage 1: Initial document upload and ID generation
         HEALTH_CLAIM_STAGES.put("GenerateTicketIDAndWorkflowName", 1);
         HEALTH_CLAIM_STAGES.put("Generate TicketID And WorkflowName", 1);
+        HEALTH_CLAIM_STAGES.put("Generate TicketID and Workflow Name", 1);
 
         // Stage 2: Master data verification
         HEALTH_CLAIM_STAGES.put("VerifyMasterData", 2);
@@ -26,22 +27,28 @@ public class WorkflowStageMapping {
         // Stage 3: Forgery detection
         HEALTH_CLAIM_STAGES.put("IdentifyForgedDocuments", 3);
         HEALTH_CLAIM_STAGES.put("Identify Forged Documents", 3);
+        HEALTH_CLAIM_STAGES.put("Identify forged documents", 3);
 
         // Stage 4: Document classification
         HEALTH_CLAIM_STAGES.put("DocumentClassifier", 4);
         HEALTH_CLAIM_STAGES.put("Document Classifier", 4);
+        HEALTH_CLAIM_STAGES.put("Doc Classifier", 4);
+        HEALTH_CLAIM_STAGES.put("DocClassifier", 4);
 
         // Stage 5: Document type splitting
         HEALTH_CLAIM_STAGES.put("DocTypeSplitter", 5);
         HEALTH_CLAIM_STAGES.put("Doc Type Splitter", 5);
+        HEALTH_CLAIM_STAGES.put("DocTypeSplitter", 5);
 
         // Stage 6: OCR extraction
         HEALTH_CLAIM_STAGES.put("OCROnDoc", 6);
         HEALTH_CLAIM_STAGES.put("OCR On Doc", 6);
+        HEALTH_CLAIM_STAGES.put("OCR on Doc", 6);
 
         // Stage 7: OCR to FHIR conversion
         HEALTH_CLAIM_STAGES.put("OcrToStatic", 7);
         HEALTH_CLAIM_STAGES.put("OCR To Static", 7);
+        HEALTH_CLAIM_STAGES.put("OCR to Static", 7);
 
         // Stage 8: FHIR consolidation
         HEALTH_CLAIM_STAGES.put("FHIRConsolidator", 8);
@@ -54,6 +61,7 @@ public class WorkflowStageMapping {
         // Stage 10: FHIR analysis
         HEALTH_CLAIM_STAGES.put("FHIRAnalyser", 10);
         HEALTH_CLAIM_STAGES.put("FHIR Analyser", 10);
+        HEALTH_CLAIM_STAGES.put("FHIRAnalyzer", 10);
 
         // Stage 11: UI field display
         HEALTH_CLAIM_STAGES.put("UIDisplayer", 11);

@@ -32,6 +32,9 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
             stageNumber = StoragePathBuilder.getStageNumber(execution) + 1;
         }
 
+        // Set/update stageNumber for next task
+        execution.setVariable("stageNumber", stageNumber);
+
         log.info("Stage {}: {}", stageNumber, taskName);
 
         @SuppressWarnings("unchecked")

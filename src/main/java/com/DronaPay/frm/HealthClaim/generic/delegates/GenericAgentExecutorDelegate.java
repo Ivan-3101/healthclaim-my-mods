@@ -64,6 +64,9 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
             stageNumber = StoragePathBuilder.getStageNumber(execution);
         }
 
+        // Set/update stageNumber for next task
+        execution.setVariable("stageNumber", stageNumber);
+
         log.info("Stage {}: {} - Agent: {}", stageNumber, taskName, displayName);
 
         if (filename == null) {
@@ -209,6 +212,18 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
                     } catch (Exception e) {
                         log.error("Error extracting variable '{}' from path '{}'", variableName, e);
                     }
+                }
+            }
+
+            // If no data was extracted but API succeeded, store the raw "answer" field for downstream use
+            if (extractedData.isEmpty() && apiResponse.has("answer")) {
+                Object answerData = apiResponse.get("answer");
+                if (answerData instanceof org.json.JSONArray) {
+                    extractedData.put("rawAnswer", apiResponse.getJSONArray("answer").toString());
+                    log.debug("Stored raw answer array in extractedData for agent '{}'", displayName);
+                } else {
+                    extractedData.put("rawAnswer", answerData.toString());
+                    log.debug("Stored raw answer in extractedData for agent '{}'", displayName);
                 }
             }
         } else {

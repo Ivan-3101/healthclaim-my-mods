@@ -10,6 +10,7 @@ import org.apache.pdfbox.multipdf.PDFMergerUtility;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
@@ -33,6 +34,9 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
             log.warn("Stage number not found for task '{}', using previous + 1", taskName);
             stageNumber = StoragePathBuilder.getStageNumber(execution) + 1;
         }
+
+        // Set/update stageNumber for next task
+        execution.setVariable("stageNumber", stageNumber);
 
         log.info("Stage {}: {}", stageNumber, taskName);
 
@@ -65,33 +69,41 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
 
                 Map<String, Object> extractedData = (Map<String, Object>) classifierResult.get("extractedData");
 
-                if (extractedData == null || !extractedData.containsKey("docClassifications")) {
-                    log.warn("No docClassifications found for {}", filename);
+                // Get classification data - either from docClassifications or rawAnswer
+                String classificationsJson = null;
+
+                if (extractedData != null) {
+                    if (extractedData.containsKey("docClassifications")) {
+                        classificationsJson = (String) extractedData.get("docClassifications");
+                    } else if (extractedData.containsKey("rawAnswer")) {
+                        classificationsJson = (String) extractedData.get("rawAnswer");
+                        log.debug("Using rawAnswer for classifications of {}", filename);
+                    }
+                }
+
+                if (classificationsJson == null || classificationsJson.isEmpty()) {
+                    log.warn("No classification data found for {}", filename);
                     continue;
                 }
 
-                String classificationsJson = (String) extractedData.get("docClassifications");
-                JSONObject classifications = new JSONObject(classificationsJson);
+                // Parse classifications
+                JSONArray classificationArray = new JSONArray(classificationsJson);
 
                 String storagePath = documentPaths.get(filename);
                 InputStream pdfStream = storage.downloadDocument(storagePath);
                 PDDocument document = PDDocument.load(pdfStream);
                 openDocs.put(filename, document);
 
-                // Parse classifications and map pages
-                for (String key : classifications.keySet()) {
-                    Object value = classifications.get(key);
+                // Parse classification array and map pages to document types
+                for (int i = 0; i < classificationArray.length(); i++) {
+                    JSONObject classification = classificationArray.getJSONObject(i);
+                    String docType = classification.optString("category", "unknown");
+                    int pageNum = classification.optInt("page_number", i + 1);
 
-                    if (value instanceof JSONObject) {
-                        JSONObject pageClass = (JSONObject) value;
-                        String docType = pageClass.optString("document_type", "unknown");
-                        int pageNum = Integer.parseInt(key.replace("page_", ""));
+                    docTypeMap.computeIfAbsent(docType, k -> new ArrayList<>())
+                            .add(new PageInfo(filename, storagePath, pageNum));
 
-                        docTypeMap.computeIfAbsent(docType, k -> new ArrayList<>())
-                                .add(new PageInfo(filename, storagePath, pageNum));
-
-                        log.debug("Page {} of {} classified as: {}", pageNum, filename, docType);
-                    }
+                    log.debug("Page {} of {} classified as: {}", pageNum, filename, docType);
                 }
             }
 
