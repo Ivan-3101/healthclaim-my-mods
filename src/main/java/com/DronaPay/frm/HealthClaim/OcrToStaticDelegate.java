@@ -35,11 +35,14 @@ public class OcrToStaticDelegate implements JavaDelegate {
         int stageNumber = WorkflowStageMapping.getStageNumber(workflowKey, taskName);
 
         if (stageNumber == -1) {
-            log.warn("Stage number not found for task '{}', using previous + 1", taskName);
-            stageNumber = StoragePathBuilder.getStageNumber(execution) + 1;
+            log.warn("Stage number not found for task '{}', using previous stageNumber", taskName);
+            stageNumber = StoragePathBuilder.getStageNumber(execution);
+            if (stageNumber == -1) {
+                stageNumber = 7; // Default OcrToStatic stage
+            }
         }
 
-        execution.setVariable("stageNumber", stageNumber);
+        // Don't set stageNumber in execution - this is a multi-instance loop
         log.info("Stage {}: {} - Processing file: {}", stageNumber, taskName, filename);
 
         // Get previous OCR stage info

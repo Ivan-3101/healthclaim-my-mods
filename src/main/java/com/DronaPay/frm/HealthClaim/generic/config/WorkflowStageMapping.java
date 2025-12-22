@@ -45,6 +45,8 @@ public class WorkflowStageMapping {
         HEALTH_CLAIM_STAGES.put("OCR On Doc", 6);
         HEALTH_CLAIM_STAGES.put("OCR on Doc", 6);
         HEALTH_CLAIM_STAGES.put("OCRonDoc", 6);
+        HEALTH_CLAIM_STAGES.put("Doing OCR on Documents", 6);
+        HEALTH_CLAIM_STAGES.put("doing_ocr_on_doc", 6);
 
         // Stage 7: OCR to FHIR conversion
         HEALTH_CLAIM_STAGES.put("OcrToStatic", 7);
@@ -67,6 +69,8 @@ public class WorkflowStageMapping {
         HEALTH_CLAIM_STAGES.put("FHIRAnalyser", 10);
         HEALTH_CLAIM_STAGES.put("FHIR Analyser", 10);
         HEALTH_CLAIM_STAGES.put("FHIRAnalyzer", 10);
+        HEALTH_CLAIM_STAGES.put("FHIR Analyzer", 10);
+        HEALTH_CLAIM_STAGES.put("FHIR_Analyzer", 10);
 
         // Stage 11: UI field display
         HEALTH_CLAIM_STAGES.put("UIDisplayer", 11);

@@ -41,12 +41,16 @@ public class OCROnDoc implements JavaDelegate {
         int stageNumber = WorkflowStageMapping.getStageNumber(workflowKey, taskName);
 
         if (stageNumber == -1) {
-            log.warn("Stage number not found for task '{}', using previous + 1", taskName);
-            stageNumber = StoragePathBuilder.getStageNumber(execution) + 1;
+            log.warn("Stage number not found for task '{}', using previous stageNumber", taskName);
+            stageNumber = StoragePathBuilder.getStageNumber(execution);
+            if (stageNumber == -1) {
+                stageNumber = 6; // Default OCR stage
+            }
         }
 
-        execution.setVariable("stageNumber", stageNumber);
-        log.info("Stage {}: {}", stageNumber, taskName);
+        // Don't set stageNumber in execution - this is a multi-instance loop
+        // Setting it would increment on each iteration
+        log.info("Stage {}: {} - Processing file: {}", stageNumber, taskName, filename);
 
         @SuppressWarnings("unchecked")
         Map<String, String> documentPaths = (Map<String, String>) execution.getVariable("documentPaths");
@@ -56,7 +60,6 @@ public class OCROnDoc implements JavaDelegate {
         }
 
         String storagePath = documentPaths.get(filename);
-        log.info("Processing file: {} from path: {}", filename, storagePath);
 
         // Extract doctype from filename
         String doctype = filename.substring(0, filename.lastIndexOf("."));
