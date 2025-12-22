@@ -55,10 +55,13 @@ public class WorkflowStageMapping {
         // Stage 8: FHIR consolidation
         HEALTH_CLAIM_STAGES.put("FHIRConsolidator", 8);
         HEALTH_CLAIM_STAGES.put("FHIR Consolidator", 8);
+        HEALTH_CLAIM_STAGES.put("Document Consolidator", 8);
+        HEALTH_CLAIM_STAGES.put("DocumentConsolidator", 8);
 
         // Stage 9: Submission validation
         HEALTH_CLAIM_STAGES.put("SubmissionValidator", 9);
         HEALTH_CLAIM_STAGES.put("Submission Validator", 9);
+        HEALTH_CLAIM_STAGES.put("Submission_Validator", 9);
 
         // Stage 10: FHIR analysis
         HEALTH_CLAIM_STAGES.put("FHIRAnalyser", 10);

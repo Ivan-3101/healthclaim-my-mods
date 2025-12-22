@@ -2,6 +2,8 @@ package com.DronaPay.frm.HealthClaim;
 
 import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
 import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
+import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
+import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.util.EntityUtils;
@@ -11,21 +13,12 @@ import org.cibseven.bpm.engine.delegate.JavaDelegate;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Submission Validator Delegate
- *
- * Calls the Submission_Validator agent with the consolidated FHIR request.
- *
- * Input: Consolidated FHIR request from MinIO (built by FHIRConsolidatorDelegate)
- * Output: Missing documents list
- *
- * Stores the response in MinIO and sets process variables:
- * - missingDocuments: JSON array of missing document types
- */
 @Slf4j
 public class SubmissionValidatorDelegate implements JavaDelegate {
 
@@ -57,9 +50,14 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
 
         log.info("Retrieving consolidated FHIR request from MinIO: {}", consolidatorMinioPath);
 
-        // Retrieve from MinIO
-        Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, consolidatorMinioPath);
-        String consolidatedRequest = (String) result.get("apiResponse");
+        // Retrieve consolidated JSON directly from MinIO
+        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+        InputStream stream = storage.downloadDocument(consolidatorMinioPath);
+        byte[] content = stream.readAllBytes();
+        String jsonString = new String(content, StandardCharsets.UTF_8);
+
+        JSONObject consolidatedJson = new JSONObject(jsonString);
+        String consolidatedRequest = consolidatedJson.toString();
 
         if (consolidatedRequest == null || consolidatedRequest.trim().isEmpty()) {
             log.error("Empty consolidated request retrieved from MinIO");
@@ -69,9 +67,8 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
         log.info("Retrieved consolidated FHIR request ({} bytes) from MinIO", consolidatedRequest.length());
 
         // 3. Change agentid to Submission_Validator
-        JSONObject requestJson = new JSONObject(consolidatedRequest);
-        requestJson.put("agentid", "Submission_Validator");
-        String modifiedRequest = requestJson.toString();
+        consolidatedJson.put("agentid", "Submission_Validator");
+        String modifiedRequest = consolidatedJson.toString();
 
         log.info("Modified agentid to Submission_Validator");
 
@@ -110,14 +107,10 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
         log.info("=== Submission Validator Completed ===");
     }
 
-    /**
-     * Extract missing documents from Submission Validator response and set as process variable
-     */
     private void extractAndSetProcessVariables(DelegateExecution execution, String response) {
         try {
             JSONObject responseJson = new JSONObject(response);
 
-            // Extract answer.missing_documents
             if (responseJson.has("answer")) {
                 JSONObject answer = responseJson.getJSONObject("answer");
 
@@ -131,7 +124,6 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
 
         } catch (Exception e) {
             log.error("Error extracting process variables from Submission Validator response", e);
-            // Don't throw - we've stored the full response in MinIO
         }
     }
 }
