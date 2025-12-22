@@ -90,7 +90,8 @@ public class FHIRAnalyserDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "FHIR_Analyser", statusCode, resp, new HashMap<>());
 
-        String analyserMinioPath = AgentResultStorageService.storeAgentResult(tenantId, "HealthClaim", ticketId, "FHIRAnalyser", "consolidated", fullResult);
+        String analyserMinioPath = AgentResultStorageService.storeAgentResultStageWise(
+                tenantId, ticketId, "consolidated", "FHIR_Analyser", fullResult);
 
         log.info("Stored FHIR_Analyser result at: {}", analyserMinioPath);
 

@@ -95,7 +95,8 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "Submission_Validator", statusCode, resp, new HashMap<>());
 
-        String validatorMinioPath = AgentResultStorageService.storeAgentResult(tenantId, "HealthClaim", ticketId, "SubmissionValidator", "consolidated", fullResult);
+        String validatorMinioPath = AgentResultStorageService.storeAgentResultStageWise(
+                tenantId, ticketId, "consolidated", "Submission_Validator", fullResult);
 
         log.info("Stored Submission_Validator result at: {}", validatorMinioPath);
 

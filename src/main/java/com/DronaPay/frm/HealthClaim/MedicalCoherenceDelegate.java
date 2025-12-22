@@ -89,7 +89,8 @@ public class MedicalCoherenceDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "medical_comp", statusCode, resp, new HashMap<>());
 
-        String medicalCoherenceMinioPath = AgentResultStorageService.storeAgentResult(tenantId, "HealthClaim", ticketId, "MedicalCoherence", "consolidated", fullResult);
+        String medicalCoherenceMinioPath = AgentResultStorageService.storeAgentResultStageWise(
+                tenantId, ticketId, "consolidated", "medical_comp", fullResult);
 
         log.info("Stored Medical Coherence result at: {}", medicalCoherenceMinioPath);
 
