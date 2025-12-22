@@ -1,14 +1,15 @@
 package com.DronaPay.frm.HealthClaim;
 
-import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
+import com.DronaPay.frm.HealthClaim.generic.config.WorkflowStageMapping;
+import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
 import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
 import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
+import com.DronaPay.frm.HealthClaim.generic.utils.StoragePathBuilder;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.pdfbox.multipdf.PDFMergerUtility;
 import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.PDPage;
 import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
@@ -22,209 +23,151 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
     public void execute(DelegateExecution execution) throws Exception {
         log.info("=== Doc Type Splitter Started ===");
 
-        String ticketId = String.valueOf(execution.getVariable("TicketID"));
         String tenantId = execution.getTenantId();
+        String ticketId = String.valueOf(execution.getVariable("TicketID"));
+        String workflowKey = StoragePathBuilder.getWorkflowType(execution);
+        String taskName = StoragePathBuilder.getTaskName(execution);
+        int stageNumber = WorkflowStageMapping.getStageNumber(workflowKey, taskName);
+
+        if (stageNumber == -1) {
+            log.warn("Stage number not found for task '{}', using previous + 1", taskName);
+            stageNumber = StoragePathBuilder.getStageNumber(execution) + 1;
+        }
+
+        log.info("Stage {}: {}", stageNumber, taskName);
+
+        @SuppressWarnings("unchecked")
+        Map<String, String> documentPaths = (Map<String, String>) execution.getVariable("documentPaths");
 
         @SuppressWarnings("unchecked")
         Map<String, Map<String, Object>> fileProcessMap =
                 (Map<String, Map<String, Object>>) execution.getVariable("fileProcessMap");
 
-        @SuppressWarnings("unchecked")
-        Map<String, String> documentPaths =
-                (Map<String, String>) execution.getVariable("documentPaths");
-
-        if (fileProcessMap == null || fileProcessMap.isEmpty()) {
-            log.error("No fileProcessMap found");
-            throw new RuntimeException("fileProcessMap is null or empty");
-        }
-
-        // Group pages by document type
-        Map<String, List<PageInfo>> docTypePages = new LinkedHashMap<>();
-
-        // Process each file's classifier output
-        for (String filename : fileProcessMap.keySet()) {
-            Map<String, Object> fileResults = fileProcessMap.get(filename);
-
-            if (!fileResults.containsKey("Document_ClassifierOutput")) {
-                log.warn("No classifier output for file: {}, skipping", filename);
-                continue;
-            }
-
-            @SuppressWarnings("unchecked")
-            Map<String, Object> classifierOutput =
-                    (Map<String, Object>) fileResults.get("Document_ClassifierOutput");
-
-            String apiCall = (String) classifierOutput.get("apiCall");
-            if (!"success".equals(apiCall)) {
-                log.warn("Classifier failed for file: {}, skipping", filename);
-                continue;
-            }
-
-            String minioPath = (String) classifierOutput.get("minioPath");
-            String storagePath = documentPaths.get(filename);
-
-            if (minioPath == null || storagePath == null) {
-                log.warn("Missing minioPath or storagePath for file: {}, skipping", filename);
-                continue;
-            }
-
-            // Retrieve classifier result from MinIO
-            Map<String, Object> result =
-                    AgentResultStorageService.retrieveAgentResult(tenantId, minioPath);
-            String apiResponse = (String) result.get("apiResponse");
-
-            JSONObject response = new JSONObject(apiResponse);
-
-            if (!response.has("answer")) {
-                log.warn("No 'answer' field in classifier response for: {}", filename);
-                continue;
-            }
-
-            JSONArray answer = response.getJSONArray("answer");
-
-            // Group pages by category
-            for (int i = 0; i < answer.length(); i++) {
-                JSONObject item = answer.getJSONObject(i);
-                String category = item.getString("category");
-                int pageNumber = item.getInt("page_number");
-
-                docTypePages.computeIfAbsent(category, k -> new ArrayList<>())
-                        .add(new PageInfo(filename, storagePath, pageNumber));
-
-                log.debug("Classified page {} of {} as {}", pageNumber, filename, category);
-            }
-        }
-
-        if (docTypePages.isEmpty()) {
-            log.error("No document types found after classification");
-            throw new RuntimeException("Document classification produced no results");
-        }
-
-        log.info("Grouped pages into {} document types", docTypePages.size());
-
-        // Create split documents
-        List<String> splitDocumentVars = new ArrayList<>();
         StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+        Properties props = ConfigurationService.getTenantProperties(tenantId);
+        String rootFolder = props.getProperty("storage.minio.bucketName", "insurance-claims");
 
-        for (Map.Entry<String, List<PageInfo>> entry : docTypePages.entrySet()) {
-            String docType = entry.getKey();
-            List<PageInfo> pages = entry.getValue();
+        // Get classification results from previous stage (Document_Classifier)
+        Map<String, List<PageInfo>> docTypeMap = new HashMap<>();
+        Map<String, PDDocument> openDocs = new HashMap<>();
 
-            // Sanitize doc type for filename
-            String sanitizedDocType = docType.replaceAll("[^a-zA-Z0-9]", "_").toLowerCase();
-            String splitFilename = sanitizedDocType + ".pdf";
+        try {
+            for (String filename : fileProcessMap.keySet()) {
+                log.info("Processing classification for: {}", filename);
 
-            log.info("Creating split document: {} with {} pages", splitFilename, pages.size());
+                Map<String, Object> fileResults = fileProcessMap.get(filename);
+                Map<String, Object> classifierResult = (Map<String, Object>) fileResults.get("Document_Classifier");
 
-            // Create new merged document
-            PDDocument mergedDoc = new PDDocument();
-
-            try {
-                // Load all source documents first and keep them open
-                Map<String, PDDocument> openDocs = new HashMap<>();
-
-                for (PageInfo pageInfo : pages) {
-                    // Only load each document once
-                    if (!openDocs.containsKey(pageInfo.storagePath)) {
-                        try {
-                            InputStream stream = storage.downloadDocument(pageInfo.storagePath);
-                            PDDocument doc = PDDocument.load(stream);
-                            stream.close();
-                            openDocs.put(pageInfo.storagePath, doc);
-                            log.debug("Loaded source document: {}", pageInfo.filename);
-                        } catch (Exception e) {
-                            log.error("Error loading document {}", pageInfo.filename, e);
-                        }
-                    }
-                }
-
-                // Now extract pages (all source docs are still open)
-                for (PageInfo pageInfo : pages) {
-                    PDDocument sourceDoc = openDocs.get(pageInfo.storagePath);
-                    if (sourceDoc == null) {
-                        log.warn("Source document not loaded for {}", pageInfo.filename);
-                        continue;
-                    }
-
-                    try {
-                        // PDF pages are 0-indexed, but classifier returns 1-indexed
-                        int pageIndex = pageInfo.pageNumber - 1;
-
-                        if (pageIndex >= 0 && pageIndex < sourceDoc.getNumberOfPages()) {
-                            PDPage page = sourceDoc.getPage(pageIndex);
-                            mergedDoc.addPage(page);
-
-                            log.debug("Added page {} from {} to {}",
-                                    pageInfo.pageNumber, pageInfo.filename, splitFilename);
-                        } else {
-                            log.warn("Page {} out of range in {} (total pages: {})",
-                                    pageInfo.pageNumber, pageInfo.filename,
-                                    sourceDoc.getNumberOfPages());
-                        }
-                    } catch (Exception e) {
-                        log.error("Error adding page {} from {}",
-                                pageInfo.pageNumber, pageInfo.filename, e);
-                    }
-                }
-
-                if (mergedDoc.getNumberOfPages() == 0) {
-                    log.warn("No pages added for document type: {}, skipping", docType);
-                    // Close all open source documents
-                    for (PDDocument doc : openDocs.values()) {
-                        try {
-                            doc.close();
-                        } catch (Exception e) {
-                            log.warn("Error closing document", e);
-                        }
-                    }
+                if (classifierResult == null) {
+                    log.warn("No classification result found for {}, skipping", filename);
                     continue;
                 }
 
-                // Save merged document BEFORE closing source documents
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                mergedDoc.save(baos);
-                byte[] pdfBytes = baos.toByteArray();
-                baos.close();
+                Map<String, Object> extractedData = (Map<String, Object>) classifierResult.get("extractedData");
 
-                // NOW close all source documents
-                for (PDDocument doc : openDocs.values()) {
-                    try {
-                        doc.close();
-                    } catch (Exception e) {
-                        log.warn("Error closing document", e);
-                    }
+                if (extractedData == null || !extractedData.containsKey("docClassifications")) {
+                    log.warn("No docClassifications found for {}", filename);
+                    continue;
                 }
 
-                // Upload to MinIO
-                String splitStoragePath = tenantId + "/HealthClaim/" + ticketId +
-                        "/split/" + splitFilename;
-                storage.uploadDocument(splitStoragePath, pdfBytes, "application/pdf");
+                String classificationsJson = (String) extractedData.get("docClassifications");
+                JSONObject classifications = new JSONObject(classificationsJson);
 
-                splitDocumentVars.add(splitFilename);
-                documentPaths.put(splitFilename, splitStoragePath);
-                fileProcessMap.put(splitFilename, new HashMap<>());
+                String storagePath = documentPaths.get(filename);
+                InputStream pdfStream = storage.downloadDocument(storagePath);
+                PDDocument document = PDDocument.load(pdfStream);
+                openDocs.put(filename, document);
 
-                log.info("Created split document: {} at {} ({} pages, {} bytes)",
-                        splitFilename, splitStoragePath, mergedDoc.getNumberOfPages(),
-                        pdfBytes.length);
+                // Parse classifications and map pages
+                for (String key : classifications.keySet()) {
+                    Object value = classifications.get(key);
 
-            } finally {
-                mergedDoc.close();
+                    if (value instanceof JSONObject) {
+                        JSONObject pageClass = (JSONObject) value;
+                        String docType = pageClass.optString("document_type", "unknown");
+                        int pageNum = Integer.parseInt(key.replace("page_", ""));
+
+                        docTypeMap.computeIfAbsent(docType, k -> new ArrayList<>())
+                                .add(new PageInfo(filename, storagePath, pageNum));
+
+                        log.debug("Page {} of {} classified as: {}", pageNum, filename, docType);
+                    }
+                }
+            }
+
+            if (docTypeMap.isEmpty()) {
+                log.error("No documents were classified");
+                throw new RuntimeException("Document classification failed - no results");
+            }
+
+            log.info("Document classification complete. Found {} document types", docTypeMap.size());
+
+            // Create split documents and store in userdoc/processed/
+            List<String> splitDocumentVars = new ArrayList<>();
+
+            for (Map.Entry<String, List<PageInfo>> entry : docTypeMap.entrySet()) {
+                String docType = entry.getKey();
+                List<PageInfo> pages = entry.getValue();
+
+                String splitFilename = docType.toLowerCase().replace(" ", "_") + ".pdf";
+
+                // Merge pages
+                PDFMergerUtility merger = new PDFMergerUtility();
+                PDDocument mergedDoc = new PDDocument();
+
+                try {
+                    for (PageInfo pageInfo : pages) {
+                        PDDocument sourceDoc = openDocs.get(pageInfo.filename);
+                        mergedDoc.addPage(sourceDoc.getPage(pageInfo.pageNumber - 1));
+                    }
+
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    mergedDoc.save(baos);
+                    byte[] pdfBytes = baos.toByteArray();
+
+                    // Store in userdoc/processed/ folder (NEW STRUCTURE)
+                    String splitStoragePath = StoragePathBuilder.buildUserProcessedPath(
+                            rootFolder, tenantId, workflowKey, ticketId,
+                            stageNumber, taskName, splitFilename
+                    );
+
+                    storage.uploadDocument(splitStoragePath, pdfBytes, "application/pdf");
+
+                    splitDocumentVars.add(splitFilename);
+                    documentPaths.put(splitFilename, splitStoragePath);
+                    fileProcessMap.put(splitFilename, new HashMap<>());
+
+                    log.info("Created split document: {} at {} ({} pages, {} bytes)",
+                            splitFilename, splitStoragePath, pages.size(), pdfBytes.length);
+
+                } finally {
+                    mergedDoc.close();
+                }
+            }
+
+            if (splitDocumentVars.isEmpty()) {
+                log.error("No split documents were created");
+                throw new RuntimeException("Failed to create any split documents");
+            }
+
+            execution.setVariable("splitDocumentVars", splitDocumentVars);
+            execution.setVariable("documentPaths", documentPaths);
+            execution.setVariable("fileProcessMap", fileProcessMap);
+
+            log.info("=== Doc Type Splitter Completed: {} split documents created ===",
+                    splitDocumentVars.size());
+            log.info("Split documents: {}", splitDocumentVars);
+
+        } finally {
+            // Close all open documents
+            for (PDDocument doc : openDocs.values()) {
+                try {
+                    doc.close();
+                } catch (Exception e) {
+                    log.warn("Error closing document", e);
+                }
             }
         }
-
-        if (splitDocumentVars.isEmpty()) {
-            log.error("No split documents were created");
-            throw new RuntimeException("Failed to create any split documents");
-        }
-
-        execution.setVariable("splitDocumentVars", splitDocumentVars);
-        execution.setVariable("documentPaths", documentPaths);
-        execution.setVariable("fileProcessMap", fileProcessMap);
-
-        log.info("=== Doc Type Splitter Completed: {} split documents created ===",
-                splitDocumentVars.size());
-        log.info("Split documents: {}", splitDocumentVars);
     }
 
     private static class PageInfo {
