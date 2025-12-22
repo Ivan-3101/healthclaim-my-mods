@@ -44,11 +44,13 @@ public class WorkflowStageMapping {
         HEALTH_CLAIM_STAGES.put("OCROnDoc", 6);
         HEALTH_CLAIM_STAGES.put("OCR On Doc", 6);
         HEALTH_CLAIM_STAGES.put("OCR on Doc", 6);
+        HEALTH_CLAIM_STAGES.put("OCRonDoc", 6);
 
         // Stage 7: OCR to FHIR conversion
         HEALTH_CLAIM_STAGES.put("OcrToStatic", 7);
         HEALTH_CLAIM_STAGES.put("OCR To Static", 7);
         HEALTH_CLAIM_STAGES.put("OCR to Static", 7);
+        HEALTH_CLAIM_STAGES.put("OCRToStatic", 7);
 
         // Stage 8: FHIR consolidation
         HEALTH_CLAIM_STAGES.put("FHIRConsolidator", 8);
