@@ -3,7 +3,9 @@ package com.DronaPay.frm.HealthClaim.generic.delegates;
 import com.DronaPay.frm.HealthClaim.APIServices;
 import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
 import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
+import com.DronaPay.frm.HealthClaim.generic.services.DocumentProcessingService;
 import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
+import com.DronaPay.frm.HealthClaim.generic.storage.StoragePathBuilder;
 import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
@@ -12,72 +14,62 @@ import org.apache.http.util.EntityUtils;
 import org.cibseven.bpm.engine.delegate.BpmnError;
 import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.InputStream;
-import java.sql.Connection;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 
-/**
- * Generic Agent Executor Delegate
- * Executes any AI agent based on configuration passed via currentAgentConfig variable
- */
 @Slf4j
 public class GenericAgentExecutorDelegate implements JavaDelegate {
 
-    // Maximum size for process variables to prevent VARCHAR overflow
-    private static final int MAX_PROCESS_VAR_SIZE = 3500; // Leave buffer below 4000 limit
+    private static final int MAX_PROCESS_VAR_SIZE = 10000; // 10KB limit for process variables
 
     @Override
     public void execute(DelegateExecution execution) throws Exception {
+        log.info("=== Generic Agent Executor Started ===");
 
         // 1. Get agent configuration from process variable
-        Object configObj = execution.getVariable("currentAgentConfig");
-        if (configObj == null) {
-            throw new IllegalStateException("currentAgentConfig variable not set");
+        Object agentConfigObj = execution.getVariable("currentAgentConfig");
+        if (agentConfigObj == null) {
+            throw new IllegalStateException("currentAgentConfig not found");
         }
 
-        JSONObject agentConfig = (JSONObject) configObj;
-
+        JSONObject agentConfig = new JSONObject(agentConfigObj.toString());
         String agentId = agentConfig.getString("agentId");
         String displayName = agentConfig.getString("displayName");
-        boolean enabled = agentConfig.optBoolean("enabled", true);
         boolean critical = agentConfig.optBoolean("critical", false);
 
-        log.info("=== Generic Agent Executor Started for {} ({}) ===", displayName, agentId);
+        log.info("Executing agent: {} ({})", displayName, agentId);
 
-        if (!enabled) {
-            log.info("Agent '{}' is disabled, skipping execution", displayName);
-            return;
-        }
-
-        // 2. Get current filename and ticket info
-        String filename = (String) execution.getVariable("attachment");
-        String ticketId = String.valueOf(execution.getVariable("TicketID")); // Convert Long to String
+        // 2. Get execution context
         String tenantId = execution.getTenantId();
-
-        // Log if filename is null (indicates non-document agent like FHIRAnalyser)
-        if (filename == null) {
-            log.info("Agent '{}' is processing consolidated/non-document data (filename is null)", displayName);
+        String ticketId = String.valueOf(execution.getVariable("TicketID"));
+        String workflowKey = (String) execution.getVariable("WorkflowKey");
+        if (workflowKey == null) {
+            workflowKey = "HealthClaim"; // Fallback
         }
 
+        // 3. Get filename if in multi-instance loop (document-based agents)
+        String filename = (String) execution.getVariable("attachment");
+
+        // 4. Get current task name for path construction
+        String taskName = StoragePathBuilder.getCurrentTaskName(execution);
+
+        // 5. Build request payload
         JSONObject config = agentConfig.getJSONObject("config");
+        JSONObject requestBody = buildRequest(config, execution, filename, tenantId, agentId, workflowKey, ticketId);
 
-        // 3. Load workflow configuration
-        Connection conn = execution.getProcessEngine()
-                .getProcessEngineConfiguration()
-                .getDataSource()
-                .getConnection();
+        log.debug("Request payload for {}: {}", displayName, requestBody.toString(2));
 
-        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
-        conn.close();
+        // 6. Get workflow configuration
+        Properties workflowConfig = ConfigurationService.getWorkflowConfiguration(
+                execution.getProcessEngineServices(), tenantId, workflowKey);
 
-        // 4. Build request based on input mapping
-        JSONObject requestBody = buildRequest(config, execution, filename, tenantId, agentId);
-
-        // 5. Call agent API
+        // 7. Call agent API
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
         CloseableHttpResponse response = apiServices.callAgent(requestBody.toString());
 
@@ -87,9 +79,9 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         log.info("Agent '{}' API status: {}", displayName, statusCode);
         log.debug("Agent '{}' response: {}", displayName, resp);
 
-        // 6. Process response, extract data, and store in MinIO (BOTH locations)
+        // 8. Process response and store in MinIO
         processAndStoreResponse(agentId, displayName, statusCode, resp, config,
-                execution, filename, critical, tenantId, ticketId);
+                execution, filename, critical, tenantId, workflowKey, ticketId, taskName);
 
         log.info("=== Generic Agent Executor Completed for {} ===", displayName);
     }
@@ -99,7 +91,8 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
      */
     @SuppressWarnings("unchecked")
     private JSONObject buildRequest(JSONObject config, DelegateExecution execution,
-                                    String filename, String tenantId, String agentId) throws Exception {
+                                    String filename, String tenantId, String agentId,
+                                    String workflowKey, String ticketId) throws Exception {
 
         JSONObject requestBody = new JSONObject();
         JSONObject data = new JSONObject();
@@ -111,7 +104,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
 
         // Handle different source types
         if (source.equals("documentVariable")) {
-            // Get document from storage and convert to base64
+            // Get document from CURRENT stage's userdoc/uploaded/
             Map<String, String> documentPaths = (Map<String, String>) execution.getVariable("documentPaths");
 
             if (filename == null) {
@@ -119,127 +112,149 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
             }
 
             String storagePath = documentPaths.get(filename);
+            if (storagePath == null) {
+                throw new IllegalStateException("No storage path found for: " + filename);
+            }
 
             StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
             InputStream fileContent = storage.downloadDocument(storagePath);
             byte[] bytes = IOUtils.toByteArray(fileContent);
+            fileContent.close();
 
             if (transformation.equals("toBase64")) {
                 String base64 = Base64.getEncoder().encodeToString(bytes);
                 data.put("base64_img", base64);
+            } else {
+                throw new IllegalArgumentException("Unsupported transformation: " + transformation);
             }
 
         } else if (source.equals("processVariable")) {
             // Get data from process variable
             String variableName = inputMapping.getString("variableName");
-            Object value = execution.getVariable(variableName);
+            Object variableValue = execution.getVariable(variableName);
 
-            if (value != null) {
-                // Add to data based on variable name convention
-                if (variableName.equals("ocr_text")) {
-                    data.put("ocr_text", value);
-                } else if (variableName.equals("fhir_json")) {
-                    data.put("doc_fhir", new JSONObject(value.toString()));
-                } else if (variableName.equals("consolidatedFhir")) {
-                    data.put("consolidated_fhir", new JSONObject(value.toString()));
-                } else {
-                    data.put(variableName, value);
-                }
+            if (variableValue == null) {
+                throw new IllegalStateException("Process variable not found: " + variableName);
             }
 
-            // Handle additional inputs
-            if (inputMapping.has("additionalInputs")) {
-                JSONObject additionalInputs = inputMapping.getJSONObject("additionalInputs");
-                for (String key : additionalInputs.keySet()) {
-                    String varName = additionalInputs.getString(key);
-                    Object additionalValue = execution.getVariable(varName);
-                    if (additionalValue != null) {
-                        data.put(key, additionalValue);
+            // Apply transformation
+            if (transformation.equals("parseJson")) {
+                JSONObject jsonValue = new JSONObject(variableValue.toString());
+                data = jsonValue; // Use entire JSON
+            } else {
+                data = new JSONObject(variableValue.toString());
+            }
+
+        } else if (source.equals("chainedOutput")) {
+            // Chain from previous agent's output
+            String chainFrom = inputMapping.getString("chainFrom");
+            String chainTransformation = inputMapping.optString("transformation", "none");
+
+            // Get previous agent's result from current stage's task-docs
+            String previousResultPath = StoragePathBuilder.buildTaskDocsPath(
+                    tenantId, workflowKey, ticketId,
+                    StoragePathBuilder.getCurrentTaskName(execution),
+                    filename + ".json"
+            );
+
+            // If not found in current stage, try to get from fileProcessMap
+            @SuppressWarnings("unchecked")
+            Map<String, Map<String, Object>> fileProcessMap =
+                    (Map<String, Map<String, Object>>) execution.getVariable("fileProcessMap");
+
+            if (fileProcessMap != null && filename != null) {
+                Map<String, Object> fileResults = fileProcessMap.get(filename);
+                if (fileResults != null && fileResults.containsKey(chainFrom + "Output")) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> previousOutput = (Map<String, Object>) fileResults.get(chainFrom + "Output");
+                    String minioPath = (String) previousOutput.get("minioPath");
+
+                    if (minioPath != null) {
+                        Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, minioPath);
+                        String rawResponse = (String) result.get("apiResponse");
+
+                        if (chainTransformation.equals("wrapAnswerInData")) {
+                            JSONObject responseJson = new JSONObject(rawResponse);
+                            if (responseJson.has("answer")) {
+                                data.put("data", responseJson.get("answer"));
+                            } else {
+                                data.put("data", rawResponse);
+                            }
+                        } else {
+                            data = new JSONObject(rawResponse);
+                        }
                     }
                 }
             }
         }
 
-        requestBody.put("data", data);
         requestBody.put("agentid", agentId);
-
-        log.debug("Built request for agent '{}' with {} bytes of data", agentId, requestBody.toString().length());
+        requestBody.put("data", data);
 
         return requestBody;
     }
 
     /**
-     * Process agent response, extract data, and store in MinIO (BOTH locations)
+     * Process API response, extract variables, and store result in MinIO
      */
     @SuppressWarnings("unchecked")
-    private void processAndStoreResponse(String agentId, String displayName, int statusCode, String resp,
-                                         JSONObject config, DelegateExecution execution,
-                                         String filename, boolean critical, String tenantId, String ticketId) throws Exception {
+    private void processAndStoreResponse(String agentId, String displayName, int statusCode,
+                                         String resp, JSONObject config, DelegateExecution execution,
+                                         String filename, boolean critical, String tenantId,
+                                         String workflowKey, String ticketId, String taskName) throws Exception {
 
-        // Build result map
         Map<String, Object> extractedData = new HashMap<>();
 
         if (statusCode == 200) {
-            // Parse response and extract variables based on output mapping
-            JSONObject outputMapping = config.optJSONObject("outputMapping");
-            if (outputMapping != null && outputMapping.has("variablesToSet")) {
+            log.info("Agent '{}' succeeded", displayName);
+
+            // Extract output mappings
+            if (config.has("outputMapping")) {
+                JSONObject outputMapping = config.getJSONObject("outputMapping");
                 JSONObject variablesToSet = outputMapping.getJSONObject("variablesToSet");
-                JSONObject responseJson = new JSONObject(resp);
 
                 for (String variableName : variablesToSet.keySet()) {
-                    JSONObject mapping = variablesToSet.getJSONObject(variableName);
-                    String jsonPath = mapping.getString("jsonPath");
-                    String dataType = mapping.optString("dataType", "string");
-                    String transformationFn = mapping.optString("transformation", "none");
-
                     try {
-                        Object value = responseJson.optQuery(jsonPath);
+                        JSONObject mapping = variablesToSet.getJSONObject(variableName);
+                        String jsonPath = mapping.getString("jsonPath");
+                        String dataType = mapping.optString("dataType", "string");
 
-                        if (value != null) {
-// Apply transformation
-                            if (transformationFn.equals("mapSuspiciousToBoolean")) {
-                                // value is JSONObject with pages: {"1": {...}, "2": {...}}
-                                boolean isForged = false;
-                                if (value instanceof org.json.JSONObject) {
-                                    org.json.JSONObject pages = (org.json.JSONObject) value;
-                                    for (String pageKey : pages.keySet()) {
-                                        org.json.JSONObject page = pages.getJSONObject(pageKey);
-                                        String classification = page.optString("classification", "");
-                                        // Check if page is suspicious (but NOT "Not Suspicious")
-                                        if (classification.contains("Suspicious") &&
-                                                !classification.contains("<Not Suspicious>")) {
-                                            isForged = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                                value = isForged;
-                            }
+                        // Extract value using jsonPath
+                        Object extractedValue = extractValueFromJsonPath(resp, jsonPath);
 
-                            // Convert to data type
-                            Object convertedValue = convertValue(value, dataType);
+                        // Apply transformation if specified
+                        if (mapping.has("transformation")) {
+                            extractedValue = applyTransformation(extractedValue, mapping.getString("transformation"));
+                        }
 
-                            // SIZE CHECK: Only set process variable if it's reasonably sized
-                            if (shouldSetProcessVariable(variableName, convertedValue)) {
-                                execution.setVariable(variableName, convertedValue);
-                                log.info("Set variable '{}' = {}", variableName,
-                                        convertedValue.toString().length() > 100 ?
-                                                convertedValue.toString().substring(0, 100) + "..." : convertedValue);
-                            } else {
-                                log.warn("Skipping process variable '{}' - size {} exceeds limit. Available in MinIO.",
-                                        variableName, convertedValue.toString().length());
-                            }
+                        // Convert to target data type
+                        Object convertedValue = convertValue(extractedValue, dataType);
 
-                            // Always add to extracted data for MinIO storage
-                            extractedData.put(variableName, convertedValue);
+                        // Set as process variable only if size is reasonable
+                        if (shouldSetProcessVariable(variableName, convertedValue)) {
+                            execution.setVariable(variableName, convertedValue);
+                            log.info("Set process variable '{}' = {}", variableName,
+                                    convertedValue.toString().length() > 100 ?
+                                            convertedValue.toString().substring(0, 100) + "..." : convertedValue);
+                        } else {
+                            log.warn("Skipping process variable '{}' - size {} exceeds limit. Available in MinIO.",
+                                    variableName, convertedValue.toString().length());
+                        }
 
-                        } else if (mapping.has("defaultValue")) {
-                            Object defaultValue = convertValue(mapping.get("defaultValue"), dataType);
+                        // Always add to extracted data for MinIO storage
+                        extractedData.put(variableName, convertedValue);
+
+                    } catch (Exception e) {
+                        log.error("Error extracting variable '{}' from path '{}'", variableName,
+                                mapping.getString("jsonPath"), e);
+
+                        // Use default value if specified
+                        if (mapping.has("defaultValue")) {
+                            Object defaultValue = convertValue(mapping.get("defaultValue"),
+                                    mapping.optString("dataType", "string"));
                             execution.setVariable(variableName, defaultValue);
                             extractedData.put(variableName, defaultValue);
                         }
-                    } catch (Exception e) {
-                        log.error("Error extracting variable '{}' from path '{}'", variableName, jsonPath, e);
                     }
                 }
             }
@@ -261,13 +276,12 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
             }
         }
 
-        // Store full result in MinIO (stage-wise only)
+        // Store full result in MinIO using NEW structure
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 agentId, statusCode, resp, extractedData);
 
-        // Store in stage-wise location only - no more duplication
-        String minioPath = AgentResultStorageService.storeAgentResultStageWise(
-                tenantId, ticketId, filename, agentId, fullResult);
+        String minioPath = AgentResultStorageService.storeAgentResult(
+                tenantId, workflowKey, ticketId, taskName, filename, fullResult);
 
         log.info("Stored full result for '{}' in MinIO at: {}", agentId, minioPath);
 
@@ -295,7 +309,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
 
             log.info("Updated fileProcessMap with {} result for {}", agentId, filename);
         } else {
-            // For non-document agents (like FHIRAnalyser), store result directly in process variable
+            // For non-document agents, store result path directly
             log.info("Agent '{}' is non-document agent, storing result path directly", agentId);
             execution.setVariable(agentId + "MinioPath", minioPath);
             execution.setVariable(agentId + "StatusCode", statusCode);
@@ -304,8 +318,47 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
     }
 
     /**
+     * Extract value from JSON using simple path notation
+     */
+    private Object extractValueFromJsonPath(String jsonString, String jsonPath) throws Exception {
+        JSONObject json = new JSONObject(jsonString);
+
+        // Simple path parsing (e.g., "/answer", "/answer/missing_documents")
+        String[] parts = jsonPath.split("/");
+        Object current = json;
+
+        for (String part : parts) {
+            if (part.isEmpty()) continue;
+
+            if (current instanceof JSONObject) {
+                current = ((JSONObject) current).get(part);
+            } else if (current instanceof JSONArray) {
+                int index = Integer.parseInt(part);
+                current = ((JSONArray) current).get(index);
+            }
+        }
+
+        return current;
+    }
+
+    /**
+     * Apply transformation to extracted value
+     */
+    private Object applyTransformation(Object value, String transformation) {
+        switch (transformation) {
+            case "mapSuspiciousToBoolean":
+                if (value instanceof String) {
+                    String strValue = ((String) value).toLowerCase();
+                    return strValue.contains("suspicious") || strValue.contains("forged");
+                }
+                return false;
+            default:
+                return value;
+        }
+    }
+
+    /**
      * Check if a process variable should be set based on size constraints
-     * Large JSON responses should only be stored in MinIO, not as process variables
      */
     private boolean shouldSetProcessVariable(String variableName, Object value) {
         if (value == null) {
@@ -315,13 +368,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         String stringValue = value.toString();
         int size = stringValue.length();
 
-        if (size > MAX_PROCESS_VAR_SIZE) {
-            log.warn("Variable '{}' size ({} chars) exceeds process variable limit ({} chars)",
-                    variableName, size, MAX_PROCESS_VAR_SIZE);
-            return false;
-        }
-
-        return true;
+        return size <= MAX_PROCESS_VAR_SIZE;
     }
 
     /**

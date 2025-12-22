@@ -26,10 +26,12 @@ public class GenericIDGeneratorDelegate implements JavaDelegate {
         execution.setVariable("TicketID", ticketId);
         log.info("Generated TicketID: {}", ticketId);
 
-        // 2. Get workflow key (for now, hardcoded; later from config)
-        String workflowKey = "HealthClaim"; // TODO: Make configurable
+        // 2. Determine workflow key from process definition
+        String workflowKey = determineWorkflowKey(execution);
+        execution.setVariable("WorkflowKey", workflowKey);
+        log.info("WorkflowKey: {}", workflowKey);
 
-        // 3. Process documents and upload to object storage
+        // 3. Process documents and upload to object storage (Stage 1: GenerateTicketIDAndWorkflowName)
         Object docsObject = execution.getVariable("docs");
         Map<String, String> documentPaths = DocumentProcessingService.processAndUploadDocuments(
                 docsObject, tenantId, workflowKey, String.valueOf(ticketId)
@@ -99,5 +101,28 @@ public class GenericIDGeneratorDelegate implements JavaDelegate {
                 conn.close();
             }
         }
+    }
+
+    /**
+     * Determine workflow key from process definition key
+     * Process definition key format: "HealthClaim", "MotorClaim", etc.
+     */
+    private String determineWorkflowKey(DelegateExecution execution) {
+        // Try to get from process definition key
+        String processDefinitionKey = execution.getProcessDefinitionId();
+
+        if (processDefinitionKey != null) {
+            // Extract key from process definition ID (format: "HealthClaim:1:xxx")
+            String[] parts = processDefinitionKey.split(":");
+            if (parts.length > 0) {
+                String key = parts[0];
+                log.debug("Extracted workflow key '{}' from process definition", key);
+                return key;
+            }
+        }
+
+        // Fallback to HealthClaim if cannot determine
+        log.warn("Could not determine workflow key from process definition, using HealthClaim");
+        return "HealthClaim";
     }
 }

@@ -87,8 +87,7 @@ public class OcrToStaticDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "ocrToStatic", statusCode, resp, new HashMap<>());
 
-        String storedPath = AgentResultStorageService.storeAgentResultStageWise(
-                tenantId, ticketId, filename, "ocrToStatic", fullResult);
+        String storedPath = AgentResultStorageService.storeAgentResult(tenantId, "HealthClaim", ticketId, "OcrToStatic", filename, fullResult);
 
         log.info("Stored ocrToStatic result at: {}", storedPath);
 

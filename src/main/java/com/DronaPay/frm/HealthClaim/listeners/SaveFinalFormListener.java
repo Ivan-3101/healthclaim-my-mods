@@ -10,65 +10,79 @@ import org.json.JSONObject;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Listener to save final reviewed form data from final review task
+ *
+ * NEW structure:
+ * - Reads edited from: 11_UIDisplayer/task-docs/edited.json (or original result.json)
+ * - Writes final to: 17_FinalReviewTask/task-docs/final.json
+ */
 @Slf4j
 public class SaveFinalFormListener implements ExecutionListener {
 
     @Override
     public void notify(DelegateExecution execution) throws Exception {
-        String action = (String) execution.getVariable("FinalAction");
-
-        // Only save on approval
-        if (!"approve".equalsIgnoreCase(action)) {
-            log.info("FinalAction is not approve, skipping final form save");
-            return;
-        }
-
-        String ticketId = String.valueOf(execution.getVariable("TicketID"));
-        String tenantId = execution.getTenantId();
-
-        log.info("=== Execution Listener: Saving Final Form for Ticket {} ===", ticketId);
+        log.info("=== SaveFinalFormListener Started ===");
 
         try {
-            // 1. Get current UI_Displayer data (edited or original)
-            String currentData = getCurrentUIDisplayerData(execution, tenantId);
+            String tenantId = execution.getTenantId();
+            String ticketId = String.valueOf(execution.getVariable("TicketID"));
+            String workflowKey = (String) execution.getVariable("WorkflowKey");
+            if (workflowKey == null) {
+                workflowKey = "HealthClaim";
+            }
 
-            if (currentData == null || currentData.trim().isEmpty()) {
-                log.warn("No current UI displayer data found, cannot save final form");
+            // Get final form data from user task
+            Object finalFormDataObj = execution.getVariable("finalFormData");
+            if (finalFormDataObj == null) {
+                log.warn("No finalFormData found, skipping save");
                 return;
             }
 
-            // 2. Parse current data
-            JSONObject currentJson = new JSONObject(currentData);
-            JSONArray answerArray = currentJson.getJSONArray("answer");
-            JSONArray updatedArray = new JSONArray();
+            JSONObject finalFormData = new JSONObject(finalFormDataObj.toString());
 
+            // Get edited or original UI displayer data
+            String dataPath = (String) execution.getVariable("editedFormMinioPath");
+            if (dataPath == null) {
+                dataPath = (String) execution.getVariable("UI_DisplayerMinioPath");
+            }
+
+            if (dataPath == null) {
+                log.error("No UI displayer data path found");
+                throw new RuntimeException("Cannot save final form - data path missing");
+            }
+
+            Map<String, Object> previousResult =
+                    AgentResultStorageService.retrieveAgentResult(tenantId, dataPath);
+            String previousResponse = (String) previousResult.get("apiResponse");
+
+            JSONObject previousData = new JSONObject(previousResponse);
+            JSONArray previousAnswer = previousData.getJSONArray("answer");
+
+            // Build final answer array
+            JSONArray finalArray = new JSONArray();
             int updatedCount = 0;
 
-            // 3. Update ALL fields with edited values from process variables
-            for (int i = 0; i < answerArray.length(); i++) {
-                JSONObject field = answerArray.getJSONObject(i);
+            for (int i = 0; i < previousAnswer.length(); i++) {
+                JSONObject field = previousAnswer.getJSONObject(i);
                 String fieldName = field.getString("field_name");
 
-                JSONObject updatedField = new JSONObject(field.toString());
+                JSONObject finalField = new JSONObject();
+                finalField.put("field_name", fieldName);
+                finalField.put("field_type", field.optString("field_type", "text"));
+                finalField.put("section", field.optString("section", ""));
 
-                // Get edited value for ALL fields
-                String varName = "final_" + fieldName
-                        .toLowerCase()
-                        .replaceAll("[^a-z0-9]", "_")
-                        .replaceAll("_+", "_")
-                        .replaceAll("^_|_$", "");
-
-                Object editedValue = execution.getVariable(varName);
-
-                if (editedValue != null) {
-                    String originalValue = field.opt("value") != null ?
-                            field.opt("value").toString() : "";
+                // Check if this field was edited in final review
+                if (finalFormData.has(fieldName)) {
+                    Object editedValue = finalFormData.get(fieldName);
+                    String originalValue = field.has("value") && !field.isNull("value")
+                            ? field.opt("value").toString() : "";
                     String newValue = editedValue.toString();
 
                     // Update value
-                    updatedField.put("value", newValue);
-                    updatedField.put("final_edited", true);
-                    updatedField.put("pre_final_value", originalValue);
+                    finalField.put("value", newValue);
+                    finalField.put("final_edited", true);
+                    finalField.put("pre_final_value", originalValue);
 
                     // Track if actually changed
                     if (!originalValue.equals(newValue)) {
@@ -78,22 +92,23 @@ public class SaveFinalFormListener implements ExecutionListener {
                     }
                 } else {
                     // Keep current value for fields not edited
-                    updatedField.put("final_edited", false);
+                    finalField.put("value", field.opt("value"));
+                    finalField.put("final_edited", false);
                 }
 
-                updatedArray.put(updatedField);
+                finalArray.put(finalField);
             }
 
-            // 4. Build final response JSON
+            // Build final response JSON
             JSONObject finalResponse = new JSONObject();
             finalResponse.put("agentid", "final");
-            finalResponse.put("answer", updatedArray);
+            finalResponse.put("answer", finalArray);
             finalResponse.put("version", "v3_final");
             finalResponse.put("final_timestamp", System.currentTimeMillis());
             finalResponse.put("ticket_id", ticketId);
             finalResponse.put("fields_updated_count", updatedCount);
 
-            // 5. Store in MinIO - NEW "final" folder
+            // Store in MinIO using NEW structure
             Map<String, Object> finalResult = new HashMap<>();
             finalResult.put("agentId", "final");
             finalResult.put("statusCode", 200);
@@ -101,14 +116,13 @@ public class SaveFinalFormListener implements ExecutionListener {
             finalResult.put("version", "v3");
             finalResult.put("timestamp", System.currentTimeMillis());
 
-            // Store with agentId="final" and stage="consolidated"
-            // This creates: {tenantId}/HealthClaim/{ticketId}/results/final/consolidated.json
-            String finalPath = AgentResultStorageService.storeAgentResultStageWise(
-                    tenantId, ticketId, "consolidated", "final", finalResult);
+            // Store final form
+            String finalPath = AgentResultStorageService.storeFinalForm(
+                    tenantId, workflowKey, ticketId, finalResult);
 
             log.info("Stored final form at: {}", finalPath);
 
-            // 6. Set process variable for reference
+            // Set process variable for reference
             execution.setVariable("finalFormMinioPath", finalPath);
             execution.setVariable("finalFieldsUpdatedCount", updatedCount);
 
@@ -119,27 +133,5 @@ public class SaveFinalFormListener implements ExecutionListener {
             execution.setVariable("finalFormSaveError", e.getMessage());
             // Don't throw - let workflow continue even if save fails
         }
-    }
-
-    private String getCurrentUIDisplayerData(DelegateExecution execution, String tenantId) throws Exception {
-        // First try edited version
-        String editedFormMinioPath = (String) execution.getVariable("editedFormMinioPath");
-
-        if (editedFormMinioPath != null && !editedFormMinioPath.trim().isEmpty()) {
-            log.info("Using edited UI displayer data from: {}", editedFormMinioPath);
-            Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, editedFormMinioPath);
-            return (String) result.get("apiResponse");
-        }
-
-        // Fallback to original
-        String uiDisplayerMinioPath = (String) execution.getVariable("uiDisplayerMinioPath");
-
-        if (uiDisplayerMinioPath != null && !uiDisplayerMinioPath.trim().isEmpty()) {
-            log.info("Using original UI displayer data from: {}", uiDisplayerMinioPath);
-            Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, uiDisplayerMinioPath);
-            return (String) result.get("apiResponse");
-        }
-
-        return null;
     }
 }

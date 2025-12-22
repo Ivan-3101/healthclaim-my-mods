@@ -89,8 +89,7 @@ public class PolicyCoherenceDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "policy_comp1", statusCode, resp, new HashMap<>());
 
-        String policyCoherenceMinioPath = AgentResultStorageService.storeAgentResultStageWise(
-                tenantId, ticketId, "consolidated", "policy_comp1", fullResult);
+        String policyCoherenceMinioPath = AgentResultStorageService.storeAgentResult(tenantId, "HealthClaim", ticketId, "PolicyCoherence", "consolidated", fullResult);
 
         log.info("Stored Policy Coherence result at: {}", policyCoherenceMinioPath);
 

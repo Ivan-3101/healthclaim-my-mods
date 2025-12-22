@@ -1,5 +1,6 @@
 package com.DronaPay.frm.HealthClaim.generic.services;
 
+import com.DronaPay.frm.HealthClaim.generic.storage.StoragePathBuilder;
 import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;
@@ -9,40 +10,51 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Service for storing and retrieving agent processing results in MinIO
+ * Service for storing and retrieving agent results in MinIO using NEW folder structure
+ *
+ * Agent results stored in: insurance-claims/{tenantId}/{WorkflowType}/{TicketID}/{stage#}_{TaskName}/task-docs/
  */
 @Slf4j
 public class AgentResultStorageService {
 
     /**
-     * Store agent result in MinIO - DOCUMENT-WISE structure (OLD - will be removed later)
-     * Path: {tenantId}/HealthClaim/{ticketId}/results/{filename}/{agentId}.json
+     * Store agent result in MinIO using NEW folder structure
+     * Path: insurance-claims/{tenantId}/{WorkflowType}/{TicketID}/{stage#}_{TaskName}/task-docs/{filename}.json
      *
      * @param tenantId - Tenant ID
+     * @param workflowKey - Workflow key (e.g., "HealthClaim")
      * @param ticketId - Ticket ID
+     * @param taskName - BPMN task name (e.g., "IdentifyForgedDocuments", "OCROnDoc")
      * @param filename - Document filename (can be null for non-document agents)
-     * @param agentId - Agent ID (e.g., "forgeryagent", "openaiVision")
      * @param result - Result object to store
      * @return MinIO storage path
      */
-    public static String storeAgentResultDocumentWise(String tenantId, String ticketId,
-                                                      String filename, String agentId,
-                                                      Map<String, Object> result) throws Exception {
+    public static String storeAgentResult(String tenantId, String workflowKey, String ticketId,
+                                          String taskName, String filename,
+                                          Map<String, Object> result) throws Exception {
 
         StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
 
-        // Handle null filename for non-document agents (like FHIRAnalyser, PolicyComparator)
-        String safeFilename = (filename != null && !filename.isEmpty())
-                ? filename.replaceAll("[^a-zA-Z0-9.-]", "_")
-                : "consolidated";
+        // Build filename for agent output
+        // For document-based agents: {document_filename}.json
+        // For non-document agents: result.json or consolidated.json
+        String outputFilename;
+        if (filename != null && !filename.isEmpty()) {
+            // Document-based agent
+            if (filename.endsWith(".json")) {
+                outputFilename = filename; // Already has .json extension
+            } else {
+                outputFilename = filename + ".json";
+            }
+        } else {
+            // Non-document agent - use generic name
+            outputFilename = "result.json";
+        }
 
-        // Build storage path: {tenantId}/HealthClaim/{ticketId}/results/{filename}/{agentId}.json
-        String pathPattern = "{tenantId}/HealthClaim/{ticketId}/results/{filename}/{agentId}.json";
-        String storagePath = pathPattern
-                .replace("{tenantId}", tenantId)
-                .replace("{ticketId}", ticketId)
-                .replace("{filename}", safeFilename)
-                .replace("{agentId}", agentId);
+        // Build path using StoragePathBuilder
+        String storagePath = StoragePathBuilder.buildTaskDocsPath(
+                tenantId, workflowKey, ticketId, taskName, outputFilename
+        );
 
         // Convert result to JSON
         JSONObject resultJson = new JSONObject(result);
@@ -51,84 +63,13 @@ public class AgentResultStorageService {
         // Upload to MinIO
         storage.uploadDocument(storagePath, content, "application/json");
 
-        log.debug("Stored {} result for {} at (document-wise): {}", agentId, filename, storagePath);
+        log.info("Stored agent result for task '{}' at: {}", taskName, storagePath);
 
         return storagePath;
     }
 
     /**
-     * Store agent result in MinIO - STAGE-WISE structure (NEW)
-     * Path: {tenantId}/HealthClaim/{ticketId}/results/{agentId}/{filename}.json
-     *
-     * This groups all files processed by the same agent in one folder
-     *
-     * @param tenantId - Tenant ID
-     * @param ticketId - Ticket ID
-     * @param filename - Document filename (can be null for non-document agents)
-     * @param agentId - Agent ID (e.g., "forgeryagent", "openaiVision")
-     * @param result - Result object to store
-     * @return MinIO storage path
-     */
-    public static String storeAgentResultStageWise(String tenantId, String ticketId,
-                                                   String filename, String agentId,
-                                                   Map<String, Object> result) throws Exception {
-
-        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
-
-        // Handle null filename for non-document agents (like FHIRAnalyser, PolicyComparator)
-        String safeFilename = (filename != null && !filename.isEmpty())
-                ? filename.replaceAll("[^a-zA-Z0-9.-]", "_")
-                : "consolidated";
-
-        // Build storage path: {tenantId}/HealthClaim/{ticketId}/results/{agentId}/{filename}.json
-        String pathPattern = "{tenantId}/HealthClaim/{ticketId}/results/{agentId}/{filename}.json";
-        String storagePath = pathPattern
-                .replace("{tenantId}", tenantId)
-                .replace("{ticketId}", ticketId)
-                .replace("{agentId}", agentId)
-                .replace("{filename}", safeFilename);
-
-        // Convert result to JSON
-        JSONObject resultJson = new JSONObject(result);
-        byte[] content = resultJson.toString(2).getBytes(StandardCharsets.UTF_8);
-
-        // Upload to MinIO
-        storage.uploadDocument(storagePath, content, "application/json");
-
-        log.info("Stored {} result for {} at (stage-wise): {}", agentId, filename, storagePath);
-
-        return storagePath;
-    }
-
-    /**
-     * Store agent result in BOTH locations (document-wise and stage-wise)
-     * Returns the stage-wise path as primary
-     *
-     * @param tenantId - Tenant ID
-     * @param ticketId - Ticket ID
-     * @param filename - Document filename (can be null for non-document agents)
-     * @param agentId - Agent ID
-     * @param result - Result object to store
-     * @return Primary storage path (stage-wise)
-     */
-    public static String storeAgentResultBoth(String tenantId, String ticketId,
-                                              String filename, String agentId,
-                                              Map<String, Object> result) throws Exception {
-
-        // Store in OLD location (document-wise)
-        String documentWisePath = storeAgentResultDocumentWise(tenantId, ticketId, filename, agentId, result);
-
-        // Store in NEW location (stage-wise)
-        String stageWisePath = storeAgentResultStageWise(tenantId, ticketId, filename, agentId, result);
-
-        log.info("Stored {} result in both locations - primary: {}", agentId, stageWisePath);
-
-        return stageWisePath;
-    }
-
-    /**
-     * Retrieve agent result from MinIO by path (backward compatibility)
-     * Used by existing code that has the full MinIO path
+     * Retrieve agent result from MinIO by path
      *
      * @param tenantId - Tenant ID
      * @param minioPath - Full MinIO path to result file
@@ -144,94 +85,17 @@ public class AgentResultStorageService {
 
             Map<String, Object> result = new HashMap<>();
 
-            // Handle both old and new result structures
-            if (json.has("rawResponse")) {
-                // New structure: {agentId, statusCode, rawResponse, extractedData, timestamp}
-                result.put("agentId", json.optString("agentId"));
-                result.put("statusCode", json.optInt("statusCode"));
-                result.put("success", json.optBoolean("success"));
-                result.put("apiResponse", json.optString("rawResponse"));
-                result.put("timestamp", json.optLong("timestamp"));
-
-                if (json.has("extractedData")) {
-                    JSONObject extractedData = json.getJSONObject("extractedData");
-                    extractedData.keySet().forEach(key -> result.put(key, extractedData.get(key)));
-                }
-            } else {
-                // Legacy structure: direct JSON conversion
-                json.keySet().forEach(key -> result.put(key, json.get(key)));
+            // Convert JSON to Map
+            for (String key : json.keySet()) {
+                result.put(key, json.get(key));
             }
 
             log.debug("Retrieved agent result from: {}", minioPath);
             return result;
+
         } catch (Exception e) {
-            log.error("Failed to retrieve agent result from MinIO path: {}", minioPath, e);
-            throw new RuntimeException(String.format(
-                    "Could not retrieve agent result from MinIO: %s", minioPath), e);
-        }
-    }
-
-    /**
-     * Retrieve agent result from MinIO (tries stage-wise first, falls back to document-wise)
-     *
-     * @param tenantId - Tenant ID
-     * @param ticketId - Ticket ID
-     * @param filename - Document filename (can be null for non-document agents)
-     * @param agentId - Agent ID
-     * @return Result map
-     */
-    public static Map<String, Object> retrieveAgentResult(String tenantId, String ticketId,
-                                                          String filename, String agentId) throws Exception {
-
-        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
-
-        // Handle null filename for non-document agents
-        String safeFilename = (filename != null && !filename.isEmpty())
-                ? filename.replaceAll("[^a-zA-Z0-9.-]", "_")
-                : "consolidated";
-
-        // Try stage-wise first (NEW structure)
-        String stageWisePath = "{tenantId}/HealthClaim/{ticketId}/results/{agentId}/{filename}.json"
-                .replace("{tenantId}", tenantId)
-                .replace("{ticketId}", ticketId)
-                .replace("{agentId}", agentId)
-                .replace("{filename}", safeFilename);
-
-        try {
-            byte[] content = storage.downloadDocument(stageWisePath).readAllBytes();
-            String jsonString = new String(content, StandardCharsets.UTF_8);
-            JSONObject json = new JSONObject(jsonString);
-
-            Map<String, Object> result = new HashMap<>();
-            json.keySet().forEach(key -> result.put(key, json.get(key)));
-
-            log.debug("Retrieved {} result from stage-wise: {}", agentId, stageWisePath);
-            return result;
-        } catch (Exception e) {
-            log.debug("Stage-wise result not found, trying document-wise: {}", e.getMessage());
-        }
-
-        // Fall back to document-wise (OLD structure)
-        String documentWisePath = "{tenantId}/HealthClaim/{ticketId}/results/{filename}/{agentId}.json"
-                .replace("{tenantId}", tenantId)
-                .replace("{ticketId}", ticketId)
-                .replace("{filename}", safeFilename)
-                .replace("{agentId}", agentId);
-
-        try {
-            byte[] content = storage.downloadDocument(documentWisePath).readAllBytes();
-            String jsonString = new String(content, StandardCharsets.UTF_8);
-            JSONObject json = new JSONObject(jsonString);
-
-            Map<String, Object> result = new HashMap<>();
-            json.keySet().forEach(key -> result.put(key, json.get(key)));
-
-            log.debug("Retrieved {} result from document-wise: {}", agentId, documentWisePath);
-            return result;
-        } catch (Exception e) {
-            log.error("Failed to retrieve {} result for {} from MinIO", agentId, filename, e);
-            throw new RuntimeException(String.format(
-                    "Could not retrieve agent result for %s/%s from MinIO", agentId, filename), e);
+            log.error("Failed to retrieve agent result from MinIO: {}", minioPath, e);
+            throw new RuntimeException("Could not retrieve agent result from MinIO: " + minioPath, e);
         }
     }
 
@@ -251,9 +115,69 @@ public class AgentResultStorageService {
         result.put("statusCode", statusCode);
         result.put("success", statusCode == 200);
         result.put("rawResponse", rawResponse);
+        result.put("apiResponse", rawResponse); // Alias for backward compatibility
         result.put("extractedData", extractedData);
         result.put("timestamp", System.currentTimeMillis());
 
         return result;
+    }
+
+    /**
+     * Store consolidated FHIR result
+     * Used by FHIRConsolidatorDelegate
+     *
+     * Path: insurance-claims/{tenantId}/{WorkflowType}/{TicketID}/8_FHIRConsolidator/userdoc/processed/consolidated.json
+     */
+    public static String storeConsolidatedFhir(String tenantId, String workflowKey, String ticketId,
+                                               String consolidatedJson) throws Exception {
+        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+
+        // Build path for consolidated output
+        String storagePath = StoragePathBuilder.buildUserProcessedPath(
+                tenantId, workflowKey, ticketId, "FHIRConsolidator", "consolidated.json"
+        );
+
+        byte[] content = consolidatedJson.getBytes(StandardCharsets.UTF_8);
+        storage.uploadDocument(storagePath, content, "application/json");
+
+        log.info("Stored consolidated FHIR at: {}", storagePath);
+
+        return storagePath;
+    }
+
+    /**
+     * Retrieve consolidated FHIR result
+     */
+    public static String retrieveConsolidatedFhir(String tenantId, String workflowKey, String ticketId) throws Exception {
+        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+
+        String storagePath = StoragePathBuilder.buildUserProcessedPath(
+                tenantId, workflowKey, ticketId, "FHIRConsolidator", "consolidated.json"
+        );
+
+        byte[] content = storage.downloadDocument(storagePath).readAllBytes();
+        return new String(content, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Store edited UI form data
+     * Used by SaveEditedFormListener
+     *
+     * Path: insurance-claims/{tenantId}/{WorkflowType}/{TicketID}/11_UIDisplayer/task-docs/edited.json
+     */
+    public static String storeEditedForm(String tenantId, String workflowKey, String ticketId,
+                                         Map<String, Object> editedData) throws Exception {
+        return storeAgentResult(tenantId, workflowKey, ticketId, "UIDisplayer", "edited", editedData);
+    }
+
+    /**
+     * Store final reviewed form data
+     * Used by SaveFinalFormListener
+     *
+     * Path: insurance-claims/{tenantId}/{WorkflowType}/{TicketID}/17_FinalReviewTask/task-docs/final.json
+     */
+    public static String storeFinalForm(String tenantId, String workflowKey, String ticketId,
+                                        Map<String, Object> finalData) throws Exception {
+        return storeAgentResult(tenantId, workflowKey, ticketId, "FinalReviewTask", "final", finalData);
     }
 }

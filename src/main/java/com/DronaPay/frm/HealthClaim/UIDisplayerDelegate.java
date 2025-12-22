@@ -84,8 +84,7 @@ public class UIDisplayerDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "UI_Displayer", statusCode, resp, new HashMap<>());
 
-        String uiDisplayerMinioPath = AgentResultStorageService.storeAgentResultStageWise(
-                tenantId, ticketId, "consolidated", "UI_Displayer", fullResult);
+        String uiDisplayerMinioPath = AgentResultStorageService.storeAgentResult(tenantId, "HealthClaim", ticketId, "UIDisplayer", "consolidated", fullResult);
 
         log.info("Stored UI_Displayer result at: {}", uiDisplayerMinioPath);
 
