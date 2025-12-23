@@ -28,19 +28,13 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
         int stageNumber = WorkflowStageMapping.getStageNumber(workflowKey, taskName);
 
         if (stageNumber == -1) {
-            log.warn("Stage number not found for task '{}', using previous + 1", taskName);
             stageNumber = StoragePathBuilder.getStageNumber(execution) + 1;
         }
 
-        // Set/update stageNumber for next task
         execution.setVariable("stageNumber", stageNumber);
+        log.info("Stage {}: {} - TicketID: {}, TenantID: {}", stageNumber, taskName, ticketId, tenantId);
 
-        log.info("Stage {}: {}", stageNumber, taskName);
-
-        @SuppressWarnings("unchecked")
         List<String> splitDocumentVars = (List<String>) execution.getVariable("splitDocumentVars");
-
-        @SuppressWarnings("unchecked")
         Map<String, Map<String, Object>> fileProcessMap =
                 (Map<String, Map<String, Object>>) execution.getVariable("fileProcessMap");
 
@@ -48,12 +42,8 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
             throw new RuntimeException("No split documents found for FHIR consolidation");
         }
 
-        // Create consolidated FHIR JSON
-        JSONObject consolidatedFhir = new JSONObject();
-        JSONObject commonData = new JSONObject();
-        JSONArray documents = new JSONArray();
-
-        Map<String, Object> mergedFields = new HashMap<>();
+        // Build doc_fhir array from OCR_to_Static outputs
+        JSONArray docFhirArray = new JSONArray();
 
         for (String filename : splitDocumentVars) {
             Map<String, Object> fileResults = fileProcessMap.get(filename);
@@ -63,7 +53,6 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
                 continue;
             }
 
-            // Get ocrToStatic agent output
             Map<String, Object> ocrToStaticResult = (Map<String, Object>) fileResults.get("ocrToStatic");
 
             if (ocrToStaticResult == null) {
@@ -71,60 +60,68 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
                 continue;
             }
 
-            Map<String, Object> extractedData = (Map<String, Object>) ocrToStaticResult.get("extractedData");
+            String rawResponse = (String) ocrToStaticResult.get("rawResponse");
 
-            if (extractedData != null) {
-                // Parse the "fields" JSON string if it exists
-                if (extractedData.containsKey("fields") && extractedData.get("fields") instanceof String) {
-                    try {
-                        String fieldsJson = (String) extractedData.get("fields");
-                        JSONObject fieldsObj = new JSONObject(fieldsJson);
-
-                        // Merge parsed fields into mergedFields
-                        for (String key : fieldsObj.keySet()) {
-                            Object value = fieldsObj.get(key);
-                            if (value != null && !JSONObject.NULL.equals(value) && !mergedFields.containsKey(key)) {
-                                mergedFields.put(key, value);
-                            }
-                        }
-                    } catch (Exception e) {
-                        log.warn("Failed to parse fields JSON for {}: {}", filename, e.getMessage());
-                    }
-                }
-
-                // Also merge other extractedData fields (like doc_type)
-                for (Map.Entry<String, Object> entry : extractedData.entrySet()) {
-                    if (!"fields".equals(entry.getKey()) && entry.getValue() != null && !mergedFields.containsKey(entry.getKey())) {
-                        mergedFields.put(entry.getKey(), entry.getValue());
-                    }
-                }
+            if (rawResponse == null || rawResponse.trim().isEmpty()) {
+                log.warn("No rawResponse for {}, skipping", filename);
+                continue;
             }
 
-            JSONObject docEntry = new JSONObject();
-            docEntry.put("filename", filename);
-            docEntry.put("extractedData", extractedData != null ? extractedData : new HashMap<>());
-            documents.put(docEntry);
+            try {
+                JSONObject responseJson = new JSONObject(rawResponse);
+
+                if (!responseJson.has("answer")) {
+                    log.warn("No 'answer' field in rawResponse for {}", filename);
+                    continue;
+                }
+
+                Object answerObj = responseJson.get("answer");
+
+                // Handle two formats:
+                // Format 1: {"answer": {"doc_type": "...", "field1": "...", ...}}
+                // Format 2: {"answer": {"response": [{"doc_type": "...", "fields": {...}}, ...]}}
+
+                if (answerObj instanceof JSONObject) {
+                    JSONObject answer = (JSONObject) answerObj;
+
+                    if (answer.has("response") && answer.get("response") instanceof JSONArray) {
+                        // Format 2: Multiple documents in response array
+                        JSONArray responseArray = answer.getJSONArray("response");
+                        for (int i = 0; i < responseArray.length(); i++) {
+                            JSONObject docItem = responseArray.getJSONObject(i);
+                            docFhirArray.put(docItem);
+                            log.debug("Added FHIR doc from {} (format 2): {}", filename, docItem.optString("doc_type", "unknown"));
+                        }
+                    } else {
+                        // Format 1: Single document with fields at root level
+                        docFhirArray.put(answer);
+                        log.debug("Added FHIR doc from {} (format 1): {}", filename, answer.optString("doc_type", "unknown"));
+                    }
+                }
+
+            } catch (Exception e) {
+                log.error("Failed to parse rawResponse for {}: {}", filename, e.getMessage());
+            }
         }
 
-        // Build consolidated request
-        for (Map.Entry<String, Object> entry : mergedFields.entrySet()) {
-            commonData.put(entry.getKey(), entry.getValue());
-        }
+        log.info("Built doc_fhir array with {} documents", docFhirArray.length());
 
-        consolidatedFhir.put("commonData", commonData);
-        consolidatedFhir.put("documents", documents);
-        consolidatedFhir.put("totalDocuments", documents.length());
-        consolidatedFhir.put("consolidatedAt", System.currentTimeMillis());
-
+        // Build consolidated request in the format UI_Displayer expects
         JSONObject consolidatedRequest = new JSONObject();
-        consolidatedRequest.put("data", consolidatedFhir);
         consolidatedRequest.put("agentid", "FHIR_Analyser");
 
-        String consolidatedJson = consolidatedRequest.toString(2);
-        log.info("Consolidated FHIR request ({} bytes) ready for FHIR_Analyser",
-                consolidatedJson.length());
+        JSONObject data = new JSONObject();
+        data.put("doc_fhir", docFhirArray);
+        data.put("consolidatedAt", System.currentTimeMillis());
+        data.put("totalDocuments", docFhirArray.length());
 
-        // Store consolidated request in MinIO using NEW structure (userdoc/processed/)
+        consolidatedRequest.put("data", data);
+
+        String consolidatedJson = consolidatedRequest.toString(2);
+        log.info("Consolidated FHIR request ({} bytes) with {} doc_fhir entries",
+                consolidatedJson.length(), docFhirArray.length());
+
+        // Store consolidated request in MinIO
         String minioPath = storeConsolidatedRequest(tenantId, ticketId, workflowKey,
                 stageNumber, taskName, consolidatedRequest);
 
@@ -134,11 +131,6 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
         log.info("=== FHIR Consolidator Completed ===");
     }
 
-    /**
-     * Store consolidated FHIR request in MinIO using NEW folder structure
-     *
-     * Pattern: {rootFolder}/{tenantId}/{workflowType}/{ticketId}/{stageNumber}_{taskName}/userdoc/processed/consolidated.json
-     */
     private String storeConsolidatedRequest(String tenantId, String ticketId, String workflowKey,
                                             int stageNumber, String taskName,
                                             JSONObject consolidatedRequest) {
@@ -149,7 +141,6 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
 
             byte[] content = consolidatedRequest.toString(2).getBytes(StandardCharsets.UTF_8);
 
-            // Store in userdoc/processed/ since this is a consolidated/transformed document
             String minioPath = StoragePathBuilder.buildUserProcessedPath(
                     rootFolder, tenantId, workflowKey, ticketId,
                     stageNumber, taskName, "consolidated.json"

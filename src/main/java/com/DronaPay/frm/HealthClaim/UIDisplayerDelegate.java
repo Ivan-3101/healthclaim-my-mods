@@ -62,31 +62,23 @@ public class UIDisplayerDelegate implements JavaDelegate {
 
         JSONObject consolidatedJson = new JSONObject(jsonString);
 
-        // Extract commonData and flatten it to root data level for agent
+        // Send the data object with doc_fhir array directly to the agent
         JSONObject requestToAgent = new JSONObject();
         requestToAgent.put("agentid", "UI_Displayer");
 
         if (consolidatedJson.has("data")) {
             JSONObject dataObj = consolidatedJson.getJSONObject("data");
+            requestToAgent.put("data", dataObj);
 
-            if (dataObj.has("commonData")) {
-                JSONObject commonData = dataObj.getJSONObject("commonData");
-
-                // Flatten: put commonData fields directly under "data"
-                requestToAgent.put("data", commonData);
-
-                log.info("Flattened {} fields from commonData to root data level", commonData.length());
-            } else {
-                log.warn("No commonData found, sending entire data object");
-                requestToAgent.put("data", dataObj);
-            }
+            int docCount = dataObj.has("doc_fhir") ? dataObj.getJSONArray("doc_fhir").length() : 0;
+            log.info("Sending {} doc_fhir entries to UI_Displayer agent", docCount);
         } else {
             log.error("No data field in consolidated JSON");
             throw new BpmnError("uiDisplayerFailed", "Invalid consolidated JSON structure");
         }
 
         String modifiedRequest = requestToAgent.toString();
-        log.info("Calling UI_Displayer API with flattened data ({} bytes)", modifiedRequest.length());
+        log.info("Calling UI_Displayer API with doc_fhir data ({} bytes)", modifiedRequest.length());
 
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
         CloseableHttpResponse response = apiServices.callAgent(modifiedRequest);
