@@ -62,11 +62,31 @@ public class UIDisplayerDelegate implements JavaDelegate {
 
         JSONObject consolidatedJson = new JSONObject(jsonString);
 
-        // Simply change agentid to UI_Displayer - that's it
-        consolidatedJson.put("agentid", "UI_Displayer");
-        String modifiedRequest = consolidatedJson.toString();
+        // Extract commonData and flatten it to root data level for agent
+        JSONObject requestToAgent = new JSONObject();
+        requestToAgent.put("agentid", "UI_Displayer");
 
-        log.info("Calling UI_Displayer API with consolidated data ({} bytes)", modifiedRequest.length());
+        if (consolidatedJson.has("data")) {
+            JSONObject dataObj = consolidatedJson.getJSONObject("data");
+
+            if (dataObj.has("commonData")) {
+                JSONObject commonData = dataObj.getJSONObject("commonData");
+
+                // Flatten: put commonData fields directly under "data"
+                requestToAgent.put("data", commonData);
+
+                log.info("Flattened {} fields from commonData to root data level", commonData.length());
+            } else {
+                log.warn("No commonData found, sending entire data object");
+                requestToAgent.put("data", dataObj);
+            }
+        } else {
+            log.error("No data field in consolidated JSON");
+            throw new BpmnError("uiDisplayerFailed", "Invalid consolidated JSON structure");
+        }
+
+        String modifiedRequest = requestToAgent.toString();
+        log.info("Calling UI_Displayer API with flattened data ({} bytes)", modifiedRequest.length());
 
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
         CloseableHttpResponse response = apiServices.callAgent(modifiedRequest);
