@@ -33,7 +33,6 @@ public class UIDisplayerDelegate implements JavaDelegate {
         int stageNumber = WorkflowStageMapping.getStageNumber(workflowKey, taskName);
 
         if (stageNumber == -1) {
-            log.warn("Stage number not found for task '{}', using previous + 1", taskName);
             stageNumber = StoragePathBuilder.getStageNumber(execution) + 1;
         }
 
@@ -51,7 +50,6 @@ public class UIDisplayerDelegate implements JavaDelegate {
         String consolidatorMinioPath = (String) execution.getVariable("fhirConsolidatorMinioPath");
 
         if (consolidatorMinioPath == null || consolidatorMinioPath.trim().isEmpty()) {
-            log.error("No fhirConsolidatorMinioPath found in process variables");
             throw new BpmnError("uiDisplayerFailed", "Missing fhirConsolidatorMinioPath");
         }
 
@@ -64,30 +62,11 @@ public class UIDisplayerDelegate implements JavaDelegate {
 
         JSONObject consolidatedJson = new JSONObject(jsonString);
 
-        // Build request with JUST commonData at root level
-        JSONObject requestToAgent = new JSONObject();
-        requestToAgent.put("agentid", "UI_Displayer");
+        // Simply change agentid to UI_Displayer - that's it
+        consolidatedJson.put("agentid", "UI_Displayer");
+        String modifiedRequest = consolidatedJson.toString();
 
-        if (consolidatedJson.has("data")) {
-            JSONObject dataObj = consolidatedJson.getJSONObject("data");
-
-            if (dataObj.has("commonData")) {
-                // Send ONLY commonData as the data field
-                requestToAgent.put("data", dataObj.getJSONObject("commonData"));
-                log.info("Prepared UI_Displayer request with {} common fields",
-                        dataObj.getJSONObject("commonData").length());
-            } else {
-                log.warn("No 'commonData' found, sending entire data object");
-                requestToAgent.put("data", dataObj);
-            }
-        } else {
-            log.error("No 'data' field in consolidated JSON");
-            throw new BpmnError("uiDisplayerFailed", "Invalid consolidated JSON structure");
-        }
-
-        String modifiedRequest = requestToAgent.toString();
-        log.info("Calling UI_Displayer API with {} bytes", modifiedRequest.length());
-        log.debug("UI_Displayer request: {}", modifiedRequest);
+        log.info("Calling UI_Displayer API with consolidated data ({} bytes)", modifiedRequest.length());
 
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
         CloseableHttpResponse response = apiServices.callAgent(modifiedRequest);
@@ -99,11 +78,10 @@ public class UIDisplayerDelegate implements JavaDelegate {
         log.debug("UI_Displayer API response: {}", resp);
 
         if (statusCode != 200) {
-            log.error("UI_Displayer agent failed with status: {}", statusCode);
             throw new BpmnError("uiDisplayerFailed", "UI_Displayer agent failed with status: " + statusCode);
         }
 
-        // Store result using NEW MinIO structure
+        // Store result
         Properties props = ConfigurationService.getTenantProperties(tenantId);
         String rootFolder = props.getProperty("storage.minio.bucketName", "insurance-claims");
 
@@ -116,11 +94,10 @@ public class UIDisplayerDelegate implements JavaDelegate {
         result.put("timestamp", System.currentTimeMillis());
 
         byte[] resultContent = result.toString(2).getBytes(StandardCharsets.UTF_8);
-        String outputFilename = "consolidated.json";
 
         String storagePath = StoragePathBuilder.buildTaskDocsPath(
                 rootFolder, tenantId, workflowKey, ticketId,
-                stageNumber, taskName, outputFilename
+                stageNumber, taskName, "consolidated.json"
         );
 
         storage.uploadDocument(storagePath, resultContent, "application/json");
