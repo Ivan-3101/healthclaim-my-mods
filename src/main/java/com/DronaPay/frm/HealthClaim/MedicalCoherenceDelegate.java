@@ -1,9 +1,10 @@
 package com.DronaPay.frm.HealthClaim;
 
-import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
+import com.DronaPay.frm.HealthClaim.generic.config.WorkflowStageMapping;
 import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
 import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
 import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
+import com.DronaPay.frm.HealthClaim.generic.utils.StoragePathBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.util.EntityUtils;
@@ -16,7 +17,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.util.HashMap;
-import java.util.Map;
+import java.util.Properties;
 
 @Slf4j
 public class MedicalCoherenceDelegate implements JavaDelegate {
@@ -27,15 +28,24 @@ public class MedicalCoherenceDelegate implements JavaDelegate {
 
         String tenantId = execution.getTenantId();
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
+        String workflowKey = StoragePathBuilder.getWorkflowType(execution);
+        String taskName = StoragePathBuilder.getTaskName(execution);
+        int stageNumber = WorkflowStageMapping.getStageNumber(workflowKey, taskName);
 
-        log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
+        if (stageNumber == -1) {
+            log.warn("Stage number not found for task '{}', using previous + 1", taskName);
+            stageNumber = StoragePathBuilder.getStageNumber(execution) + 1;
+        }
+
+        execution.setVariable("stageNumber", stageNumber);
+        log.info("Stage {}: {} - TicketID: {}, TenantID: {}", stageNumber, taskName, ticketId, tenantId);
 
         Connection conn = execution.getProcessEngine()
                 .getProcessEngineConfiguration()
                 .getDataSource()
                 .getConnection();
 
-        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
+        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig(workflowKey, tenantId, conn);
         conn.close();
 
         String consolidatorMinioPath = (String) execution.getVariable("fhirConsolidatorMinioPath");
@@ -84,15 +94,30 @@ public class MedicalCoherenceDelegate implements JavaDelegate {
             throw new BpmnError("medicalCoherenceFailed", "Medical Coherence agent failed with status: " + statusCode);
         }
 
-        Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
-                "medical_comp", statusCode, resp, new HashMap<>());
+        // Store result using NEW MinIO structure
+        Properties props = ConfigurationService.getTenantProperties(tenantId);
+        String rootFolder = props.getProperty("storage.minio.bucketName", "insurance-claims");
 
-        String medicalCoherenceMinioPath = AgentResultStorageService.storeAgentResultStageWise(
-                tenantId, ticketId, "consolidated", "medical_comp", fullResult);
+        JSONObject result = new JSONObject();
+        result.put("agentId", "medical_comp");
+        result.put("statusCode", statusCode);
+        result.put("success", true);
+        result.put("rawResponse", resp);
+        result.put("extractedData", new HashMap<>());
+        result.put("timestamp", System.currentTimeMillis());
 
-        log.info("Stored Medical Coherence result at: {}", medicalCoherenceMinioPath);
+        byte[] resultContent = result.toString(2).getBytes(StandardCharsets.UTF_8);
+        String outputFilename = "consolidated.json";
 
-        execution.setVariable("medicalCoherenceMinioPath", medicalCoherenceMinioPath);
+        String storagePath = StoragePathBuilder.buildTaskDocsPath(
+                rootFolder, tenantId, workflowKey, ticketId,
+                stageNumber, taskName, outputFilename
+        );
+
+        storage.uploadDocument(storagePath, resultContent, "application/json");
+        log.info("Stored Medical Coherence result at: {}", storagePath);
+
+        execution.setVariable("medicalCoherenceMinioPath", storagePath);
         execution.setVariable("medicalCoherenceSuccess", true);
 
         log.info("=== Medical Coherence Completed ===");

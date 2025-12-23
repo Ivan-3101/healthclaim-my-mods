@@ -1,9 +1,10 @@
 package com.DronaPay.frm.HealthClaim;
 
-import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
+import com.DronaPay.frm.HealthClaim.generic.config.WorkflowStageMapping;
 import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
 import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
 import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
+import com.DronaPay.frm.HealthClaim.generic.utils.StoragePathBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.util.EntityUtils;
@@ -18,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 
 @Slf4j
 public class SubmissionValidatorDelegate implements JavaDelegate {
@@ -28,19 +30,26 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
 
         String tenantId = execution.getTenantId();
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
+        String workflowKey = StoragePathBuilder.getWorkflowType(execution);
+        String taskName = StoragePathBuilder.getTaskName(execution);
+        int stageNumber = WorkflowStageMapping.getStageNumber(workflowKey, taskName);
 
-        log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
+        if (stageNumber == -1) {
+            log.warn("Stage number not found for task '{}', using previous + 1", taskName);
+            stageNumber = StoragePathBuilder.getStageNumber(execution) + 1;
+        }
 
-        // 1. Load workflow configuration
+        execution.setVariable("stageNumber", stageNumber);
+        log.info("Stage {}: {} - TicketID: {}, TenantID: {}", stageNumber, taskName, ticketId, tenantId);
+
         Connection conn = execution.getProcessEngine()
                 .getProcessEngineConfiguration()
                 .getDataSource()
                 .getConnection();
 
-        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
+        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig(workflowKey, tenantId, conn);
         conn.close();
 
-        // 2. Get consolidated FHIR request from MinIO
         String consolidatorMinioPath = (String) execution.getVariable("fhirConsolidatorMinioPath");
 
         if (consolidatorMinioPath == null || consolidatorMinioPath.trim().isEmpty()) {
@@ -50,29 +59,23 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
 
         log.info("Retrieving consolidated FHIR request from MinIO: {}", consolidatorMinioPath);
 
-        // Retrieve consolidated JSON directly from MinIO
         StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
         InputStream stream = storage.downloadDocument(consolidatorMinioPath);
         byte[] content = stream.readAllBytes();
         String jsonString = new String(content, StandardCharsets.UTF_8);
 
         JSONObject consolidatedJson = new JSONObject(jsonString);
-        String consolidatedRequest = consolidatedJson.toString();
+        consolidatedJson.put("agentid", "Submission_Validator");
+        String modifiedRequest = consolidatedJson.toString();
 
-        if (consolidatedRequest == null || consolidatedRequest.trim().isEmpty()) {
+        if (modifiedRequest == null || modifiedRequest.trim().isEmpty()) {
             log.error("Empty consolidated request retrieved from MinIO");
             throw new BpmnError("submissionValidatorFailed", "Empty consolidated FHIR request in MinIO");
         }
 
-        log.info("Retrieved consolidated FHIR request ({} bytes) from MinIO", consolidatedRequest.length());
-
-        // 3. Change agentid to Submission_Validator
-        consolidatedJson.put("agentid", "Submission_Validator");
-        String modifiedRequest = consolidatedJson.toString();
-
+        log.info("Retrieved consolidated FHIR request ({} bytes) from MinIO", modifiedRequest.length());
         log.info("Modified agentid to Submission_Validator");
 
-        // 4. Call Submission_Validator agent
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
         CloseableHttpResponse response = apiServices.callAgent(modifiedRequest);
 
@@ -84,24 +87,35 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
 
         if (statusCode != 200) {
             log.error("Submission_Validator agent failed with status: {}", statusCode);
-            throw new BpmnError("submissionValidatorFailed",
-                    "Submission_Validator agent failed with status: " + statusCode);
+            throw new BpmnError("submissionValidatorFailed", "Submission_Validator agent failed with status: " + statusCode);
         }
 
-        // 5. Store result in MinIO
-        Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
-                "Submission_Validator", statusCode, resp, new HashMap<>());
+        // Store result using NEW MinIO structure
+        Properties props = ConfigurationService.getTenantProperties(tenantId);
+        String rootFolder = props.getProperty("storage.minio.bucketName", "insurance-claims");
 
-        String validatorMinioPath = AgentResultStorageService.storeAgentResultStageWise(
-                tenantId, ticketId, "consolidated", "Submission_Validator", fullResult);
+        JSONObject result = new JSONObject();
+        result.put("agentId", "Submission_Validator");
+        result.put("statusCode", statusCode);
+        result.put("success", true);
+        result.put("rawResponse", resp);
+        result.put("extractedData", new HashMap<>());
+        result.put("timestamp", System.currentTimeMillis());
 
-        log.info("Stored Submission_Validator result at: {}", validatorMinioPath);
+        byte[] resultContent = result.toString(2).getBytes(StandardCharsets.UTF_8);
+        String outputFilename = "consolidated.json";
 
-        // 6. Extract missing documents and set as process variable
+        String storagePath = StoragePathBuilder.buildTaskDocsPath(
+                rootFolder, tenantId, workflowKey, ticketId,
+                stageNumber, taskName, outputFilename
+        );
+
+        storage.uploadDocument(storagePath, resultContent, "application/json");
+        log.info("Stored Submission_Validator result at: {}", storagePath);
+
         extractAndSetProcessVariables(execution, resp);
 
-        // 7. Set MinIO path for reference
-        execution.setVariable("submissionValidatorMinioPath", validatorMinioPath);
+        execution.setVariable("submissionValidatorMinioPath", storagePath);
         execution.setVariable("submissionValidatorSuccess", true);
 
         log.info("=== Submission Validator Completed ===");
