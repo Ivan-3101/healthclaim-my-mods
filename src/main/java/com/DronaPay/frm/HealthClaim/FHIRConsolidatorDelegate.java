@@ -74,9 +74,27 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
             Map<String, Object> extractedData = (Map<String, Object>) ocrToStaticResult.get("extractedData");
 
             if (extractedData != null) {
-                // Merge fields preferring non-null values
+                // Parse the "fields" JSON string if it exists
+                if (extractedData.containsKey("fields") && extractedData.get("fields") instanceof String) {
+                    try {
+                        String fieldsJson = (String) extractedData.get("fields");
+                        JSONObject fieldsObj = new JSONObject(fieldsJson);
+
+                        // Merge parsed fields into mergedFields
+                        for (String key : fieldsObj.keySet()) {
+                            Object value = fieldsObj.get(key);
+                            if (value != null && !JSONObject.NULL.equals(value) && !mergedFields.containsKey(key)) {
+                                mergedFields.put(key, value);
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.warn("Failed to parse fields JSON for {}: {}", filename, e.getMessage());
+                    }
+                }
+
+                // Also merge other extractedData fields (like doc_type)
                 for (Map.Entry<String, Object> entry : extractedData.entrySet()) {
-                    if (entry.getValue() != null && !mergedFields.containsKey(entry.getKey())) {
+                    if (!"fields".equals(entry.getKey()) && entry.getValue() != null && !mergedFields.containsKey(entry.getKey())) {
                         mergedFields.put(entry.getKey(), entry.getValue());
                     }
                 }
