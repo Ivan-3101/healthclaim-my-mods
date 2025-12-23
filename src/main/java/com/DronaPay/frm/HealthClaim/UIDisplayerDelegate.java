@@ -63,16 +63,31 @@ public class UIDisplayerDelegate implements JavaDelegate {
         String jsonString = new String(content, StandardCharsets.UTF_8);
 
         JSONObject consolidatedJson = new JSONObject(jsonString);
-        consolidatedJson.put("agentid", "UI_Displayer");
-        String modifiedRequest = consolidatedJson.toString();
 
-        if (modifiedRequest == null || modifiedRequest.trim().isEmpty()) {
-            log.error("Empty consolidated request retrieved from MinIO");
-            throw new BpmnError("uiDisplayerFailed", "Empty consolidated FHIR request in MinIO");
+        // Build request with JUST commonData at root level
+        JSONObject requestToAgent = new JSONObject();
+        requestToAgent.put("agentid", "UI_Displayer");
+
+        if (consolidatedJson.has("data")) {
+            JSONObject dataObj = consolidatedJson.getJSONObject("data");
+
+            if (dataObj.has("commonData")) {
+                // Send ONLY commonData as the data field
+                requestToAgent.put("data", dataObj.getJSONObject("commonData"));
+                log.info("Prepared UI_Displayer request with {} common fields",
+                        dataObj.getJSONObject("commonData").length());
+            } else {
+                log.warn("No 'commonData' found, sending entire data object");
+                requestToAgent.put("data", dataObj);
+            }
+        } else {
+            log.error("No 'data' field in consolidated JSON");
+            throw new BpmnError("uiDisplayerFailed", "Invalid consolidated JSON structure");
         }
 
-        log.info("Retrieved consolidated FHIR request ({} bytes) from MinIO", modifiedRequest.length());
-        log.info("Modified agentid to UI_Displayer");
+        String modifiedRequest = requestToAgent.toString();
+        log.info("Calling UI_Displayer API with {} bytes", modifiedRequest.length());
+        log.debug("UI_Displayer request: {}", modifiedRequest);
 
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
         CloseableHttpResponse response = apiServices.callAgent(modifiedRequest);
