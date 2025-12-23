@@ -11,8 +11,8 @@ import org.cibseven.bpm.engine.delegate.ExecutionListener;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
 import java.util.Properties;
 
 @Slf4j
@@ -27,60 +27,95 @@ public class SaveEditedFormListener implements ExecutionListener {
             String ticketId = String.valueOf(execution.getVariable("TicketID"));
             String workflowKey = StoragePathBuilder.getWorkflowType(execution);
 
-            // Get the edited form data
-            Object editedData = execution.getVariable("editedFormData");
-            if (editedData == null) {
-                log.info("No edited form data found, skipping save");
-                return;
-            }
-
-            JSONObject editedJson = new JSONObject(editedData.toString());
-            JSONArray editedFields = editedJson.getJSONArray("editedFields");
-
             // Load original UI display data from MinIO
             String originalMinioPath = (String) execution.getVariable("uiDisplayerMinioPath");
 
+            if (originalMinioPath == null || originalMinioPath.trim().isEmpty()) {
+                log.warn("No uiDisplayerMinioPath found, skipping edit save");
+                return;
+            }
+
             StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
-            byte[] originalBytes = storage.downloadDocument(originalMinioPath).readAllBytes();
+            InputStream stream = storage.downloadDocument(originalMinioPath);
+            byte[] originalBytes = stream.readAllBytes();
             String originalContent = new String(originalBytes, StandardCharsets.UTF_8);
 
             JSONObject originalResponse = new JSONObject(originalContent);
-            JSONArray originalAnswer = originalResponse.getJSONArray("answer");
 
-            // Merge edited fields back into original structure
+            if (!originalResponse.has("rawResponse")) {
+                log.warn("No rawResponse in original UI displayer data");
+                return;
+            }
+
+            String rawResponse = originalResponse.getString("rawResponse");
+            JSONObject responseJson = new JSONObject(rawResponse);
+            JSONArray originalAnswer = responseJson.getJSONArray("answer");
+
+            // Read edited values from process variables and update
             int updatedCount = 0;
-            for (int i = 0; i < editedFields.length(); i++) {
-                JSONObject editedField = editedFields.getJSONObject(i);
-                String editedFieldName = editedField.getString("field");
-                Object editedValue = editedField.get("value");
+            JSONArray updatedAnswer = new JSONArray();
 
-                // Find and update in original
-                for (int j = 0; j < originalAnswer.length(); j++) {
-                    JSONObject originalField = originalAnswer.getJSONObject(j);
-                    if (originalField.getString("field").equals(editedFieldName)) {
-                        originalField.put("value", editedValue);
+            for (int i = 0; i < originalAnswer.length(); i++) {
+                JSONObject field = originalAnswer.getJSONObject(i);
+                String fieldName = field.getString("field_name");
+
+                // Get variable name for this field
+                String varName = "ui_" + fieldName
+                        .toLowerCase()
+                        .replaceAll("[^a-z0-9]", "_")
+                        .replaceAll("_+", "_")
+                        .replaceAll("^_|_$", "");
+
+                Object editedValue = execution.getVariable(varName);
+
+                JSONObject updatedField = new JSONObject(field.toString());
+
+                if (editedValue != null) {
+                    String originalValue = field.opt("value") != null ?
+                            field.opt("value").toString() : "";
+                    String newValue = editedValue.toString();
+
+                    updatedField.put("value", newValue);
+                    updatedField.put("edited", true);
+                    updatedField.put("original_value", originalValue);
+
+                    if (!originalValue.equals(newValue)) {
                         updatedCount++;
-                        break;
+                        log.info("Field '{}' updated: '{}' -> '{}'", fieldName,
+                                originalValue, newValue);
                     }
+                } else {
+                    updatedField.put("edited", false);
                 }
+
+                updatedAnswer.put(updatedField);
+            }
+
+            if (updatedCount == 0) {
+                log.info("No fields were modified, skipping save");
+                return;
             }
 
             // Build updated response JSON
+            JSONObject updatedResponseData = new JSONObject();
+            updatedResponseData.put("answer", updatedAnswer);
+
             JSONObject updatedResponse = new JSONObject();
-            updatedResponse.put("agentid", "UI_Displayer");
-            updatedResponse.put("answer", originalAnswer);
-            updatedResponse.put("version", "v2_edited");
-            updatedResponse.put("edited_timestamp", System.currentTimeMillis());
-            updatedResponse.put("ticket_id", ticketId);
+            updatedResponse.put("agentId", "UI_Displayer");
+            updatedResponse.put("statusCode", 200);
+            updatedResponse.put("success", true);
+            updatedResponse.put("rawResponse", updatedResponseData.toString());
+            updatedResponse.put("extractedData", originalResponse.opt("extractedData"));
+            updatedResponse.put("timestamp", System.currentTimeMillis());
+            updatedResponse.put("version", "edited");
             updatedResponse.put("fields_updated_count", updatedCount);
 
-            // Store in MinIO using NEW folder structure
-            // We'll use the UIDisplayer stage but create an "edited.json" file in task-docs/
-            String taskName = "UIDisplayer";  // Or get from context if available
+            // Store in MinIO using stage-based structure
+            String taskName = "Activity_UIDisplayer";
             int stageNumber = WorkflowStageMapping.getStageNumber(workflowKey, taskName);
 
             if (stageNumber == -1) {
-                stageNumber = 11;  // Default UIDisplayer stage
+                stageNumber = 11;
             }
 
             Properties props = ConfigurationService.getTenantProperties(tenantId);

@@ -1,14 +1,19 @@
 package com.DronaPay.frm.HealthClaim.listeners;
 
-import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
+import com.DronaPay.frm.HealthClaim.generic.config.WorkflowStageMapping;
+import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
+import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
+import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
+import com.DronaPay.frm.HealthClaim.generic.utils.StoragePathBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.ExecutionListener;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Properties;
 
 @Slf4j
 public class SaveFinalFormListener implements ExecutionListener {
@@ -17,7 +22,6 @@ public class SaveFinalFormListener implements ExecutionListener {
     public void notify(DelegateExecution execution) throws Exception {
         String action = (String) execution.getVariable("FinalAction");
 
-        // Only save on approval
         if (!"approve".equalsIgnoreCase(action)) {
             log.info("FinalAction is not approve, skipping final form save");
             return;
@@ -25,33 +29,57 @@ public class SaveFinalFormListener implements ExecutionListener {
 
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
         String tenantId = execution.getTenantId();
+        String workflowKey = StoragePathBuilder.getWorkflowType(execution);
 
         log.info("=== Execution Listener: Saving Final Form for Ticket {} ===", ticketId);
 
         try {
-            // 1. Get current UI_Displayer data (edited or original)
-            String currentData = getCurrentUIDisplayerData(execution, tenantId);
+            // Get current UI_Displayer data (edited or original)
+            String currentMinioPath = null;
+            String editedFormMinioPath = (String) execution.getVariable("editedFormMinioPath");
 
-            if (currentData == null || currentData.trim().isEmpty()) {
-                log.warn("No current UI displayer data found, cannot save final form");
+            if (editedFormMinioPath != null && !editedFormMinioPath.trim().isEmpty()) {
+                log.info("Using edited UI displayer data from: {}", editedFormMinioPath);
+                currentMinioPath = editedFormMinioPath;
+            } else {
+                String uiDisplayerMinioPath = (String) execution.getVariable("uiDisplayerMinioPath");
+                if (uiDisplayerMinioPath != null && !uiDisplayerMinioPath.trim().isEmpty()) {
+                    log.info("Using original UI displayer data from: {}", uiDisplayerMinioPath);
+                    currentMinioPath = uiDisplayerMinioPath;
+                }
+            }
+
+            if (currentMinioPath == null) {
+                log.warn("No UI displayer data found, cannot save final form");
                 return;
             }
 
-            // 2. Parse current data
-            JSONObject currentJson = new JSONObject(currentData);
-            JSONArray answerArray = currentJson.getJSONArray("answer");
-            JSONArray updatedArray = new JSONArray();
+            StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+            InputStream stream = storage.downloadDocument(currentMinioPath);
+            byte[] content = stream.readAllBytes();
+            String jsonString = new String(content, StandardCharsets.UTF_8);
 
+            JSONObject storedData = new JSONObject(jsonString);
+
+            if (!storedData.has("rawResponse")) {
+                log.warn("No rawResponse in UI displayer data");
+                return;
+            }
+
+            String rawResponse = storedData.getString("rawResponse");
+            JSONObject responseJson = new JSONObject(rawResponse);
+            JSONArray answerArray = responseJson.getJSONArray("answer");
+
+            JSONArray updatedArray = new JSONArray();
             int updatedCount = 0;
 
-            // 3. Update ALL fields with edited values from process variables
+            // Update ALL fields with edited values from process variables
             for (int i = 0; i < answerArray.length(); i++) {
                 JSONObject field = answerArray.getJSONObject(i);
                 String fieldName = field.getString("field_name");
 
                 JSONObject updatedField = new JSONObject(field.toString());
 
-                // Get edited value for ALL fields
                 String varName = "final_" + fieldName
                         .toLowerCase()
                         .replaceAll("[^a-z0-9]", "_")
@@ -65,50 +93,59 @@ public class SaveFinalFormListener implements ExecutionListener {
                             field.opt("value").toString() : "";
                     String newValue = editedValue.toString();
 
-                    // Update value
                     updatedField.put("value", newValue);
                     updatedField.put("final_edited", true);
                     updatedField.put("pre_final_value", originalValue);
 
-                    // Track if actually changed
                     if (!originalValue.equals(newValue)) {
                         updatedCount++;
                         log.info("Field '{}' updated in final review: '{}' -> '{}'", fieldName,
-                                originalValue.isEmpty() ? "[empty]" : originalValue, newValue);
+                                originalValue.isEmpty() ? "null" : originalValue, newValue);
                     }
                 } else {
-                    // Keep current value for fields not edited
                     updatedField.put("final_edited", false);
                 }
 
                 updatedArray.put(updatedField);
             }
 
-            // 4. Build final response JSON
+            // Build final response JSON
+            JSONObject finalResponseData = new JSONObject();
+            finalResponseData.put("answer", updatedArray);
+
             JSONObject finalResponse = new JSONObject();
-            finalResponse.put("agentid", "final");
-            finalResponse.put("answer", updatedArray);
-            finalResponse.put("version", "v3_final");
-            finalResponse.put("final_timestamp", System.currentTimeMillis());
+            finalResponse.put("agentId", "UI_Displayer_Final");
+            finalResponse.put("statusCode", 200);
+            finalResponse.put("success", true);
+            finalResponse.put("rawResponse", finalResponseData.toString());
+            finalResponse.put("extractedData", storedData.opt("extractedData"));
+            finalResponse.put("timestamp", System.currentTimeMillis());
+            finalResponse.put("version", "final");
             finalResponse.put("ticket_id", ticketId);
             finalResponse.put("fields_updated_count", updatedCount);
 
-            // 5. Store in MinIO - NEW "final" folder
-            Map<String, Object> finalResult = new HashMap<>();
-            finalResult.put("agentId", "final");
-            finalResult.put("statusCode", 200);
-            finalResult.put("apiResponse", finalResponse.toString());
-            finalResult.put("version", "v3");
-            finalResult.put("timestamp", System.currentTimeMillis());
+            // Store in MinIO using stage-based structure (stage 16: Final Review)
+            String taskName = "Final_Review";
+            int stageNumber = WorkflowStageMapping.getStageNumber(workflowKey, taskName);
 
-            // Store with agentId="final" and stage="consolidated"
-            // This creates: {tenantId}/HealthClaim/{ticketId}/results/final/consolidated.json
-            String finalPath = AgentResultStorageService.storeAgentResultStageWise(
-                    tenantId, ticketId, "consolidated", "final", finalResult);
+            if (stageNumber == -1) {
+                stageNumber = 16;
+            }
+
+            Properties props = ConfigurationService.getTenantProperties(tenantId);
+            String rootFolder = props.getProperty("storage.minio.bucketName", "insurance-claims");
+
+            byte[] finalContent = finalResponse.toString(2).getBytes(StandardCharsets.UTF_8);
+
+            String finalPath = StoragePathBuilder.buildTaskDocsPath(
+                    rootFolder, tenantId, workflowKey, ticketId,
+                    stageNumber, taskName, "consolidated.json"
+            );
+
+            storage.uploadDocument(finalPath, finalContent, "application/json");
 
             log.info("Stored final form at: {}", finalPath);
 
-            // 6. Set process variable for reference
             execution.setVariable("finalFormMinioPath", finalPath);
             execution.setVariable("finalFieldsUpdatedCount", updatedCount);
 
@@ -117,29 +154,6 @@ public class SaveFinalFormListener implements ExecutionListener {
         } catch (Exception e) {
             log.error("Error in SaveFinalFormListener", e);
             execution.setVariable("finalFormSaveError", e.getMessage());
-            // Don't throw - let workflow continue even if save fails
         }
-    }
-
-    private String getCurrentUIDisplayerData(DelegateExecution execution, String tenantId) throws Exception {
-        // First try edited version
-        String editedFormMinioPath = (String) execution.getVariable("editedFormMinioPath");
-
-        if (editedFormMinioPath != null && !editedFormMinioPath.trim().isEmpty()) {
-            log.info("Using edited UI displayer data from: {}", editedFormMinioPath);
-            Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, editedFormMinioPath);
-            return (String) result.get("apiResponse");
-        }
-
-        // Fallback to original
-        String uiDisplayerMinioPath = (String) execution.getVariable("uiDisplayerMinioPath");
-
-        if (uiDisplayerMinioPath != null && !uiDisplayerMinioPath.trim().isEmpty()) {
-            log.info("Using original UI displayer data from: {}", uiDisplayerMinioPath);
-            Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, uiDisplayerMinioPath);
-            return (String) result.get("apiResponse");
-        }
-
-        return null;
     }
 }
