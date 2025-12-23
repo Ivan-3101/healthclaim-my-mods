@@ -2,6 +2,8 @@ package com.DronaPay.frm.HealthClaim;
 
 import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
 import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
+import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
+import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.util.EntityUtils;
@@ -10,6 +12,8 @@ import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
 import org.json.JSONObject;
 
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.util.HashMap;
 import java.util.Map;
@@ -26,7 +30,6 @@ public class UIDisplayerDelegate implements JavaDelegate {
 
         log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
 
-        // 1. Load workflow configuration
         Connection conn = execution.getProcessEngine()
                 .getProcessEngineConfiguration()
                 .getDataSource()
@@ -35,7 +38,6 @@ public class UIDisplayerDelegate implements JavaDelegate {
         JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
         conn.close();
 
-        // 2. Get consolidated FHIR request from MinIO
         String consolidatorMinioPath = (String) execution.getVariable("fhirConsolidatorMinioPath");
 
         if (consolidatorMinioPath == null || consolidatorMinioPath.trim().isEmpty()) {
@@ -45,25 +47,23 @@ public class UIDisplayerDelegate implements JavaDelegate {
 
         log.info("Retrieving consolidated FHIR request from MinIO: {}", consolidatorMinioPath);
 
-        // Retrieve from MinIO
-        Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, consolidatorMinioPath);
-        String consolidatedRequest = (String) result.get("apiResponse");
+        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+        InputStream stream = storage.downloadDocument(consolidatorMinioPath);
+        byte[] content = stream.readAllBytes();
+        String jsonString = new String(content, StandardCharsets.UTF_8);
 
-        if (consolidatedRequest == null || consolidatedRequest.trim().isEmpty()) {
+        JSONObject consolidatedJson = new JSONObject(jsonString);
+        consolidatedJson.put("agentid", "UI_Displayer");
+        String modifiedRequest = consolidatedJson.toString();
+
+        if (modifiedRequest == null || modifiedRequest.trim().isEmpty()) {
             log.error("Empty consolidated request retrieved from MinIO");
             throw new BpmnError("uiDisplayerFailed", "Empty consolidated FHIR request in MinIO");
         }
 
-        log.info("Retrieved consolidated FHIR request ({} bytes) from MinIO", consolidatedRequest.length());
-
-        // 3. Change agentid to UI_Displayer
-        JSONObject requestJson = new JSONObject(consolidatedRequest);
-        requestJson.put("agentid", "UI_Displayer");
-        String modifiedRequest = requestJson.toString();
-
+        log.info("Retrieved consolidated FHIR request ({} bytes) from MinIO", modifiedRequest.length());
         log.info("Modified agentid to UI_Displayer");
 
-        // 4. Call UI_Displayer agent
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
         CloseableHttpResponse response = apiServices.callAgent(modifiedRequest);
 
@@ -75,12 +75,9 @@ public class UIDisplayerDelegate implements JavaDelegate {
 
         if (statusCode != 200) {
             log.error("UI_Displayer agent failed with status: {}", statusCode);
-            execution.setVariable("uiDisplayerSuccess", false);
-            log.warn("=== UI Displayer Completed with Error ===");
-            return;
+            throw new BpmnError("uiDisplayerFailed", "UI_Displayer agent failed with status: " + statusCode);
         }
 
-        // 5. Store result in MinIO
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "UI_Displayer", statusCode, resp, new HashMap<>());
 
@@ -89,7 +86,6 @@ public class UIDisplayerDelegate implements JavaDelegate {
 
         log.info("Stored UI_Displayer result at: {}", uiDisplayerMinioPath);
 
-        // 6. Set MinIO path for reference
         execution.setVariable("uiDisplayerMinioPath", uiDisplayerMinioPath);
         execution.setVariable("uiDisplayerSuccess", true);
 

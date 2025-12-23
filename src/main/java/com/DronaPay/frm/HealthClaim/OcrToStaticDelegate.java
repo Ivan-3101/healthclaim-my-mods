@@ -42,8 +42,14 @@ public class OcrToStaticDelegate implements JavaDelegate {
             }
         }
 
-        // Don't set stageNumber in execution - this is a multi-instance loop
-        log.info("Stage {}: {} - Processing file: {}", stageNumber, taskName, filename);
+        // Set stageNumber ONLY if it's not already at this stage (for multi-instance loops)
+        Integer currentStage = (Integer) execution.getVariable("stageNumber");
+        if (currentStage == null || currentStage != stageNumber) {
+            execution.setVariable("stageNumber", stageNumber);
+            log.info("Set stage number to {}: {} - Processing file: {}", stageNumber, taskName, filename);
+        } else {
+            log.info("Stage {}: {} - Processing file: {}", stageNumber, taskName, filename);
+        }
 
         // Get previous OCR stage info
         Map<String, Map<String, Object>> fileProcessMap =

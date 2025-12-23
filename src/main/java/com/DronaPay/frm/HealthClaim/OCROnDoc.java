@@ -48,9 +48,14 @@ public class OCROnDoc implements JavaDelegate {
             }
         }
 
-        // Don't set stageNumber in execution - this is a multi-instance loop
-        // Setting it would increment on each iteration
-        log.info("Stage {}: {} - Processing file: {}", stageNumber, taskName, filename);
+        // Set stageNumber ONLY if it's not already at this stage (for multi-instance loops)
+        Integer currentStage = (Integer) execution.getVariable("stageNumber");
+        if (currentStage == null || currentStage != stageNumber) {
+            execution.setVariable("stageNumber", stageNumber);
+            log.info("Set stage number to {}: {} - Processing file: {}", stageNumber, taskName, filename);
+        } else {
+            log.info("Stage {}: {} - Processing file: {}", stageNumber, taskName, filename);
+        }
 
         @SuppressWarnings("unchecked")
         Map<String, String> documentPaths = (Map<String, String>) execution.getVariable("documentPaths");
