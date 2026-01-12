@@ -1,6 +1,5 @@
 package com.DronaPay.frm.HealthClaim.generic.delegates;
 
-import java.sql.Connection;
 import com.DronaPay.frm.HealthClaim.APIServices;
 import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
 import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
@@ -16,6 +15,7 @@ import org.cibseven.bpm.engine.delegate.JavaDelegate;
 import org.json.JSONObject;
 
 import java.io.InputStream;
+import java.sql.Connection;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -39,6 +39,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         String displayName = agentConfig.getString("displayName");
         boolean enabled = agentConfig.optBoolean("enabled", true);
         boolean critical = agentConfig.optBoolean("critical", false);
+        int agentOrder = agentConfig.optInt("order", 99);
 
         log.info("=== Generic Agent Executor Started for {} ({}) ===", displayName, agentId);
 
@@ -51,10 +52,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
         String tenantId = execution.getTenantId();
 
-        Integer stageCounter = (Integer) execution.getVariable("stageCounter");
-        if (stageCounter == null) {
-            stageCounter = 2;
-        }
+        int stageNumber = agentOrder + 1;
 
         String stageName = execution.getCurrentActivityName();
         if (stageName == null || stageName.isEmpty()) {
@@ -78,6 +76,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         conn.close();
 
         JSONObject requestBody = buildRequest(config, execution, filename, tenantId, agentId);
+
         log.debug("Calling agent '{}' with request body size: {} bytes", displayName, requestBody.toString().length());
 
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
@@ -90,14 +89,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         log.debug("Agent '{}' response: {}", displayName, resp);
 
         processAndStoreResponse(agentId, displayName, statusCode, resp, config,
-                execution, filename, critical, tenantId, ticketId, stageCounter, stageName);
-
-        // Only increment stage counter for non-document agents (consolidated processing)
-// For document agents in multi-instance loop, keep same stage number
-        if (filename == null) {
-            execution.setVariable("stageCounter", stageCounter + 1);
-            log.debug("Incremented stage counter to {} (non-document agent)", stageCounter + 1);
-        }
+                execution, filename, critical, tenantId, ticketId, stageNumber, stageName);
 
         log.info("=== Generic Agent Executor Completed for {} ===", displayName);
     }

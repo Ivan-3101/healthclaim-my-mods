@@ -25,8 +25,6 @@ public class GenericIDGeneratorDelegate implements JavaDelegate {
         execution.setVariable("TicketID", ticketId);
         log.info("Generated TicketID: {}", ticketId);
 
-        execution.setVariable("stageCounter", 1);
-
         String stageName = execution.getCurrentActivityName();
         if (stageName == null || stageName.isEmpty()) {
             stageName = "Generate_TicketID_and_Workflow_Name";
@@ -51,8 +49,6 @@ public class GenericIDGeneratorDelegate implements JavaDelegate {
         Map<String, Map<String, Object>> fileProcessMap =
                 DocumentProcessingService.initializeFileProcessMap(documentPaths.keySet());
         execution.setVariable("fileProcessMap", fileProcessMap);
-
-        execution.setVariable("stageCounter", 2);
 
         try {
             Properties props = ConfigurationService.getTenantProperties(tenantId);
