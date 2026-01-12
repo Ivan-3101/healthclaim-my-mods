@@ -20,20 +20,14 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Generic Agent Executor Delegate
- * Executes any AI agent based on configuration passed via currentAgentConfig variable
- */
 @Slf4j
 public class GenericAgentExecutorDelegate implements JavaDelegate {
 
-    // Maximum size for process variables to prevent VARCHAR overflow
-    private static final int MAX_PROCESS_VAR_SIZE = 3500; // Leave buffer below 4000 limit
+    private static final int MAX_PROCESS_VAR_SIZE = 3500;
 
     @Override
     public void execute(DelegateExecution execution) throws Exception {
 
-        // 1. Get agent configuration from process variable
         Object configObj = execution.getVariable("currentAgentConfig");
         if (configObj == null) {
             throw new IllegalStateException("currentAgentConfig variable not set");
@@ -53,31 +47,35 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
             return;
         }
 
-        // 2. Get current filename and ticket info
         String filename = (String) execution.getVariable("attachment");
-        String ticketId = String.valueOf(execution.getVariable("TicketID")); // Convert Long to String
+        String ticketId = String.valueOf(execution.getVariable("TicketID"));
         String tenantId = execution.getTenantId();
 
-        // Log if filename is null (indicates non-document agent like FHIRAnalyser)
+        // Get stage info
+        Integer stageCounter = (Integer) execution.getVariable("stageCounter");
+        if (stageCounter == null) {
+            stageCounter = 2; // Default if not set
+        }
+
+        String stageName = execution.getCurrentActivityName();
+        if (stageName == null || stageName.isEmpty()) {
+            stageName = agentId;
+        } else {
+            stageName = stageName.replaceAll("[^a-zA-Z0-9]+", "_");
+        }
+
         if (filename == null) {
-            log.info("Agent '{}' is processing consolidated/non-document data (filename is null)", displayName);
+            log.info("Agent '{}' is processing consolidated/non-document data", displayName);
         }
 
         JSONObject config = agentConfig.getJSONObject("config");
 
-        // 3. Load workflow configuration
-        Connection conn = execution.getProcessEngine()
-                .getProcessEngineConfiguration()
-                .getDataSource()
-                .getConnection();
+        JSONObject workflowConfig = ConfigurationService.getWorkflowConfiguration(tenantId, "HealthClaim");
 
-        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
-        conn.close();
-
-        // 4. Build request based on input mapping
         JSONObject requestBody = buildRequest(config, execution, filename, tenantId, agentId);
 
-        // 5. Call agent API
+        log.debug("Calling agent '{}' with request body size: {} bytes", displayName, requestBody.toString().length());
+
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
         CloseableHttpResponse response = apiServices.callAgent(requestBody.toString());
 
@@ -87,16 +85,15 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         log.info("Agent '{}' API status: {}", displayName, statusCode);
         log.debug("Agent '{}' response: {}", displayName, resp);
 
-        // 6. Process response, extract data, and store in MinIO (BOTH locations)
         processAndStoreResponse(agentId, displayName, statusCode, resp, config,
-                execution, filename, critical, tenantId, ticketId);
+                execution, filename, critical, tenantId, ticketId, stageCounter, stageName);
+
+        // Increment stage counter for next agent
+        execution.setVariable("stageCounter", stageCounter + 1);
 
         log.info("=== Generic Agent Executor Completed for {} ===", displayName);
     }
 
-    /**
-     * Build request payload based on input mapping configuration
-     */
     @SuppressWarnings("unchecked")
     private JSONObject buildRequest(JSONObject config, DelegateExecution execution,
                                     String filename, String tenantId, String agentId) throws Exception {
@@ -104,14 +101,11 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         JSONObject requestBody = new JSONObject();
         JSONObject data = new JSONObject();
 
-        // Get input mapping
         JSONObject inputMapping = config.getJSONObject("inputMapping");
         String source = inputMapping.getString("source");
         String transformation = inputMapping.optString("transformation", "none");
 
-        // Handle different source types
         if (source.equals("documentVariable")) {
-            // Get document from storage and convert to base64
             Map<String, String> documentPaths = (Map<String, String>) execution.getVariable("documentPaths");
 
             if (filename == null) {
@@ -130,31 +124,25 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
             }
 
         } else if (source.equals("processVariable")) {
-            // Get data from process variable
             String variableName = inputMapping.getString("variableName");
-            Object value = execution.getVariable(variableName);
+            Object variableValue = execution.getVariable(variableName);
+            data.put("data", variableValue);
 
-            if (value != null) {
-                // Add to data based on variable name convention
-                if (variableName.equals("ocr_text")) {
-                    data.put("ocr_text", value);
-                } else if (variableName.equals("fhir_json")) {
-                    data.put("doc_fhir", new JSONObject(value.toString()));
-                } else if (variableName.equals("consolidatedFhir")) {
-                    data.put("consolidated_fhir", new JSONObject(value.toString()));
-                } else {
-                    data.put(variableName, value);
-                }
-            }
+        } else if (source.equals("chainedOutput")) {
+            String chainFrom = inputMapping.getString("chainFrom");
+            Map<String, Map<String, Object>> fileProcessMap =
+                    (Map<String, Map<String, Object>>) execution.getVariable("fileProcessMap");
 
-            // Handle additional inputs
-            if (inputMapping.has("additionalInputs")) {
-                JSONObject additionalInputs = inputMapping.getJSONObject("additionalInputs");
-                for (String key : additionalInputs.keySet()) {
-                    String varName = additionalInputs.getString(key);
-                    Object additionalValue = execution.getVariable(varName);
-                    if (additionalValue != null) {
-                        data.put(key, additionalValue);
+            if (filename != null && fileProcessMap != null && fileProcessMap.containsKey(filename)) {
+                Map<String, Object> fileResults = fileProcessMap.get(filename);
+                if (fileResults.containsKey(chainFrom)) {
+                    Object chainedData = fileResults.get(chainFrom);
+                    if (transformation.equals("wrapAnswerInData")) {
+                        JSONObject wrappedData = new JSONObject();
+                        wrappedData.put("answer", chainedData);
+                        data.put("data", wrappedData.toString());
+                    } else {
+                        data.put("data", chainedData);
                     }
                 }
             }
@@ -163,24 +151,20 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         requestBody.put("data", data);
         requestBody.put("agentid", agentId);
 
-        log.debug("Built request for agent '{}' with {} bytes of data", agentId, requestBody.toString().length());
+        log.debug("Built request for agent '{}', size: {} bytes", agentId, requestBody.toString().length());
 
         return requestBody;
     }
 
-    /**
-     * Process agent response, extract data, and store in MinIO (BOTH locations)
-     */
     @SuppressWarnings("unchecked")
     private void processAndStoreResponse(String agentId, String displayName, int statusCode, String resp,
                                          JSONObject config, DelegateExecution execution,
-                                         String filename, boolean critical, String tenantId, String ticketId) throws Exception {
+                                         String filename, boolean critical, String tenantId, String ticketId,
+                                         int stageNumber, String stageName) throws Exception {
 
-        // Build result map
         Map<String, Object> extractedData = new HashMap<>();
 
         if (statusCode == 200) {
-            // Parse response and extract variables based on output mapping
             JSONObject outputMapping = config.optJSONObject("outputMapping");
             if (outputMapping != null && outputMapping.has("variablesToSet")) {
                 JSONObject variablesToSet = outputMapping.getJSONObject("variablesToSet");
@@ -196,33 +180,16 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
                         Object value = responseJson.optQuery(jsonPath);
 
                         if (value != null) {
-// Apply transformation
                             if (transformationFn.equals("mapSuspiciousToBoolean")) {
-                                // value is JSONObject with pages: {"1": {...}, "2": {...}}
-                                boolean isForged = false;
-                                if (value instanceof org.json.JSONObject) {
-                                    org.json.JSONObject pages = (org.json.JSONObject) value;
-                                    for (String pageKey : pages.keySet()) {
-                                        org.json.JSONObject page = pages.getJSONObject(pageKey);
-                                        String classification = page.optString("classification", "");
-                                        // Check if page is suspicious (but NOT "Not Suspicious")
-                                        if (classification.contains("Suspicious") &&
-                                                !classification.contains("<Not Suspicious>")) {
-                                            isForged = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                                value = isForged;
+                                value = value.toString().toLowerCase().contains("suspicious");
                             }
 
-                            // Convert to data type
                             Object convertedValue = convertValue(value, dataType);
 
-                            // SIZE CHECK: Only set process variable if it's reasonably sized
-                            if (shouldSetProcessVariable(variableName, convertedValue)) {
+                            if (convertedValue.toString().length() <= MAX_PROCESS_VAR_SIZE) {
                                 execution.setVariable(variableName, convertedValue);
-                                log.info("Set variable '{}' = {}", variableName,
+                                log.debug("Set process variable '{}': {}",
+                                        variableName,
                                         convertedValue.toString().length() > 100 ?
                                                 convertedValue.toString().substring(0, 100) + "..." : convertedValue);
                             } else {
@@ -230,7 +197,6 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
                                         variableName, convertedValue.toString().length());
                             }
 
-                            // Always add to extracted data for MinIO storage
                             extractedData.put(variableName, convertedValue);
 
                         } else if (mapping.has("defaultValue")) {
@@ -246,7 +212,6 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         } else {
             log.error("Agent '{}' failed with status: {}", displayName, statusCode);
 
-            // Handle critical agents
             if (critical) {
                 String errorCode = "agentFailure";
                 if (config.has("errorHandling")) {
@@ -261,17 +226,14 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
             }
         }
 
-        // Store full result in MinIO (stage-wise only)
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 agentId, statusCode, resp, extractedData);
 
-        // Store in stage-wise location only - no more duplication
         String minioPath = AgentResultStorageService.storeAgentResultStageWise(
-                tenantId, ticketId, filename, agentId, fullResult);
+                tenantId, ticketId, filename, agentId, fullResult, stageNumber, stageName);
 
         log.info("Stored full result for '{}' in MinIO at: {}", agentId, minioPath);
 
-        // Update fileProcessMap ONLY if filename is not null (document-based agents)
         if (filename != null) {
             Map<String, Map<String, Object>> fileProcessMap =
                     (Map<String, Map<String, Object>>) execution.getVariable("fileProcessMap");
@@ -282,79 +244,33 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
 
             Map<String, Object> fileResults = fileProcessMap.getOrDefault(filename, new HashMap<>());
 
-            // Add agent result to file results
             Map<String, Object> agentResult = new HashMap<>();
             agentResult.put("statusCode", statusCode);
             agentResult.put("minioPath", minioPath);
             agentResult.put("apiCall", statusCode == 200 ? "success" : "failed");
 
-            fileResults.put(agentId + "Output", agentResult);
-            fileProcessMap.put(filename, fileResults);
+            if (statusCode == 200) {
+                extractedData.forEach((key, value) -> {
+                    if (!fileResults.containsKey(key) || fileResults.get(key) == null || fileResults.get(key).toString().isEmpty()) {
+                        fileResults.put(key, value);
+                    }
+                });
+            }
 
+            fileResults.put(agentId, agentResult);
+            fileProcessMap.put(filename, fileResults);
             execution.setVariable("fileProcessMap", fileProcessMap);
 
-            log.info("Updated fileProcessMap with {} result for {}", agentId, filename);
-        } else {
-            // For non-document agents (like FHIRAnalyser), store result directly in process variable
-            log.info("Agent '{}' is non-document agent, storing result path directly", agentId);
-            execution.setVariable(agentId + "MinioPath", minioPath);
-            execution.setVariable(agentId + "StatusCode", statusCode);
-            execution.setVariable(agentId + "Success", statusCode == 200);
+            log.debug("Updated fileProcessMap for file: {}", filename);
         }
     }
 
-    /**
-     * Check if a process variable should be set based on size constraints
-     * Large JSON responses should only be stored in MinIO, not as process variables
-     */
-    private boolean shouldSetProcessVariable(String variableName, Object value) {
-        if (value == null) {
-            return true;
-        }
-
-        String stringValue = value.toString();
-        int size = stringValue.length();
-
-        if (size > MAX_PROCESS_VAR_SIZE) {
-            log.warn("Variable '{}' size ({} chars) exceeds process variable limit ({} chars)",
-                    variableName, size, MAX_PROCESS_VAR_SIZE);
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * Convert value to specified data type
-     */
     private Object convertValue(Object value, String dataType) {
-        if (value == null) {
-            return null;
-        }
-
         switch (dataType.toLowerCase()) {
             case "long":
-            case "integer":
-                if (value instanceof Number) {
-                    return ((Number) value).longValue();
-                }
-                return Long.parseLong(value.toString());
-            case "double":
-            case "float":
-                if (value instanceof Number) {
-                    return ((Number) value).doubleValue();
-                }
-                return Double.parseDouble(value.toString());
+                return value instanceof Number ? ((Number) value).longValue() : Long.parseLong(value.toString());
             case "boolean":
-                if (value instanceof Boolean) {
-                    return value;
-                }
-                return Boolean.parseBoolean(value.toString());
-            case "json":
-                if (value instanceof JSONObject) {
-                    return value.toString();
-                }
-                return new JSONObject(value.toString()).toString();
+                return value instanceof Boolean ? value : Boolean.parseBoolean(value.toString());
             case "string":
             default:
                 return value.toString();

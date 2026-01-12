@@ -13,15 +13,11 @@ import java.util.*;
 public class DocumentProcessingService {
 
     /**
-     * Process documents and upload to object storage
-     * @param docsObject - the docs variable from process
-     * @param tenantId - tenant ID
-     * @param workflowKey - workflow key (e.g., "HealthClaim")
-     * @param ticketId - ticket ID
-     * @return Map of filename -> storage path
+     * Process documents and upload to object storage with stage-based folder structure
      */
     public static Map<String, String> processAndUploadDocuments(
-            Object docsObject, String tenantId, String workflowKey, String ticketId) {
+            Object docsObject, String tenantId, String workflowKey, String ticketId,
+            int stageNumber, String stageName) {
 
         Map<String, String> documentPaths = new HashMap<>();
 
@@ -31,15 +27,8 @@ public class DocumentProcessingService {
         }
 
         try {
-            // Get storage provider
             StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
 
-            // Get path pattern from properties
-            Properties props = ConfigurationService.getTenantProperties(tenantId);
-            String pathPattern = props.getProperty("storage.pathPattern",
-                    "{tenantId}/{workflowKey}/{ticketId}/");
-
-            // Convert docs to list
             List<Map<String, Object>> docsList = convertToDocsList(docsObject);
 
             for (Map<String, Object> doc : docsList) {
@@ -47,15 +36,12 @@ public class DocumentProcessingService {
                 String mimetype = doc.get("mimetype").toString();
                 String base64Content = doc.get("content").toString();
 
-                // Decode base64 content
                 byte[] fileContent = Base64.getDecoder().decode(base64Content);
 
-                // Build storage path
-                String storagePath = ObjectStorageService.buildStoragePath(
-                        pathPattern, tenantId, workflowKey, ticketId, filename
-                );
+                // Build stage-based storage path
+                String storagePath = String.format("%s/%s/%s/%d_%s/%s",
+                        tenantId, workflowKey, ticketId, stageNumber, stageName, filename);
 
-                // Upload to storage
                 String documentUrl = storage.uploadDocument(storagePath, fileContent, mimetype);
                 documentPaths.put(filename, storagePath);
 
@@ -63,7 +49,7 @@ public class DocumentProcessingService {
                         filename, storagePath, fileContent.length);
             }
 
-            log.info("Successfully uploaded {} documents to storage", documentPaths.size());
+            log.info("Successfully uploaded {} documents to stage {}", documentPaths.size(), stageNumber);
 
         } catch (Exception e) {
             log.error("Error processing and uploading documents", e);
@@ -74,7 +60,6 @@ public class DocumentProcessingService {
 
     /**
      * Process documents WITHOUT uploading (for backward compatibility)
-     * Creates FileValue objects in memory
      */
     public static Map<String, FileValue> processDocuments(Object docsObject) {
         Map<String, FileValue> fileMap = new HashMap<>();
@@ -93,10 +78,8 @@ public class DocumentProcessingService {
                 String encoding = doc.get("encoding").toString();
                 String base64Content = doc.get("content").toString();
 
-                // Decode base64 content
                 byte[] fileContent = Base64.getDecoder().decode(base64Content);
 
-                // Create FileValue
                 FileValue fileValue = Variables.fileValue(filename)
                         .file(fileContent)
                         .mimeType(mimetype)
@@ -117,96 +100,70 @@ public class DocumentProcessingService {
     }
 
     /**
-     * Download document from storage and create FileValue
-     * @param filename - document filename
-     * @param storagePath - path in object storage
-     * @param tenantId - tenant ID
-     * @return FileValue object
+     * Download document as FileValue from storage
      */
-    public static FileValue downloadDocumentAsFileValue(
-            String filename, String storagePath, String tenantId) throws Exception {
-
+    public static FileValue downloadDocumentAsFileValue(String filename, String storagePath, String tenantId) throws Exception {
         StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
 
-        // Download document content
-        byte[] content = storage.downloadDocument(storagePath).readAllBytes();
+        InputStream inputStream = storage.downloadDocument(storagePath);
+        byte[] fileContent = inputStream.readAllBytes();
 
-        // Determine MIME type from filename
-        String mimeType = guessMimeType(filename);
-
-        // Create FileValue
         return Variables.fileValue(filename)
-                .file(content)
-                .mimeType(mimeType)
-                .encoding("UTF-8")
+                .file(fileContent)
+                .mimeType("application/octet-stream")
                 .create();
     }
 
     /**
-     * Guess MIME type from filename extension
+     * Get document as base64 from storage
      */
-    private static String guessMimeType(String filename) {
-        String lower = filename.toLowerCase();
-        if (lower.endsWith(".pdf")) return "application/pdf";
-        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
-        if (lower.endsWith(".png")) return "image/png";
-        if (lower.endsWith(".doc")) return "application/msword";
-        if (lower.endsWith(".docx")) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-        return "application/octet-stream";
-    }
-
-    /**
-     * Convert various input formats to List<Map<String, Object>>
-     */
-    @SuppressWarnings("unchecked")
-    private static List<Map<String, Object>> convertToDocsList(Object docsObject) {
-        if (docsObject instanceof List) {
-            return (List<Map<String, Object>>) docsObject;
-        } else if (docsObject instanceof String) {
-            // Parse JSON string
-            JSONArray jsonArray = new JSONArray((String) docsObject);
-            List<Map<String, Object>> result = new ArrayList<>();
-            for (int i = 0; i < jsonArray.length(); i++) {
-                JSONObject jsonDoc = jsonArray.getJSONObject(i);
-                Map<String, Object> docMap = new HashMap<>();
-                docMap.put("filename", jsonDoc.getString("filename"));
-                docMap.put("mimetype", jsonDoc.getString("mimetype"));
-                docMap.put("encoding", jsonDoc.getString("encoding"));
-                docMap.put("content", jsonDoc.getString("content"));
-                result.add(docMap);
-            }
-            return result;
+    public static String getDocumentAsBase64(String filename, Map<String, String> documentPaths, String tenantId) throws Exception {
+        String storagePath = documentPaths.get(filename);
+        if (storagePath == null) {
+            throw new RuntimeException("Storage path not found for: " + filename);
         }
-        return new ArrayList<>();
+
+        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+        InputStream inputStream = storage.downloadDocument(storagePath);
+        byte[] fileContent = inputStream.readAllBytes();
+
+        return Base64.getEncoder().encodeToString(fileContent);
     }
 
     /**
-     * Initialize file process map for tracking document processing results
+     * Initialize file process map
      */
     public static Map<String, Map<String, Object>> initializeFileProcessMap(Set<String> filenames) {
         Map<String, Map<String, Object>> fileProcessMap = new HashMap<>();
+
         for (String filename : filenames) {
             fileProcessMap.put(filename, new HashMap<>());
         }
+
         log.debug("Initialized file process map for {} files", filenames.size());
         return fileProcessMap;
     }
 
     /**
-     * Get document for agent processing
-     * Downloads from storage and returns as base64 string
+     * Convert docs variable to list
      */
-    public static String getDocumentAsBase64(String filename,
-                                             Map<String, String> documentPaths,
-                                             String tenantId) throws Exception {
-        String storagePath = documentPaths.get(filename);
-        if (storagePath == null) {
-            throw new IllegalArgumentException("Document not found: " + filename);
+    private static List<Map<String, Object>> convertToDocsList(Object docsObject) {
+        List<Map<String, Object>> docsList = new ArrayList<>();
+
+        if (docsObject instanceof List) {
+            docsList = (List<Map<String, Object>>) docsObject;
+        } else if (docsObject instanceof String) {
+            String docsJson = (String) docsObject;
+            JSONArray docsArray = new JSONArray(docsJson);
+
+            for (int i = 0; i < docsArray.length(); i++) {
+                JSONObject docObj = docsArray.getJSONObject(i);
+                Map<String, Object> docMap = new HashMap<>();
+                docObj.keySet().forEach(key -> docMap.put(key, docObj.get(key)));
+                docsList.add(docMap);
+            }
         }
 
-        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
-        byte[] content = storage.downloadDocument(storagePath).readAllBytes();
-
-        return Base64.getEncoder().encodeToString(content);
+        return docsList;
     }
 }

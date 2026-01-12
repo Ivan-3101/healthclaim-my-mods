@@ -26,30 +26,44 @@ public class GenericIDGeneratorDelegate implements JavaDelegate {
         execution.setVariable("TicketID", ticketId);
         log.info("Generated TicketID: {}", ticketId);
 
-        // 2. Get workflow key (for now, hardcoded; later from config)
-        String workflowKey = "HealthClaim"; // TODO: Make configurable
+        // 2. Initialize stage counter
+        execution.setVariable("stageCounter", 1);
 
-        // 3. Process documents and upload to object storage
+        // 3. Get current activity name for stage
+        String stageName = execution.getCurrentActivityName();
+        if (stageName == null || stageName.isEmpty()) {
+            stageName = "Generate_TicketID_and_Workflow_Name";
+        } else {
+            stageName = stageName.replaceAll("[^a-zA-Z0-9]+", "_");
+        }
+
+        // 4. Get workflow key
+        String workflowKey = "HealthClaim";
+
+        // 5. Process documents and upload to object storage with stage info
         Object docsObject = execution.getVariable("docs");
         Map<String, String> documentPaths = DocumentProcessingService.processAndUploadDocuments(
-                docsObject, tenantId, workflowKey, String.valueOf(ticketId)
+                docsObject, tenantId, workflowKey, String.valueOf(ticketId), 1, stageName
         );
 
-        // 4. Set document paths for multi-instance loop
+        // 6. Set document paths for multi-instance loop
         List<String> attachmentVars = new ArrayList<>(documentPaths.keySet());
         execution.setVariable("attachmentVars", attachmentVars);
         log.info("Set {} attachments for processing: {}", attachmentVars.size(), attachmentVars);
 
-        // 5. Store document paths map for later retrieval
+        // 7. Store document paths map for later retrieval
         execution.setVariable("documentPaths", documentPaths);
         log.debug("Document paths: {}", documentPaths);
 
-        // 6. Initialize file process map
+        // 8. Initialize file process map
         Map<String, Map<String, Object>> fileProcessMap =
                 DocumentProcessingService.initializeFileProcessMap(documentPaths.keySet());
         execution.setVariable("fileProcessMap", fileProcessMap);
 
-        // 7. Load tenant-specific expiry duration (optional config)
+        // 9. Increment stage counter for next stage
+        execution.setVariable("stageCounter", 2);
+
+        // 10. Load tenant-specific expiry duration
         try {
             Properties props = ConfigurationService.getTenantProperties(tenantId);
             String expiryDuration = props.getProperty("expiry.duration", "24h");
@@ -63,9 +77,6 @@ public class GenericIDGeneratorDelegate implements JavaDelegate {
         log.info("=== Generic ID Generator Completed Successfully ===");
     }
 
-    /**
-     * Generate unique ticket ID using database sequence
-     */
     private long generateTicketID(DelegateExecution execution, String processInstanceId) throws Exception {
         Connection conn = null;
         try {
@@ -74,14 +85,12 @@ public class GenericIDGeneratorDelegate implements JavaDelegate {
                     .getDataSource()
                     .getConnection();
 
-            // Insert process instance ID
             PreparedStatement insertStmt = conn.prepareStatement(
                     "INSERT INTO ui.ticketidgenerator(processinstanceid) VALUES (?)"
             );
             insertStmt.setString(1, processInstanceId);
             insertStmt.executeUpdate();
 
-            // Retrieve generated ticket ID
             PreparedStatement selectStmt = conn.prepareStatement(
                     "SELECT ticketid FROM ui.ticketidgenerator WHERE processinstanceid = ?"
             );
