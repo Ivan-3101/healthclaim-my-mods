@@ -2,6 +2,7 @@ package com.DronaPay.frm.HealthClaim.generic.delegates;
 
 import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
 import com.DronaPay.frm.HealthClaim.generic.services.DocumentProcessingService;
+import com.DronaPay.frm.HealthClaim.generic.utils.StageHelper;
 import lombok.extern.slf4j.Slf4j;
 import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
@@ -18,6 +19,11 @@ public class GenericIDGeneratorDelegate implements JavaDelegate {
     public void execute(DelegateExecution execution) throws Exception {
         log.info("=== Generic ID Generator Started ===");
 
+        // Get stage number and task name
+        int stageNumber = StageHelper.getOrIncrementStage(execution);
+        String taskName = execution.getCurrentActivityName();
+        log.info("Stage {}: {}", stageNumber, taskName);
+
         String tenantId = execution.getTenantId();
         String processInstanceId = execution.getProcessInstanceId();
 
@@ -29,10 +35,10 @@ public class GenericIDGeneratorDelegate implements JavaDelegate {
         // 2. Get workflow key (for now, hardcoded; later from config)
         String workflowKey = "HealthClaim"; // TODO: Make configurable
 
-        // 3. Process documents and upload to object storage
+        // 3. Process documents and upload to object storage with stage
         Object docsObject = execution.getVariable("docs");
         Map<String, String> documentPaths = DocumentProcessingService.processAndUploadDocuments(
-                docsObject, tenantId, workflowKey, String.valueOf(ticketId)
+                docsObject, tenantId, workflowKey, String.valueOf(ticketId), stageNumber, taskName
         );
 
         // 4. Set document paths for multi-instance loop
