@@ -40,8 +40,9 @@ public class StageHelper {
 
     /**
      * Get current stage number from process variable
+     * Does NOT increment - just returns current value
      */
-    private static int getCurrentStage(DelegateExecution execution) {
+    public static int getCurrentStage(DelegateExecution execution) {
         Object stage = execution.getVariable("currentStageNumber");
         if (stage == null) {
             return 0;
