@@ -12,6 +12,7 @@ import org.cibseven.bpm.engine.delegate.JavaDelegate;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.util.*;
 import java.util.stream.Collectors;
 

@@ -174,4 +174,57 @@ public class AgentResultStorageService {
             throw new RuntimeException("Could not retrieve agent result from: " + minioPath, e);
         }
     }
+
+    /**
+     * BACKWARD COMPATIBLE: Retrieve agent result without stage params
+     * Extracts stage info from fileProcessMap stored in MinIO path
+     */
+    public static Map<String, Object> retrieveAgentResult(String tenantId, String ticketId) throws Exception {
+        // This is for retrieving consolidated FHIR or other non-agent results
+        // Try common paths in order
+        String[] commonPaths = {
+                tenantId + "/HealthClaim/" + ticketId + "/results/fhirConsolidator/consolidated.json",
+                tenantId + "/HealthClaim/" + ticketId + "/ocr/consolidated.json"
+        };
+
+        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+
+        for (String path : commonPaths) {
+            try {
+                return retrieveAgentResultByPath(tenantId, path);
+            } catch (Exception e) {
+                log.debug("Path not found: {}", path);
+            }
+        }
+
+        throw new RuntimeException("Could not find consolidated result for ticket: " + ticketId);
+    }
+
+    /**
+     * BACKWARD COMPATIBLE: Store agent result without stage params
+     * Uses OLD folder structure for backward compatibility
+     */
+    public static String storeAgentResultStageWise(String tenantId, String ticketId,
+                                                   String filename, String agentId,
+                                                   Map<String, Object> result) throws Exception {
+
+        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+
+        String safeFilename = (filename != null && !filename.isEmpty())
+                ? filename.replaceAll("[^a-zA-Z0-9.-]", "_")
+                : "consolidated";
+
+        // Use OLD structure for backward compatibility
+        String storagePath = String.format("%s/HealthClaim/%s/results/%s/%s.json",
+                tenantId, ticketId, agentId, safeFilename);
+
+        JSONObject resultJson = new JSONObject(result);
+        byte[] content = resultJson.toString(2).getBytes(StandardCharsets.UTF_8);
+
+        storage.uploadDocument(storagePath, content, "application/json");
+
+        log.info("Stored {} result (backward compatible path): {}", agentId, storagePath);
+
+        return storagePath;
+    }
 }

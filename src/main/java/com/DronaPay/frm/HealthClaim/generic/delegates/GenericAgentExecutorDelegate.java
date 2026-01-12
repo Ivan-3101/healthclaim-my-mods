@@ -19,6 +19,7 @@ import java.io.InputStream;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 
 /**
  * Generic Agent Executor Delegate with Stage Support
@@ -29,6 +30,47 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
 
     // Maximum size for process variables to prevent VARCHAR overflow
     private static final int MAX_PROCESS_VAR_SIZE = 3500; // Leave buffer below 4000 limit
+
+    /**
+     * Load workflow configuration from database
+     */
+    private JSONObject loadWorkflowConfig(String tenantId) throws Exception {
+        try {
+            Properties props = ConfigurationService.getTenantProperties(tenantId);
+            String configStr = props.getProperty("workflow.HealthClaim.config");
+
+            if (configStr != null) {
+                return new JSONObject(configStr);
+            }
+
+            // Fallback: create minimal config with external APIs
+            JSONObject config = new JSONObject();
+            JSONObject externalAPIs = new JSONObject();
+
+            JSONObject agentAPI = new JSONObject();
+            agentAPI.put("baseUrl", props.getProperty("agent.api.baseUrl", "https://main.dev.dronapay.net/dia"));
+            agentAPI.put("username", props.getProperty("agent.api.username", "batchuser"));
+            agentAPI.put("password", props.getProperty("agent.api.password", "100!batch"));
+            externalAPIs.put("agentAPI", agentAPI);
+
+            config.put("externalAPIs", externalAPIs);
+            return config;
+
+        } catch (Exception e) {
+            log.warn("Could not load workflow config, using defaults", e);
+
+            // Minimal fallback config
+            JSONObject config = new JSONObject();
+            JSONObject externalAPIs = new JSONObject();
+            JSONObject agentAPI = new JSONObject();
+            agentAPI.put("baseUrl", "https://main.dev.dronapay.net/dia");
+            agentAPI.put("username", "batchuser");
+            agentAPI.put("password", "100!batch");
+            externalAPIs.put("agentAPI", agentAPI);
+            config.put("externalAPIs", externalAPIs);
+            return config;
+        }
+    }
 
     @Override
     public void execute(DelegateExecution execution) throws Exception {
@@ -69,8 +111,8 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
 
         JSONObject config = agentConfig.getJSONObject("config");
 
-        // 3. Load workflow configuration
-        JSONObject workflowConfig = ConfigurationService.getWorkflowConfiguration(tenantId, "HealthClaim");
+        // 3. Load workflow configuration from database
+        JSONObject workflowConfig = loadWorkflowConfig(tenantId);
 
         // 4. Build request
         JSONObject requestBody = buildRequest(config, execution, filename, tenantId, agentId);
