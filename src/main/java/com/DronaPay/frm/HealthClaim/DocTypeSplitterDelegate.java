@@ -3,139 +3,190 @@ package com.DronaPay.frm.HealthClaim;
 import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
 import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
 import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
-import com.DronaPay.frm.HealthClaim.generic.utils.StageHelper;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.pdfbox.multipdf.PDFMergerUtility;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
 import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.*;
-import java.util.stream.Collectors;
 
-/**
- * Document Type Splitter Delegate with Stage Support
- * Groups pages by document type from classifier results
- * Merges pages into new PDFs per document type
- */
 @Slf4j
 public class DocTypeSplitterDelegate implements JavaDelegate {
 
     @Override
-    @SuppressWarnings("unchecked")
     public void execute(DelegateExecution execution) throws Exception {
         log.info("=== Doc Type Splitter Started ===");
 
-        // Get stage number and task name
-        int stageNumber = StageHelper.getOrIncrementStage(execution);
-        String taskName = execution.getCurrentActivityName();
-        log.info("Stage {}: {}", stageNumber, taskName);
-
-        String tenantId = execution.getTenantId();
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
+        String tenantId = execution.getTenantId();
 
-        // Get document paths and file process map
-        Map<String, String> documentPaths = (Map<String, String>) execution.getVariable("documentPaths");
+        @SuppressWarnings("unchecked")
         Map<String, Map<String, Object>> fileProcessMap =
                 (Map<String, Map<String, Object>>) execution.getVariable("fileProcessMap");
 
-        if (documentPaths == null || fileProcessMap == null) {
-            throw new RuntimeException("Missing documentPaths or fileProcessMap");
+        @SuppressWarnings("unchecked")
+        Map<String, String> documentPaths =
+                (Map<String, String>) execution.getVariable("documentPaths");
+
+        if (fileProcessMap == null || fileProcessMap.isEmpty()) {
+            log.error("No fileProcessMap found");
+            throw new RuntimeException("fileProcessMap is null or empty");
         }
 
-        // Get classifier results from MinIO and group pages by document type
-        Map<String, List<PageInfo>> documentTypeGroups = new HashMap<>();
+        // Group pages by document type
+        Map<String, List<PageInfo>> docTypePages = new LinkedHashMap<>();
 
-        for (String filename : documentPaths.keySet()) {
+        // Process each file's classifier output
+        for (String filename : fileProcessMap.keySet()) {
             Map<String, Object> fileResults = fileProcessMap.get(filename);
-            if (fileResults == null || !fileResults.containsKey("Document_Classifier")) {
-                log.warn("No classifier result for: {}", filename);
+
+            if (!fileResults.containsKey("Document_ClassifierOutput")) {
+                log.warn("No classifier output for file: {}, skipping", filename);
                 continue;
             }
 
-            Map<String, Object> classifierResult = (Map<String, Object>) fileResults.get("Document_Classifier");
-            String minioPath = (String) classifierResult.get("minioPath");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> classifierOutput =
+                    (Map<String, Object>) fileResults.get("Document_ClassifierOutput");
 
-            // Retrieve full classifier response from MinIO
-            Map<String, Object> classifierData = AgentResultStorageService.retrieveAgentResultByPath(
-                    tenantId, minioPath);
+            String apiCall = (String) classifierOutput.get("apiCall");
+            if (!"success".equals(apiCall)) {
+                log.warn("Classifier failed for file: {}, skipping", filename);
+                continue;
+            }
 
-            // Extract page classifications
-            if (classifierData.containsKey("response")) {
-                Map<String, Object> response = (Map<String, Object>) classifierData.get("response");
-                if (response.containsKey("answer")) {
-                    Map<String, Object> answer = (Map<String, Object>) response.get("answer");
+            String minioPath = (String) classifierOutput.get("minioPath");
+            String storagePath = documentPaths.get(filename);
 
-                    for (String key : answer.keySet()) {
-                        if (key.startsWith("page_")) {
-                            int pageNumber = Integer.parseInt(key.substring(5));
-                            String docType = answer.get(key).toString();
+            if (minioPath == null || storagePath == null) {
+                log.warn("Missing minioPath or storagePath for file: {}, skipping", filename);
+                continue;
+            }
 
-                            documentTypeGroups
-                                    .computeIfAbsent(docType, k -> new ArrayList<>())
-                                    .add(new PageInfo(filename, documentPaths.get(filename), pageNumber));
-                        }
-                    }
-                }
+            // Retrieve classifier result from MinIO
+            Map<String, Object> result =
+                    AgentResultStorageService.retrieveAgentResult(tenantId, minioPath);
+            String apiResponse = (String) result.get("apiResponse");
+
+            JSONObject response = new JSONObject(apiResponse);
+
+            if (!response.has("answer")) {
+                log.warn("No 'answer' field in classifier response for: {}", filename);
+                continue;
+            }
+
+            JSONArray answer = response.getJSONArray("answer");
+
+            // Group pages by category
+            for (int i = 0; i < answer.length(); i++) {
+                JSONObject item = answer.getJSONObject(i);
+                String category = item.getString("category");
+                int pageNumber = item.getInt("page_number");
+
+                docTypePages.computeIfAbsent(category, k -> new ArrayList<>())
+                        .add(new PageInfo(filename, storagePath, pageNumber));
+
+                log.debug("Classified page {} of {} as {}", pageNumber, filename, category);
             }
         }
 
-        log.info("Found {} document types to split", documentTypeGroups.size());
+        if (docTypePages.isEmpty()) {
+            log.error("No document types found after classification");
+            throw new RuntimeException("Document classification produced no results");
+        }
+
+        log.info("Grouped pages into {} document types", docTypePages.size());
 
         // Create split documents
-        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
         List<String> splitDocumentVars = new ArrayList<>();
+        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
 
-        // Build stage folder name for split documents
-        String stageFolderName = StageHelper.buildStageFolderName(stageNumber, taskName);
-
-        for (Map.Entry<String, List<PageInfo>> entry : documentTypeGroups.entrySet()) {
+        for (Map.Entry<String, List<PageInfo>> entry : docTypePages.entrySet()) {
             String docType = entry.getKey();
             List<PageInfo> pages = entry.getValue();
 
-            log.info("Processing document type '{}' with {} pages", docType, pages.size());
+            // Sanitize doc type for filename
+            String sanitizedDocType = docType.replaceAll("[^a-zA-Z0-9]", "_").toLowerCase();
+            String splitFilename = sanitizedDocType + ".pdf";
 
-            // Sort pages by original page number
-            pages.sort(Comparator.comparingInt(p -> p.pageNumber));
+            log.info("Creating split document: {} with {} pages", splitFilename, pages.size());
 
-            // Merge pages into single PDF
-            PDFMergerUtility merger = new PDFMergerUtility();
+            // Create new merged document
             PDDocument mergedDoc = new PDDocument();
 
-            Map<String, PDDocument> openDocs = new HashMap<>();
-
             try {
+                // Load all source documents first and keep them open
+                Map<String, PDDocument> openDocs = new HashMap<>();
+
                 for (PageInfo pageInfo : pages) {
-                    // Load document if not already loaded
-                    if (!openDocs.containsKey(pageInfo.filename)) {
-                        InputStream docStream = storage.downloadDocument(pageInfo.storagePath);
-                        PDDocument doc = PDDocument.load(docStream);
-                        openDocs.put(pageInfo.filename, doc);
-                    }
-
-                    PDDocument sourceDoc = openDocs.get(pageInfo.filename);
-                    // Page numbers are 1-indexed from classifier, but PDF pages are 0-indexed
-                    int pageIndex = pageInfo.pageNumber - 1;
-
-                    if (pageIndex >= 0 && pageIndex < sourceDoc.getNumberOfPages()) {
-                        mergedDoc.addPage(sourceDoc.getPage(pageIndex));
-                    } else {
-                        log.warn("Page {} out of bounds for {}", pageInfo.pageNumber, pageInfo.filename);
+                    // Only load each document once
+                    if (!openDocs.containsKey(pageInfo.storagePath)) {
+                        try {
+                            InputStream stream = storage.downloadDocument(pageInfo.storagePath);
+                            PDDocument doc = PDDocument.load(stream);
+                            stream.close();
+                            openDocs.put(pageInfo.storagePath, doc);
+                            log.debug("Loaded source document: {}", pageInfo.filename);
+                        } catch (Exception e) {
+                            log.error("Error loading document {}", pageInfo.filename, e);
+                        }
                     }
                 }
 
-                // Save merged PDF to byte array
+                // Now extract pages (all source docs are still open)
+                for (PageInfo pageInfo : pages) {
+                    PDDocument sourceDoc = openDocs.get(pageInfo.storagePath);
+                    if (sourceDoc == null) {
+                        log.warn("Source document not loaded for {}", pageInfo.filename);
+                        continue;
+                    }
+
+                    try {
+                        // PDF pages are 0-indexed, but classifier returns 1-indexed
+                        int pageIndex = pageInfo.pageNumber - 1;
+
+                        if (pageIndex >= 0 && pageIndex < sourceDoc.getNumberOfPages()) {
+                            PDPage page = sourceDoc.getPage(pageIndex);
+                            mergedDoc.addPage(page);
+
+                            log.debug("Added page {} from {} to {}",
+                                    pageInfo.pageNumber, pageInfo.filename, splitFilename);
+                        } else {
+                            log.warn("Page {} out of range in {} (total pages: {})",
+                                    pageInfo.pageNumber, pageInfo.filename,
+                                    sourceDoc.getNumberOfPages());
+                        }
+                    } catch (Exception e) {
+                        log.error("Error adding page {} from {}",
+                                pageInfo.pageNumber, pageInfo.filename, e);
+                    }
+                }
+
+                if (mergedDoc.getNumberOfPages() == 0) {
+                    log.warn("No pages added for document type: {}, skipping", docType);
+                    // Close all open source documents
+                    for (PDDocument doc : openDocs.values()) {
+                        try {
+                            doc.close();
+                        } catch (Exception e) {
+                            log.warn("Error closing document", e);
+                        }
+                    }
+                    continue;
+                }
+
+                // Save merged document BEFORE closing source documents
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 mergedDoc.save(baos);
                 byte[] pdfBytes = baos.toByteArray();
+                baos.close();
 
-                // Generate filename
-                String splitFilename = docType.toLowerCase().replaceAll("[^a-z0-9]", "_") + ".pdf";
-
-                // Close all source documents
+                // NOW close all source documents
                 for (PDDocument doc : openDocs.values()) {
                     try {
                         doc.close();
@@ -144,18 +195,18 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
                     }
                 }
 
-                // Upload to MinIO with stage-based path
-                String splitStoragePath = String.format("%s/HealthClaim/%s/%s/%s",
-                        tenantId, ticketId, stageFolderName, splitFilename);
-
+                // Upload to MinIO
+                String splitStoragePath = tenantId + "/HealthClaim/" + ticketId +
+                        "/split/" + splitFilename;
                 storage.uploadDocument(splitStoragePath, pdfBytes, "application/pdf");
 
                 splitDocumentVars.add(splitFilename);
                 documentPaths.put(splitFilename, splitStoragePath);
                 fileProcessMap.put(splitFilename, new HashMap<>());
 
-                log.info("Created split document: {} at stage {} ({} pages, {} bytes)",
-                        splitFilename, stageNumber, mergedDoc.getNumberOfPages(), pdfBytes.length);
+                log.info("Created split document: {} at {} ({} pages, {} bytes)",
+                        splitFilename, splitStoragePath, mergedDoc.getNumberOfPages(),
+                        pdfBytes.length);
 
             } finally {
                 mergedDoc.close();
@@ -171,8 +222,8 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
         execution.setVariable("documentPaths", documentPaths);
         execution.setVariable("fileProcessMap", fileProcessMap);
 
-        log.info("=== Doc Type Splitter Completed: {} split documents created at stage {} ===",
-                splitDocumentVars.size(), stageNumber);
+        log.info("=== Doc Type Splitter Completed: {} split documents created ===",
+                splitDocumentVars.size());
         log.info("Split documents: {}", splitDocumentVars);
     }
 
