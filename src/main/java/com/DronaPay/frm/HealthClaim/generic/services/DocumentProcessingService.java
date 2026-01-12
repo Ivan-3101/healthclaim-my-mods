@@ -7,14 +7,12 @@ import org.cibseven.bpm.engine.variable.value.FileValue;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.InputStream;
 import java.util.*;
 
 @Slf4j
 public class DocumentProcessingService {
 
-    /**
-     * Process documents and upload to object storage with stage-based folder structure
-     */
     public static Map<String, String> processAndUploadDocuments(
             Object docsObject, String tenantId, String workflowKey, String ticketId,
             int stageNumber, String stageName) {
@@ -38,7 +36,6 @@ public class DocumentProcessingService {
 
                 byte[] fileContent = Base64.getDecoder().decode(base64Content);
 
-                // Build stage-based storage path
                 String storagePath = String.format("%s/%s/%s/%d_%s/%s",
                         tenantId, workflowKey, ticketId, stageNumber, stageName, filename);
 
@@ -58,9 +55,6 @@ public class DocumentProcessingService {
         return documentPaths;
     }
 
-    /**
-     * Process documents WITHOUT uploading (for backward compatibility)
-     */
     public static Map<String, FileValue> processDocuments(Object docsObject) {
         Map<String, FileValue> fileMap = new HashMap<>();
 
@@ -99,9 +93,6 @@ public class DocumentProcessingService {
         return fileMap;
     }
 
-    /**
-     * Download document as FileValue from storage
-     */
     public static FileValue downloadDocumentAsFileValue(String filename, String storagePath, String tenantId) throws Exception {
         StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
 
@@ -114,9 +105,6 @@ public class DocumentProcessingService {
                 .create();
     }
 
-    /**
-     * Get document as base64 from storage
-     */
     public static String getDocumentAsBase64(String filename, Map<String, String> documentPaths, String tenantId) throws Exception {
         String storagePath = documentPaths.get(filename);
         if (storagePath == null) {
@@ -130,9 +118,6 @@ public class DocumentProcessingService {
         return Base64.getEncoder().encodeToString(fileContent);
     }
 
-    /**
-     * Initialize file process map
-     */
     public static Map<String, Map<String, Object>> initializeFileProcessMap(Set<String> filenames) {
         Map<String, Map<String, Object>> fileProcessMap = new HashMap<>();
 
@@ -144,9 +129,6 @@ public class DocumentProcessingService {
         return fileProcessMap;
     }
 
-    /**
-     * Convert docs variable to list
-     */
     private static List<Map<String, Object>> convertToDocsList(Object docsObject) {
         List<Map<String, Object>> docsList = new ArrayList<>();
 

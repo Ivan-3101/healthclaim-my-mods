@@ -11,9 +11,6 @@ import java.util.Map;
 @Slf4j
 public class AgentResultStorageService {
 
-    /**
-     * Store agent result with stage-based folder structure
-     */
     public static String storeAgentResultStageWise(String tenantId, String ticketId,
                                                    String filename, String agentId,
                                                    Map<String, Object> result,
@@ -25,7 +22,6 @@ public class AgentResultStorageService {
                 ? filename.replaceAll("[^a-zA-Z0-9.-]", "_")
                 : "consolidated";
 
-        // Build stage-based storage path
         String storagePath = String.format("%s/HealthClaim/%s/%d_%s/%s_%s.json",
                 tenantId, ticketId, stageNumber, stageName, agentId, safeFilename);
 
@@ -39,9 +35,12 @@ public class AgentResultStorageService {
         return storagePath;
     }
 
-    /**
-     * Build result map
-     */
+    public static String storeAgentResultStageWise(String tenantId, String ticketId,
+                                                   String filename, String agentId,
+                                                   Map<String, Object> result) throws Exception {
+        return storeAgentResultStageWise(tenantId, ticketId, filename, agentId, result, 99, agentId);
+    }
+
     public static Map<String, Object> buildResultMap(String agentId, int statusCode, String rawResponse, Map<String, Object> extractedData) {
         Map<String, Object> result = new HashMap<>();
         result.put("agentId", agentId);
@@ -53,9 +52,6 @@ public class AgentResultStorageService {
         return result;
     }
 
-    /**
-     * Retrieve agent result from MinIO
-     */
     public static Map<String, Object> retrieveAgentResult(String tenantId, String minioPath) throws Exception {
         StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
 

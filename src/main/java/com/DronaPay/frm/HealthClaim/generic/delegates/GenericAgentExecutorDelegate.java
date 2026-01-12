@@ -1,5 +1,6 @@
 package com.DronaPay.frm.HealthClaim.generic.delegates;
 
+import java.sql.Connection;
 import com.DronaPay.frm.HealthClaim.APIServices;
 import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
 import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
@@ -15,7 +16,6 @@ import org.cibseven.bpm.engine.delegate.JavaDelegate;
 import org.json.JSONObject;
 
 import java.io.InputStream;
-import java.sql.Connection;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -51,10 +51,9 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
         String tenantId = execution.getTenantId();
 
-        // Get stage info
         Integer stageCounter = (Integer) execution.getVariable("stageCounter");
         if (stageCounter == null) {
-            stageCounter = 2; // Default if not set
+            stageCounter = 2;
         }
 
         String stageName = execution.getCurrentActivityName();
@@ -70,10 +69,15 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
 
         JSONObject config = agentConfig.getJSONObject("config");
 
-        JSONObject workflowConfig = ConfigurationService.getWorkflowConfiguration(tenantId, "HealthClaim");
+        Connection conn = execution.getProcessEngine()
+                .getProcessEngineConfiguration()
+                .getDataSource()
+                .getConnection();
+
+        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
+        conn.close();
 
         JSONObject requestBody = buildRequest(config, execution, filename, tenantId, agentId);
-
         log.debug("Calling agent '{}' with request body size: {} bytes", displayName, requestBody.toString().length());
 
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
@@ -88,7 +92,6 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         processAndStoreResponse(agentId, displayName, statusCode, resp, config,
                 execution, filename, critical, tenantId, ticketId, stageCounter, stageName);
 
-        // Increment stage counter for next agent
         execution.setVariable("stageCounter", stageCounter + 1);
 
         log.info("=== Generic Agent Executor Completed for {} ===", displayName);

@@ -21,15 +21,12 @@ public class GenericIDGeneratorDelegate implements JavaDelegate {
         String tenantId = execution.getTenantId();
         String processInstanceId = execution.getProcessInstanceId();
 
-        // 1. Generate Ticket ID from database sequence
         long ticketId = generateTicketID(execution, processInstanceId);
         execution.setVariable("TicketID", ticketId);
         log.info("Generated TicketID: {}", ticketId);
 
-        // 2. Initialize stage counter
         execution.setVariable("stageCounter", 1);
 
-        // 3. Get current activity name for stage
         String stageName = execution.getCurrentActivityName();
         if (stageName == null || stageName.isEmpty()) {
             stageName = "Generate_TicketID_and_Workflow_Name";
@@ -37,33 +34,26 @@ public class GenericIDGeneratorDelegate implements JavaDelegate {
             stageName = stageName.replaceAll("[^a-zA-Z0-9]+", "_");
         }
 
-        // 4. Get workflow key
         String workflowKey = "HealthClaim";
 
-        // 5. Process documents and upload to object storage with stage info
         Object docsObject = execution.getVariable("docs");
         Map<String, String> documentPaths = DocumentProcessingService.processAndUploadDocuments(
                 docsObject, tenantId, workflowKey, String.valueOf(ticketId), 1, stageName
         );
 
-        // 6. Set document paths for multi-instance loop
         List<String> attachmentVars = new ArrayList<>(documentPaths.keySet());
         execution.setVariable("attachmentVars", attachmentVars);
         log.info("Set {} attachments for processing: {}", attachmentVars.size(), attachmentVars);
 
-        // 7. Store document paths map for later retrieval
         execution.setVariable("documentPaths", documentPaths);
         log.debug("Document paths: {}", documentPaths);
 
-        // 8. Initialize file process map
         Map<String, Map<String, Object>> fileProcessMap =
                 DocumentProcessingService.initializeFileProcessMap(documentPaths.keySet());
         execution.setVariable("fileProcessMap", fileProcessMap);
 
-        // 9. Increment stage counter for next stage
         execution.setVariable("stageCounter", 2);
 
-        // 10. Load tenant-specific expiry duration
         try {
             Properties props = ConfigurationService.getTenantProperties(tenantId);
             String expiryDuration = props.getProperty("expiry.duration", "24h");
