@@ -12,6 +12,7 @@ import org.apache.http.util.EntityUtils;
 import org.cibseven.bpm.engine.delegate.BpmnError;
 import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.InputStream;
@@ -39,7 +40,6 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         String displayName = agentConfig.getString("displayName");
         boolean enabled = agentConfig.optBoolean("enabled", true);
         boolean critical = agentConfig.optBoolean("critical", false);
-        int agentOrder = agentConfig.optInt("order", 99);
 
         log.info("=== Generic Agent Executor Started for {} ({}) ===", displayName, agentId);
 
@@ -52,7 +52,17 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
         String tenantId = execution.getTenantId();
 
+        Connection conn = execution.getProcessEngine()
+                .getProcessEngineConfiguration()
+                .getDataSource()
+                .getConnection();
+
+        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
+
+        int agentOrder = getAgentOrderFromConfig(workflowConfig, agentId);
         int stageNumber = agentOrder + 1;
+
+        conn.close();
 
         String stageName = execution.getCurrentActivityName();
         if (stageName == null || stageName.isEmpty()) {
@@ -66,14 +76,6 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         }
 
         JSONObject config = agentConfig.getJSONObject("config");
-
-        Connection conn = execution.getProcessEngine()
-                .getProcessEngineConfiguration()
-                .getDataSource()
-                .getConnection();
-
-        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
-        conn.close();
 
         JSONObject requestBody = buildRequest(config, execution, filename, tenantId, agentId);
 
@@ -92,6 +94,23 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
                 execution, filename, critical, tenantId, ticketId, stageNumber, stageName);
 
         log.info("=== Generic Agent Executor Completed for {} ===", displayName);
+    }
+
+    private int getAgentOrderFromConfig(JSONObject workflowConfig, String agentId) {
+        try {
+            if (workflowConfig.has("agents")) {
+                JSONArray agents = workflowConfig.getJSONArray("agents");
+                for (int i = 0; i < agents.length(); i++) {
+                    JSONObject agent = agents.getJSONObject(i);
+                    if (agent.getString("agentId").equals(agentId)) {
+                        return agent.getInt("order");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get agent order from config for {}, using default", agentId, e);
+        }
+        return 99;
     }
 
     @SuppressWarnings("unchecked")
