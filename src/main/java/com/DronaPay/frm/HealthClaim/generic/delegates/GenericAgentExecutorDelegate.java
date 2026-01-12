@@ -92,7 +92,12 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         processAndStoreResponse(agentId, displayName, statusCode, resp, config,
                 execution, filename, critical, tenantId, ticketId, stageCounter, stageName);
 
-        execution.setVariable("stageCounter", stageCounter + 1);
+        // Only increment stage counter for non-document agents (consolidated processing)
+// For document agents in multi-instance loop, keep same stage number
+        if (filename == null) {
+            execution.setVariable("stageCounter", stageCounter + 1);
+            log.debug("Incremented stage counter to {} (non-document agent)", stageCounter + 1);
+        }
 
         log.info("=== Generic Agent Executor Completed for {} ===", displayName);
     }
