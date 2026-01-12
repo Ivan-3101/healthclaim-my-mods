@@ -1,10 +1,7 @@
 package com.DronaPay.frm.HealthClaim;
 
-import com.DronaPay.frm.HealthClaim.generic.config.WorkflowStageMapping;
+import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
 import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
-import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
-import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
-import com.DronaPay.frm.HealthClaim.generic.utils.StoragePathBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.util.EntityUtils;
@@ -13,12 +10,24 @@ import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
 import org.json.JSONObject;
 
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.util.HashMap;
-import java.util.Properties;
+import java.util.Map;
 
+/**
+ * FHIR Analyser Delegate
+ *
+ * Calls the FHIR_Analyser agent with the consolidated FHIR request.
+ *
+ * Input: Consolidated FHIR request from MinIO (built by FHIRConsolidatorDelegate)
+ * Output: FHIR analysis response with validation checks and recommendations
+ *
+ * Stores the response in MinIO and sets process variables:
+ * - claimStatus: Overall claim status (Approved/Review Required/Rejected)
+ * - claimSummary: Summary of the analysis
+ * - validationChecks: JSON array of validation results
+ * - finalRecommendation: Final recommendation from the agent
+ */
 @Slf4j
 public class FHIRAnalyserDelegate implements JavaDelegate {
 
@@ -28,26 +37,19 @@ public class FHIRAnalyserDelegate implements JavaDelegate {
 
         String tenantId = execution.getTenantId();
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
-        String workflowKey = StoragePathBuilder.getWorkflowType(execution);
-        String taskName = StoragePathBuilder.getTaskName(execution);
-        int stageNumber = WorkflowStageMapping.getStageNumber(workflowKey, taskName);
 
-        if (stageNumber == -1) {
-            log.warn("Stage number not found for task '{}', using previous + 1", taskName);
-            stageNumber = StoragePathBuilder.getStageNumber(execution) + 1;
-        }
+        log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
 
-        execution.setVariable("stageNumber", stageNumber);
-        log.info("Stage {}: {} - TicketID: {}, TenantID: {}", stageNumber, taskName, ticketId, tenantId);
-
+        // 1. Load workflow configuration
         Connection conn = execution.getProcessEngine()
                 .getProcessEngineConfiguration()
                 .getDataSource()
                 .getConnection();
 
-        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig(workflowKey, tenantId, conn);
+        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
         conn.close();
 
+        // 2. Get consolidated FHIR request from MinIO (not from process variable - too large)
         String consolidatorMinioPath = (String) execution.getVariable("fhirConsolidatorMinioPath");
 
         if (consolidatorMinioPath == null || consolidatorMinioPath.trim().isEmpty()) {
@@ -57,10 +59,9 @@ public class FHIRAnalyserDelegate implements JavaDelegate {
 
         log.info("Retrieving consolidated FHIR request from MinIO: {}", consolidatorMinioPath);
 
-        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
-        InputStream stream = storage.downloadDocument(consolidatorMinioPath);
-        byte[] content = stream.readAllBytes();
-        String consolidatedRequest = new String(content, StandardCharsets.UTF_8);
+        // Retrieve from MinIO
+        Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, consolidatorMinioPath);
+        String consolidatedRequest = (String) result.get("apiResponse");  // KEY FIX: retrieveAgentResult maps to "apiResponse"
 
         if (consolidatedRequest == null || consolidatedRequest.trim().isEmpty()) {
             log.error("Empty consolidated request retrieved from MinIO");
@@ -69,6 +70,7 @@ public class FHIRAnalyserDelegate implements JavaDelegate {
 
         log.info("Retrieved consolidated FHIR request ({} bytes) from MinIO", consolidatedRequest.length());
 
+        // 3. Call FHIR_Analyser agent
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
         CloseableHttpResponse response = apiServices.callAgent(consolidatedRequest);
 
@@ -80,69 +82,74 @@ public class FHIRAnalyserDelegate implements JavaDelegate {
 
         if (statusCode != 200) {
             log.error("FHIR_Analyser agent failed with status: {}", statusCode);
-            throw new BpmnError("fhirAnalyserFailed", "FHIR_Analyser agent failed with status: " + statusCode);
+            throw new BpmnError("fhirAnalyserFailed",
+                    "FHIR_Analyser agent failed with status: " + statusCode);
         }
 
-        // Store result using NEW MinIO structure
-        Properties props = ConfigurationService.getTenantProperties(tenantId);
-        String rootFolder = props.getProperty("storage.minio.bucketName", "insurance-claims");
+        // 4. Store result in MinIO
+        Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
+                "FHIR_Analyser", statusCode, resp, new HashMap<>());
 
-        JSONObject result = new JSONObject();
-        result.put("agentId", "FHIR_Analyser");
-        result.put("statusCode", statusCode);
-        result.put("success", true);
-        result.put("rawResponse", resp);
-        result.put("extractedData", new HashMap<>());
-        result.put("timestamp", System.currentTimeMillis());
+        String analyserMinioPath = AgentResultStorageService.storeAgentResultStageWise(
+                tenantId, ticketId, "consolidated", "FHIR_Analyser", fullResult);
 
-        byte[] resultContent = result.toString(2).getBytes(StandardCharsets.UTF_8);
-        String outputFilename = "consolidated.json";
+        log.info("Stored FHIR_Analyser result at: {}", analyserMinioPath);
 
-        String storagePath = StoragePathBuilder.buildTaskDocsPath(
-                rootFolder, tenantId, workflowKey, ticketId,
-                stageNumber, taskName, outputFilename
-        );
-
-        storage.uploadDocument(storagePath, resultContent, "application/json");
-        log.info("Stored FHIR_Analyser result at: {}", storagePath);
-
+        // 5. Extract key fields from response and set as process variables
         extractAndSetProcessVariables(execution, resp);
 
-        execution.setVariable("fhirAnalyserMinioPath", storagePath);
+        // 6. Set MinIO path for reference
+        execution.setVariable("fhirAnalyserMinioPath", analyserMinioPath);
         execution.setVariable("fhirAnalyserSuccess", true);
 
         log.info("=== FHIR Analyser Completed ===");
     }
 
+    /**
+     * Extract key fields from FHIR Analyser response and set as process variables
+     */
     private void extractAndSetProcessVariables(DelegateExecution execution, String response) {
         try {
             JSONObject responseJson = new JSONObject(response);
 
-            if (responseJson.has("answer")) {
-                JSONObject answer = responseJson.getJSONObject("answer");
+            // Extract claim_status
+            if (responseJson.has("claim_status")) {
+                String claimStatus = responseJson.getString("claim_status");
+                execution.setVariable("claimStatus", claimStatus);
+                log.info("Claim Status: {}", claimStatus);
+            }
 
-                if (answer.has("claim_status")) {
-                    execution.setVariable("claimStatus", answer.getString("claim_status"));
-                    log.info("Claim Status: {}", answer.getString("claim_status"));
-                }
+            // Extract claim_summary
+            if (responseJson.has("claim_summary")) {
+                String claimSummary = responseJson.getString("claim_summary");
+                execution.setVariable("claimSummary", claimSummary);
+                log.info("Claim Summary: {}", claimSummary);
+            }
 
-                if (answer.has("claim_summary")) {
-                    String summary = answer.getString("claim_summary");
-                    if (summary.length() > 3500) {
-                        summary = summary.substring(0, 3500);
-                    }
-                    execution.setVariable("claimSummary", summary);
-                    log.info("Claim Summary: {} chars", summary.length());
-                }
+            // Extract validation_checks (as JSON string)
+            if (responseJson.has("validation_checks")) {
+                String validationChecks = responseJson.getJSONArray("validation_checks").toString(2);
+                execution.setVariable("validationChecks", validationChecks);
+                log.debug("Validation Checks: {}", validationChecks);
+            }
 
-                if (answer.has("final_recommendation")) {
-                    execution.setVariable("finalRecommendation", answer.getString("final_recommendation"));
-                    log.info("Final Recommendation: {}", answer.getString("final_recommendation"));
-                }
+            // Extract final_recommendation
+            if (responseJson.has("final_recommendation")) {
+                String finalRecommendation = responseJson.getString("final_recommendation");
+                execution.setVariable("finalRecommendation", finalRecommendation);
+                log.info("Final Recommendation: {}", finalRecommendation);
+            }
+
+            // Extract sequenced_groups (as JSON string)
+            if (responseJson.has("sequenced_groups")) {
+                String sequencedGroups = responseJson.getJSONArray("sequenced_groups").toString(2);
+                execution.setVariable("sequencedGroups", sequencedGroups);
+                log.debug("Sequenced Groups: {}", sequencedGroups);
             }
 
         } catch (Exception e) {
             log.error("Error extracting process variables from FHIR Analyser response", e);
+            // Don't throw - we've stored the full response in MinIO
         }
     }
 }

@@ -1,10 +1,7 @@
 package com.DronaPay.frm.HealthClaim;
 
-import com.DronaPay.frm.HealthClaim.generic.config.WorkflowStageMapping;
+import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
 import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
-import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
-import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
-import com.DronaPay.frm.HealthClaim.generic.utils.StoragePathBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.util.EntityUtils;
@@ -13,11 +10,9 @@ import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
 import org.json.JSONObject;
 
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.util.HashMap;
-import java.util.Properties;
+import java.util.Map;
 
 @Slf4j
 public class UIDisplayerDelegate implements JavaDelegate {
@@ -28,58 +23,47 @@ public class UIDisplayerDelegate implements JavaDelegate {
 
         String tenantId = execution.getTenantId();
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
-        String workflowKey = StoragePathBuilder.getWorkflowType(execution);
-        String taskName = StoragePathBuilder.getTaskName(execution);
-        int stageNumber = WorkflowStageMapping.getStageNumber(workflowKey, taskName);
 
-        if (stageNumber == -1) {
-            stageNumber = StoragePathBuilder.getStageNumber(execution) + 1;
-        }
+        log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
 
-        execution.setVariable("stageNumber", stageNumber);
-        log.info("Stage {}: {} - TicketID: {}, TenantID: {}", stageNumber, taskName, ticketId, tenantId);
-
+        // 1. Load workflow configuration
         Connection conn = execution.getProcessEngine()
                 .getProcessEngineConfiguration()
                 .getDataSource()
                 .getConnection();
 
-        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig(workflowKey, tenantId, conn);
+        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
         conn.close();
 
+        // 2. Get consolidated FHIR request from MinIO
         String consolidatorMinioPath = (String) execution.getVariable("fhirConsolidatorMinioPath");
 
         if (consolidatorMinioPath == null || consolidatorMinioPath.trim().isEmpty()) {
+            log.error("No fhirConsolidatorMinioPath found in process variables");
             throw new BpmnError("uiDisplayerFailed", "Missing fhirConsolidatorMinioPath");
         }
 
         log.info("Retrieving consolidated FHIR request from MinIO: {}", consolidatorMinioPath);
 
-        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
-        InputStream stream = storage.downloadDocument(consolidatorMinioPath);
-        byte[] content = stream.readAllBytes();
-        String jsonString = new String(content, StandardCharsets.UTF_8);
+        // Retrieve from MinIO
+        Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, consolidatorMinioPath);
+        String consolidatedRequest = (String) result.get("apiResponse");
 
-        JSONObject consolidatedJson = new JSONObject(jsonString);
-
-        // Send the data object with doc_fhir array directly to the agent
-        JSONObject requestToAgent = new JSONObject();
-        requestToAgent.put("agentid", "UI_Displayer");
-
-        if (consolidatedJson.has("data")) {
-            JSONObject dataObj = consolidatedJson.getJSONObject("data");
-            requestToAgent.put("data", dataObj);
-
-            int docCount = dataObj.has("doc_fhir") ? dataObj.getJSONArray("doc_fhir").length() : 0;
-            log.info("Sending {} doc_fhir entries to UI_Displayer agent", docCount);
-        } else {
-            log.error("No data field in consolidated JSON");
-            throw new BpmnError("uiDisplayerFailed", "Invalid consolidated JSON structure");
+        if (consolidatedRequest == null || consolidatedRequest.trim().isEmpty()) {
+            log.error("Empty consolidated request retrieved from MinIO");
+            throw new BpmnError("uiDisplayerFailed", "Empty consolidated FHIR request in MinIO");
         }
 
-        String modifiedRequest = requestToAgent.toString();
-        log.info("Calling UI_Displayer API with doc_fhir data ({} bytes)", modifiedRequest.length());
+        log.info("Retrieved consolidated FHIR request ({} bytes) from MinIO", consolidatedRequest.length());
 
+        // 3. Change agentid to UI_Displayer
+        JSONObject requestJson = new JSONObject(consolidatedRequest);
+        requestJson.put("agentid", "UI_Displayer");
+        String modifiedRequest = requestJson.toString();
+
+        log.info("Modified agentid to UI_Displayer");
+
+        // 4. Call UI_Displayer agent
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
         CloseableHttpResponse response = apiServices.callAgent(modifiedRequest);
 
@@ -90,32 +74,23 @@ public class UIDisplayerDelegate implements JavaDelegate {
         log.debug("UI_Displayer API response: {}", resp);
 
         if (statusCode != 200) {
-            throw new BpmnError("uiDisplayerFailed", "UI_Displayer agent failed with status: " + statusCode);
+            log.error("UI_Displayer agent failed with status: {}", statusCode);
+            execution.setVariable("uiDisplayerSuccess", false);
+            log.warn("=== UI Displayer Completed with Error ===");
+            return;
         }
 
-        // Store result
-        Properties props = ConfigurationService.getTenantProperties(tenantId);
-        String rootFolder = props.getProperty("storage.minio.bucketName", "insurance-claims");
+        // 5. Store result in MinIO
+        Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
+                "UI_Displayer", statusCode, resp, new HashMap<>());
 
-        JSONObject result = new JSONObject();
-        result.put("agentId", "UI_Displayer");
-        result.put("statusCode", statusCode);
-        result.put("success", true);
-        result.put("rawResponse", resp);
-        result.put("extractedData", new HashMap<>());
-        result.put("timestamp", System.currentTimeMillis());
+        String uiDisplayerMinioPath = AgentResultStorageService.storeAgentResultStageWise(
+                tenantId, ticketId, "consolidated", "UI_Displayer", fullResult);
 
-        byte[] resultContent = result.toString(2).getBytes(StandardCharsets.UTF_8);
+        log.info("Stored UI_Displayer result at: {}", uiDisplayerMinioPath);
 
-        String storagePath = StoragePathBuilder.buildTaskDocsPath(
-                rootFolder, tenantId, workflowKey, ticketId,
-                stageNumber, taskName, "consolidated.json"
-        );
-
-        storage.uploadDocument(storagePath, resultContent, "application/json");
-        log.info("Stored UI_Displayer result at: {}", storagePath);
-
-        execution.setVariable("uiDisplayerMinioPath", storagePath);
+        // 6. Set MinIO path for reference
+        execution.setVariable("uiDisplayerMinioPath", uiDisplayerMinioPath);
         execution.setVariable("uiDisplayerSuccess", true);
 
         log.info("=== UI Displayer Completed ===");

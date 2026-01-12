@@ -1,20 +1,22 @@
 package com.DronaPay.frm.HealthClaim;
 
-import com.DronaPay.frm.HealthClaim.generic.config.WorkflowStageMapping;
-import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
-import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
-import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
-import com.DronaPay.frm.HealthClaim.generic.utils.StoragePathBuilder;
+import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
 import lombok.extern.slf4j.Slf4j;
 import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
+/**
+ * FHIR Consolidator Delegate - SIMPLIFIED VERSION
+ *
+ * Fetches ocrToStatic results directly from MinIO using predictable paths.
+ * No need for fileProcessMap.
+ */
 @Slf4j
 public class FHIRConsolidatorDelegate implements JavaDelegate {
 
@@ -24,135 +26,124 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
 
         String tenantId = execution.getTenantId();
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
-        String workflowKey = StoragePathBuilder.getWorkflowType(execution);
-        String taskName = StoragePathBuilder.getTaskName(execution);
-        int stageNumber = WorkflowStageMapping.getStageNumber(workflowKey, taskName);
 
-        if (stageNumber == -1) {
-            stageNumber = StoragePathBuilder.getStageNumber(execution) + 1;
-        }
+        log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
 
-        execution.setVariable("stageNumber", stageNumber);
-        log.info("Stage {}: {} - TicketID: {}, TenantID: {}", stageNumber, taskName, ticketId, tenantId);
-
+        // Get list of processed files
+        @SuppressWarnings("unchecked")
         List<String> splitDocumentVars = (List<String>) execution.getVariable("splitDocumentVars");
 
         if (splitDocumentVars == null || splitDocumentVars.isEmpty()) {
-            throw new RuntimeException("No split documents found for FHIR consolidation");
+            log.error("No split documents found");
+            throw new RuntimeException("No documents to consolidate");
         }
 
-        Properties props = ConfigurationService.getTenantProperties(tenantId);
-        String rootFolder = props.getProperty("storage.minio.bucketName", "insurance-claims");
-        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+        log.info("Processing {} documents for FHIR consolidation", splitDocumentVars.size());
 
-        // Build doc_fhir array by reading OCR_to_Static outputs from MinIO
-        JSONArray docFhirArray = new JSONArray();
-
-        // OCR_to_Static is stage 7
-        int ocrToStaticStage = 7;
-        String ocrToStaticTaskName = "OCR_to_Static";
+        // Build consolidated doc_fhir array
+        List<Object> docFhirList = new ArrayList<>();
+        int successCount = 0;
+        int failCount = 0;
 
         for (String filename : splitDocumentVars) {
+            log.debug("Processing file: {}", filename);
+
+            // Construct MinIO path directly (predictable pattern)
+            // Pattern: {tenantId}/HealthClaim/{ticketId}/results/ocrToStatic/{filename}.json
+            String minioPath = String.format("%s/HealthClaim/%s/results/ocrToStatic/%s.json",
+                    tenantId, ticketId, filename);
+
             try {
-                // Build MinIO path for OCR_to_Static output
-                String jsonFilename = filename.replace(".pdf", ".json");
-                String minioPath = StoragePathBuilder.buildTaskDocsPath(
-                        rootFolder, tenantId, workflowKey, ticketId,
-                        ocrToStaticStage, ocrToStaticTaskName, jsonFilename
-                );
+                // Retrieve ocrToStatic result from MinIO
+                Map<String, Object> result =
+                        AgentResultStorageService.retrieveAgentResult(tenantId, minioPath);
 
-                log.debug("Reading OCR_to_Static output from: {}", minioPath);
-
-                // Download and parse
-                InputStream stream = storage.downloadDocument(minioPath);
-                byte[] content = stream.readAllBytes();
-                String jsonString = new String(content, StandardCharsets.UTF_8);
-
-                JSONObject storedResult = new JSONObject(jsonString);
-
-                if (!storedResult.has("rawResponse")) {
-                    log.warn("No rawResponse in OCR_to_Static result for {}", filename);
+                String rawResponse = (String) result.get("apiResponse");  // KEY FIX: It's "apiResponse" not "rawResponse"
+                if (rawResponse == null || rawResponse.trim().isEmpty()) {
+                    log.error("Empty apiResponse for file: {}, skipping", filename);
+                    failCount++;
                     continue;
                 }
 
-                String rawResponse = storedResult.getString("rawResponse");
                 JSONObject responseJson = new JSONObject(rawResponse);
 
+                // Extract answer object
                 if (!responseJson.has("answer")) {
-                    log.warn("No 'answer' field in rawResponse for {}", filename);
+                    log.warn("No 'answer' field in ocrToStatic response for: {}", filename);
+                    failCount++;
                     continue;
                 }
 
-                Object answerObj = responseJson.get("answer");
+                JSONObject answer = responseJson.getJSONObject("answer");
 
-                // Handle two formats:
-                // Format 1: {"answer": {"doc_type": "...", "field1": "...", ...}}
-                // Format 2: {"answer": {"response": [{"doc_type": "...", "fields": {...}}, ...]}}
-
-                if (answerObj instanceof JSONObject) {
-                    JSONObject answer = (JSONObject) answerObj;
-
-                    if (answer.has("response") && answer.get("response") instanceof JSONArray) {
-                        // Format 2: Multiple documents in response array
-                        JSONArray responseArray = answer.getJSONArray("response");
-                        for (int i = 0; i < responseArray.length(); i++) {
-                            JSONObject docItem = responseArray.getJSONObject(i);
-                            docFhirArray.put(docItem);
-                            log.debug("Added FHIR doc from {} (format 2): {}", filename, docItem.optString("doc_type", "unknown"));
-                        }
-                    } else {
-                        // Format 1: Single document with fields at root level
-                        docFhirArray.put(answer);
-                        log.debug("Added FHIR doc from {} (format 1): {}", filename, answer.optString("doc_type", "unknown"));
+                // Handle both formats: {response: [...]} or {doc_type: "...", ...}
+                if (answer.has("response")) {
+                    // Format 1: {answer: {response: [...]}}
+                    JSONArray responseArray = answer.getJSONArray("response");
+                    for (int i = 0; i < responseArray.length(); i++) {
+                        docFhirList.add(responseArray.get(i));
                     }
+                } else {
+                    // Format 2: {answer: {doc_type: "...", fields: {...}}}
+                    docFhirList.add(answer);
                 }
 
+                successCount++;
+                log.info("Successfully processed ocrToStatic output from: {}", filename);
+
             } catch (Exception e) {
-                log.error("Failed to read OCR_to_Static output for {}: {}", filename, e.getMessage());
+                log.error("Error processing ocrToStatic output for file: {}", filename, e);
+                failCount++;
             }
         }
 
-        log.info("Built doc_fhir array with {} documents", docFhirArray.length());
+        log.info("FHIR consolidation complete: {} successful, {} failed", successCount, failCount);
 
-        // Build consolidated request in the format UI_Displayer expects
+        if (docFhirList.isEmpty()) {
+            log.error("No valid ocrToStatic outputs found for consolidation");
+            throw new RuntimeException("FHIR consolidation produced no results");
+        }
+
+        // Build final consolidated request
         JSONObject consolidatedRequest = new JSONObject();
+        JSONObject data = new JSONObject();
+        data.put("doc_fhir", new JSONArray(docFhirList));
+        consolidatedRequest.put("data", data);
         consolidatedRequest.put("agentid", "FHIR_Analyser");
 
-        JSONObject data = new JSONObject();
-        data.put("doc_fhir", docFhirArray);
-        data.put("consolidatedAt", System.currentTimeMillis());
-        data.put("totalDocuments", docFhirArray.length());
-
-        consolidatedRequest.put("data", data);
-
-        log.info("Consolidated FHIR request with {} doc_fhir entries", docFhirArray.length());
+        String consolidatedJson = consolidatedRequest.toString(2);
+        log.info("Consolidated FHIR request ({} bytes) ready for FHIR_Analyser",
+                consolidatedJson.length());
 
         // Store consolidated request in MinIO
-        String minioPath = storeConsolidatedRequest(tenantId, ticketId, workflowKey,
-                stageNumber, taskName, consolidatedRequest);
+        String minioPath = storeConsolidatedRequest(tenantId, ticketId, consolidatedRequest);
 
-        // ONLY store MinIO path, NOT the JSON content (too large for process variables)
+        // CRITICAL: Don't set the large JSON as process variable (exceeds varchar(4000) limit)
+        // Instead, just store the MinIO path
         execution.setVariable("fhirConsolidatorMinioPath", minioPath);
 
         log.info("=== FHIR Consolidator Completed ===");
     }
 
-    private String storeConsolidatedRequest(String tenantId, String ticketId, String workflowKey,
-                                            int stageNumber, String taskName,
+    /**
+     * Store consolidated FHIR request in MinIO
+     * @return MinIO path where the consolidated request was stored
+     */
+    private String storeConsolidatedRequest(String tenantId, String ticketId,
                                             JSONObject consolidatedRequest) {
         try {
-            StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
-            Properties props = ConfigurationService.getTenantProperties(tenantId);
-            String rootFolder = props.getProperty("storage.minio.bucketName", "insurance-claims");
+            Map<String, Object> resultMap = new java.util.HashMap<>();
+            resultMap.put("agentId", "fhirConsolidator");
+            resultMap.put("statusCode", 200);
+            resultMap.put("success", true);
+            resultMap.put("rawResponse", consolidatedRequest.toString());
+            resultMap.put("extractedData", new java.util.HashMap<>());
+            resultMap.put("timestamp", System.currentTimeMillis());
 
-            byte[] content = consolidatedRequest.toString(2).getBytes(StandardCharsets.UTF_8);
-
-            String minioPath = StoragePathBuilder.buildUserProcessedPath(
-                    rootFolder, tenantId, workflowKey, ticketId,
-                    stageNumber, taskName, "consolidated.json"
+            // Store in stage-wise structure
+            String minioPath = AgentResultStorageService.storeAgentResultStageWise(
+                    tenantId, ticketId, "consolidated", "fhirConsolidator", resultMap
             );
-
-            storage.uploadDocument(minioPath, content, "application/json");
 
             log.info("Stored consolidated FHIR request at: {}", minioPath);
             return minioPath;

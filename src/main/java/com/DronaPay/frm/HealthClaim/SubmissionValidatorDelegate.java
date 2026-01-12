@@ -1,10 +1,7 @@
 package com.DronaPay.frm.HealthClaim;
 
-import com.DronaPay.frm.HealthClaim.generic.config.WorkflowStageMapping;
+import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
 import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
-import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
-import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
-import com.DronaPay.frm.HealthClaim.generic.utils.StoragePathBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.util.EntityUtils;
@@ -14,13 +11,21 @@ import org.cibseven.bpm.engine.delegate.JavaDelegate;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Properties;
 
+/**
+ * Submission Validator Delegate
+ *
+ * Calls the Submission_Validator agent with the consolidated FHIR request.
+ *
+ * Input: Consolidated FHIR request from MinIO (built by FHIRConsolidatorDelegate)
+ * Output: Missing documents list
+ *
+ * Stores the response in MinIO and sets process variables:
+ * - missingDocuments: JSON array of missing document types
+ */
 @Slf4j
 public class SubmissionValidatorDelegate implements JavaDelegate {
 
@@ -30,26 +35,19 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
 
         String tenantId = execution.getTenantId();
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
-        String workflowKey = StoragePathBuilder.getWorkflowType(execution);
-        String taskName = StoragePathBuilder.getTaskName(execution);
-        int stageNumber = WorkflowStageMapping.getStageNumber(workflowKey, taskName);
 
-        if (stageNumber == -1) {
-            log.warn("Stage number not found for task '{}', using previous + 1", taskName);
-            stageNumber = StoragePathBuilder.getStageNumber(execution) + 1;
-        }
+        log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
 
-        execution.setVariable("stageNumber", stageNumber);
-        log.info("Stage {}: {} - TicketID: {}, TenantID: {}", stageNumber, taskName, ticketId, tenantId);
-
+        // 1. Load workflow configuration
         Connection conn = execution.getProcessEngine()
                 .getProcessEngineConfiguration()
                 .getDataSource()
                 .getConnection();
 
-        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig(workflowKey, tenantId, conn);
+        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
         conn.close();
 
+        // 2. Get consolidated FHIR request from MinIO
         String consolidatorMinioPath = (String) execution.getVariable("fhirConsolidatorMinioPath");
 
         if (consolidatorMinioPath == null || consolidatorMinioPath.trim().isEmpty()) {
@@ -59,23 +57,25 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
 
         log.info("Retrieving consolidated FHIR request from MinIO: {}", consolidatorMinioPath);
 
-        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
-        InputStream stream = storage.downloadDocument(consolidatorMinioPath);
-        byte[] content = stream.readAllBytes();
-        String jsonString = new String(content, StandardCharsets.UTF_8);
+        // Retrieve from MinIO
+        Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, consolidatorMinioPath);
+        String consolidatedRequest = (String) result.get("apiResponse");
 
-        JSONObject consolidatedJson = new JSONObject(jsonString);
-        consolidatedJson.put("agentid", "Submission_Validator");
-        String modifiedRequest = consolidatedJson.toString();
-
-        if (modifiedRequest == null || modifiedRequest.trim().isEmpty()) {
+        if (consolidatedRequest == null || consolidatedRequest.trim().isEmpty()) {
             log.error("Empty consolidated request retrieved from MinIO");
             throw new BpmnError("submissionValidatorFailed", "Empty consolidated FHIR request in MinIO");
         }
 
-        log.info("Retrieved consolidated FHIR request ({} bytes) from MinIO", modifiedRequest.length());
+        log.info("Retrieved consolidated FHIR request ({} bytes) from MinIO", consolidatedRequest.length());
+
+        // 3. Change agentid to Submission_Validator
+        JSONObject requestJson = new JSONObject(consolidatedRequest);
+        requestJson.put("agentid", "Submission_Validator");
+        String modifiedRequest = requestJson.toString();
+
         log.info("Modified agentid to Submission_Validator");
 
+        // 4. Call Submission_Validator agent
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
         CloseableHttpResponse response = apiServices.callAgent(modifiedRequest);
 
@@ -87,44 +87,37 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
 
         if (statusCode != 200) {
             log.error("Submission_Validator agent failed with status: {}", statusCode);
-            throw new BpmnError("submissionValidatorFailed", "Submission_Validator agent failed with status: " + statusCode);
+            throw new BpmnError("submissionValidatorFailed",
+                    "Submission_Validator agent failed with status: " + statusCode);
         }
 
-        // Store result using NEW MinIO structure
-        Properties props = ConfigurationService.getTenantProperties(tenantId);
-        String rootFolder = props.getProperty("storage.minio.bucketName", "insurance-claims");
+        // 5. Store result in MinIO
+        Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
+                "Submission_Validator", statusCode, resp, new HashMap<>());
 
-        JSONObject result = new JSONObject();
-        result.put("agentId", "Submission_Validator");
-        result.put("statusCode", statusCode);
-        result.put("success", true);
-        result.put("rawResponse", resp);
-        result.put("extractedData", new HashMap<>());
-        result.put("timestamp", System.currentTimeMillis());
+        String validatorMinioPath = AgentResultStorageService.storeAgentResultStageWise(
+                tenantId, ticketId, "consolidated", "Submission_Validator", fullResult);
 
-        byte[] resultContent = result.toString(2).getBytes(StandardCharsets.UTF_8);
-        String outputFilename = "consolidated.json";
+        log.info("Stored Submission_Validator result at: {}", validatorMinioPath);
 
-        String storagePath = StoragePathBuilder.buildTaskDocsPath(
-                rootFolder, tenantId, workflowKey, ticketId,
-                stageNumber, taskName, outputFilename
-        );
-
-        storage.uploadDocument(storagePath, resultContent, "application/json");
-        log.info("Stored Submission_Validator result at: {}", storagePath);
-
+        // 6. Extract missing documents and set as process variable
         extractAndSetProcessVariables(execution, resp);
 
-        execution.setVariable("submissionValidatorMinioPath", storagePath);
+        // 7. Set MinIO path for reference
+        execution.setVariable("submissionValidatorMinioPath", validatorMinioPath);
         execution.setVariable("submissionValidatorSuccess", true);
 
         log.info("=== Submission Validator Completed ===");
     }
 
+    /**
+     * Extract missing documents from Submission Validator response and set as process variable
+     */
     private void extractAndSetProcessVariables(DelegateExecution execution, String response) {
         try {
             JSONObject responseJson = new JSONObject(response);
 
+            // Extract answer.missing_documents
             if (responseJson.has("answer")) {
                 JSONObject answer = responseJson.getJSONObject("answer");
 
@@ -138,6 +131,7 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
 
         } catch (Exception e) {
             log.error("Error extracting process variables from Submission Validator response", e);
+            // Don't throw - we've stored the full response in MinIO
         }
     }
 }

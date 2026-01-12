@@ -1,15 +1,13 @@
 package com.DronaPay.frm.HealthClaim;
 
-import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
-import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
+import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
 import lombok.extern.slf4j.Slf4j;
 import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 @Slf4j
 public class LoadUIFieldsDelegate implements JavaDelegate {
@@ -29,21 +27,9 @@ public class LoadUIFieldsDelegate implements JavaDelegate {
 
         log.info("Retrieving UI_Displayer output from: {}", uiDisplayerMinioPath);
 
-        // Download and parse directly
-        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
-        InputStream stream = storage.downloadDocument(uiDisplayerMinioPath);
-        byte[] content = stream.readAllBytes();
-        String jsonString = new String(content, StandardCharsets.UTF_8);
-
-        JSONObject stored = new JSONObject(jsonString);
-
-        if (!stored.has("rawResponse")) {
-            log.error("No rawResponse in UI_Displayer result");
-            execution.setVariable("uiFieldsJson", "[]");
-            return;
-        }
-
-        String rawResponse = stored.getString("rawResponse");
+        // Retrieve from MinIO
+        Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, uiDisplayerMinioPath);
+        String rawResponse = (String) result.get("apiResponse");
 
         if (rawResponse == null || rawResponse.trim().isEmpty()) {
             log.error("Empty UI_Displayer response from MinIO");

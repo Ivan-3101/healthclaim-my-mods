@@ -1,65 +1,66 @@
 package com.DronaPay.frm.HealthClaim.listeners;
 
-import com.DronaPay.frm.HealthClaim.generic.config.WorkflowStageMapping;
-import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
-import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
-import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
-import com.DronaPay.frm.HealthClaim.generic.utils.StoragePathBuilder;
+import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
 import lombok.extern.slf4j.Slf4j;
 import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.ExecutionListener;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.Properties;
+import java.util.HashMap;
+import java.util.Map;
 
 @Slf4j
 public class SaveEditedFormListener implements ExecutionListener {
 
     @Override
     public void notify(DelegateExecution execution) throws Exception {
-        log.info("=== Saving Edited Form ===");
+        String action = (String) execution.getVariable("Action");
+
+        // Only save on approval
+        if (!"approve".equalsIgnoreCase(action)) {
+            log.info("Action is not approve, skipping edited form save");
+            return;
+        }
+
+        String ticketId = String.valueOf(execution.getVariable("TicketID"));
+        String tenantId = execution.getTenantId();
+
+        log.info("=== Execution Listener: Saving Edited Form for Ticket {} ===", ticketId);
 
         try {
-            String tenantId = execution.getTenantId();
-            String ticketId = String.valueOf(execution.getVariable("TicketID"));
-            String workflowKey = StoragePathBuilder.getWorkflowType(execution);
-
-            // Load original UI display data from MinIO
-            String originalMinioPath = (String) execution.getVariable("uiDisplayerMinioPath");
-
-            if (originalMinioPath == null || originalMinioPath.trim().isEmpty()) {
-                log.warn("No uiDisplayerMinioPath found, skipping edit save");
+            // 1. Get original UI_Displayer output from MinIO
+            String uiDisplayerMinioPath = (String) execution.getVariable("uiDisplayerMinioPath");
+            if (uiDisplayerMinioPath == null || uiDisplayerMinioPath.trim().isEmpty()) {
+                log.warn("No uiDisplayerMinioPath found, cannot save edited form");
                 return;
             }
 
-            StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
-            InputStream stream = storage.downloadDocument(originalMinioPath);
-            byte[] originalBytes = stream.readAllBytes();
-            String originalContent = new String(originalBytes, StandardCharsets.UTF_8);
+            log.info("Retrieving original UI_Displayer output from: {}", uiDisplayerMinioPath);
 
-            JSONObject originalResponse = new JSONObject(originalContent);
+            Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, uiDisplayerMinioPath);
+            String originalResponse = (String) result.get("apiResponse");
 
-            if (!originalResponse.has("rawResponse")) {
-                log.warn("No rawResponse in original UI displayer data");
+            if (originalResponse == null || originalResponse.trim().isEmpty()) {
+                log.error("Empty original UI_Displayer response from MinIO");
                 return;
             }
 
-            String rawResponse = originalResponse.getString("rawResponse");
-            JSONObject responseJson = new JSONObject(rawResponse);
-            JSONArray originalAnswer = responseJson.getJSONArray("answer");
+            // 2. Parse original response
+            JSONObject originalJson = new JSONObject(originalResponse);
+            JSONArray answerArray = originalJson.getJSONArray("answer");
+            JSONArray updatedArray = new JSONArray();
 
-            // Read edited values from process variables and update
             int updatedCount = 0;
-            JSONArray updatedAnswer = new JSONArray();
 
-            for (int i = 0; i < originalAnswer.length(); i++) {
-                JSONObject field = originalAnswer.getJSONObject(i);
+            // 3. Update ALL fields with edited values from process variables
+            for (int i = 0; i < answerArray.length(); i++) {
+                JSONObject field = answerArray.getJSONObject(i);
                 String fieldName = field.getString("field_name");
 
-                // Get variable name for this field
+                JSONObject updatedField = new JSONObject(field.toString());
+
+                // Get edited value for ALL fields
                 String varName = "ui_" + fieldName
                         .toLowerCase()
                         .replaceAll("[^a-z0-9]", "_")
@@ -68,70 +69,54 @@ public class SaveEditedFormListener implements ExecutionListener {
 
                 Object editedValue = execution.getVariable(varName);
 
-                JSONObject updatedField = new JSONObject(field.toString());
-
                 if (editedValue != null) {
-                    String originalValue = field.opt("value") != null ?
-                            field.opt("value").toString() : "";
+                    String originalValue = field.opt("value") != null ? field.opt("value").toString() : "";
                     String newValue = editedValue.toString();
 
+                    // Update value
                     updatedField.put("value", newValue);
-                    updatedField.put("edited", true);
+                    updatedField.put("user_edited", true);
                     updatedField.put("original_value", originalValue);
 
+                    // Track if actually changed (including null -> value)
                     if (!originalValue.equals(newValue)) {
                         updatedCount++;
                         log.info("Field '{}' updated: '{}' -> '{}'", fieldName,
-                                originalValue, newValue);
+                                originalValue.isEmpty() ? "[empty]" : originalValue, newValue);
                     }
                 } else {
-                    updatedField.put("edited", false);
+                    // Keep original value for fields not edited
+                    updatedField.put("user_edited", false);
                 }
 
-                updatedAnswer.put(updatedField);
+                updatedArray.put(updatedField);
             }
 
-            if (updatedCount == 0) {
-                log.info("No fields were modified, skipping save");
-                return;
-            }
-
-            // Build updated response JSON
-            JSONObject updatedResponseData = new JSONObject();
-            updatedResponseData.put("answer", updatedAnswer);
-
+            // 4. Build updated response JSON
             JSONObject updatedResponse = new JSONObject();
-            updatedResponse.put("agentId", "UI_Displayer");
-            updatedResponse.put("statusCode", 200);
-            updatedResponse.put("success", true);
-            updatedResponse.put("rawResponse", updatedResponseData.toString());
-            updatedResponse.put("extractedData", originalResponse.opt("extractedData"));
-            updatedResponse.put("timestamp", System.currentTimeMillis());
-            updatedResponse.put("version", "edited");
+            updatedResponse.put("agentid", "UI_Displayer");
+            updatedResponse.put("answer", updatedArray);
+            updatedResponse.put("version", "v2_edited");
+            updatedResponse.put("edited_timestamp", System.currentTimeMillis());
+            updatedResponse.put("ticket_id", ticketId);
             updatedResponse.put("fields_updated_count", updatedCount);
 
-            // Store in MinIO using stage-based structure
-            String taskName = "Activity_UIDisplayer";
-            int stageNumber = WorkflowStageMapping.getStageNumber(workflowKey, taskName);
+            // 5. Store in MinIO - SAME folder as UI_Displayer, different filename
+            Map<String, Object> updatedResult = new HashMap<>();
+            updatedResult.put("agentId", "UI_Displayer");
+            updatedResult.put("statusCode", 200);
+            updatedResult.put("apiResponse", updatedResponse.toString());
+            updatedResult.put("version", "v2");
+            updatedResult.put("timestamp", System.currentTimeMillis());
 
-            if (stageNumber == -1) {
-                stageNumber = 11;
-            }
+            // Store with agentId="UI_Displayer" and stage="edited"
+            // This creates: {tenantId}/HealthClaim/{ticketId}/results/UI_Displayer/edited.json
+            String editedPath = AgentResultStorageService.storeAgentResultStageWise(
+                    tenantId, ticketId, "edited", "UI_Displayer", updatedResult);
 
-            Properties props = ConfigurationService.getTenantProperties(tenantId);
-            String rootFolder = props.getProperty("storage.minio.bucketName", "insurance-claims");
+            log.info("Stored edited form at: {} (same folder as original)", editedPath);
 
-            byte[] content = updatedResponse.toString(2).getBytes(StandardCharsets.UTF_8);
-
-            String editedPath = StoragePathBuilder.buildTaskDocsPath(
-                    rootFolder, tenantId, workflowKey, ticketId,
-                    stageNumber, taskName, "edited.json"
-            );
-
-            storage.uploadDocument(editedPath, content, "application/json");
-
-            log.info("Stored edited form at: {}", editedPath);
-
+            // 6. Set process variable for reference
             execution.setVariable("editedFormMinioPath", editedPath);
             execution.setVariable("fieldsUpdatedCount", updatedCount);
 
@@ -140,6 +125,7 @@ public class SaveEditedFormListener implements ExecutionListener {
         } catch (Exception e) {
             log.error("Error in SaveEditedFormListener", e);
             execution.setVariable("editedFormSaveError", e.getMessage());
+            // Don't throw - let workflow continue even if save fails
         }
     }
 }

@@ -1,10 +1,8 @@
 package com.DronaPay.frm.HealthClaim;
 
-import com.DronaPay.frm.HealthClaim.generic.config.WorkflowStageMapping;
 import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
 import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
 import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
-import com.DronaPay.frm.HealthClaim.generic.utils.StoragePathBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -22,9 +20,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.util.Base64;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.Properties;
 
 @Slf4j
 public class OCROnDoc implements JavaDelegate {
@@ -36,26 +32,6 @@ public class OCROnDoc implements JavaDelegate {
         String filename = (String) execution.getVariable("attachment");
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
         String tenantId = execution.getTenantId();
-        String workflowKey = StoragePathBuilder.getWorkflowType(execution);
-        String taskName = StoragePathBuilder.getTaskName(execution);
-        int stageNumber = WorkflowStageMapping.getStageNumber(workflowKey, taskName);
-
-        if (stageNumber == -1) {
-            log.warn("Stage number not found for task '{}', using previous stageNumber", taskName);
-            stageNumber = StoragePathBuilder.getStageNumber(execution);
-            if (stageNumber == -1) {
-                stageNumber = 6; // Default OCR stage
-            }
-        }
-
-        // Set stageNumber ONLY if it's not already at this stage (for multi-instance loops)
-        Integer currentStage = (Integer) execution.getVariable("stageNumber");
-        if (currentStage == null || currentStage != stageNumber) {
-            execution.setVariable("stageNumber", stageNumber);
-            log.info("Set stage number to {}: {} - Processing file: {}", stageNumber, taskName, filename);
-        } else {
-            log.info("Stage {}: {} - Processing file: {}", stageNumber, taskName, filename);
-        }
 
         @SuppressWarnings("unchecked")
         Map<String, String> documentPaths = (Map<String, String>) execution.getVariable("documentPaths");
@@ -65,50 +41,68 @@ public class OCROnDoc implements JavaDelegate {
         }
 
         String storagePath = documentPaths.get(filename);
+        log.info("Processing file: {} from path: {}", filename, storagePath);
 
-        // Extract doctype from filename
+        // Extract doctype from filename (e.g., diagnostic_report.pdf -> diagnostic_report)
         String doctype = filename.substring(0, filename.lastIndexOf("."));
+        log.info("Extracted doctype: {}", doctype);
 
-        // Load workflow config
+        // Download document from MinIO
+        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+        byte[] pdfBytes;
+        try (InputStream fileContent = storage.downloadDocument(storagePath)) {
+            pdfBytes = IOUtils.toByteArray(fileContent);
+        }
+
+        // Convert to base64
+        String base64Content = Base64.getEncoder().encodeToString(pdfBytes);
+        log.info("Converted document to base64 ({} bytes)", pdfBytes.length);
+
+        // Get AI agent URL from database
         Connection conn = execution.getProcessEngine()
                 .getProcessEngineConfiguration()
                 .getDataSource()
                 .getConnection();
-        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig(workflowKey, tenantId, conn);
+
+        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
         conn.close();
 
-        // Download file from storage
-        StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
-        InputStream fileContent = storage.downloadDocument(storagePath);
-        byte[] bytes = IOUtils.toByteArray(fileContent);
-        String base64 = Base64.getEncoder().encodeToString(bytes);
+        if (!workflowConfig.has("externalAPIs")) {
+            throw new RuntimeException("externalAPIs not configured in database for tenant: " + tenantId);
+        }
 
-        // Build request
-        JSONObject data = new JSONObject();
-        data.put("base64_img", base64);
-
-        JSONObject requestBody = new JSONObject();
-        requestBody.put("data", data);
-        requestBody.put("agentid", "openaiVision");
-
-        log.info("Calling openaiVision agent for {}", filename);
-
-        // Call API
         JSONObject externalAPIs = workflowConfig.getJSONObject("externalAPIs");
+        if (!externalAPIs.has("agentAPI")) {
+            throw new RuntimeException("agentAPI not configured in externalAPIs for tenant: " + tenantId);
+        }
+
         JSONObject agentAPI = externalAPIs.getJSONObject("agentAPI");
-        String baseUrl = agentAPI.getString("baseUrl");
+        String agentApiUrl = agentAPI.getString("baseUrl");
         String username = agentAPI.getString("username");
         String password = agentAPI.getString("password");
 
-        URI apiUri = new URI(baseUrl + "/agent");
+        log.info("Using agent API URL: {}", agentApiUrl);
 
+        // Build request body - CHANGED: doctype -> doc_type
+        JSONObject requestBody = new JSONObject();
+        JSONObject data = new JSONObject();
+        data.put("base64_img", base64Content);
+        data.put("doc_type", doctype); // CHANGED: was "doctype"
+        requestBody.put("data", data);
+        requestBody.put("agentid", "openaiVision");
+
+        log.info("Calling openaiVision agent for doc_type: {}", doctype);
+
+        // Call agent using Apache HttpClient
         CloseableHttpClient httpClient = HttpClients.createDefault();
-        HttpPost httpPost = new HttpPost(apiUri);
+        HttpPost httpPost = new HttpPost(new URI(agentApiUrl + "/agent"));
         httpPost.setHeader("Content-Type", "application/json");
 
+        // Add Basic Auth
         String auth = username + ":" + password;
         String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
         httpPost.setHeader("Authorization", "Basic " + encodedAuth);
+
         httpPost.setEntity(new StringEntity(requestBody.toString(), StandardCharsets.UTF_8));
 
         CloseableHttpResponse response = httpClient.execute(httpPost);
@@ -124,50 +118,12 @@ public class OCROnDoc implements JavaDelegate {
 
         log.info("Received response from openaiVision agent (status: {})", statusCode);
 
-        // Store result in NEW MinIO structure
-        Properties props = ConfigurationService.getTenantProperties(tenantId);
-        String rootFolder = props.getProperty("storage.minio.bucketName", "insurance-claims");
+        // Save response JSON to MinIO as {doctype}.json
+        String outputPath = tenantId + "/HealthClaim/" + ticketId + "/ocr/" + doctype + ".json";
+        byte[] jsonBytes = responseBody.getBytes(StandardCharsets.UTF_8);
+        storage.uploadDocument(outputPath, jsonBytes, "application/json");
 
-        JSONObject result = new JSONObject();
-        result.put("agentId", "openaiVision");
-        result.put("statusCode", statusCode);
-        result.put("success", true);
-        result.put("rawResponse", responseBody);
-        result.put("extractedData", new HashMap<>());
-        result.put("timestamp", System.currentTimeMillis());
-
-        byte[] content = result.toString(2).getBytes(StandardCharsets.UTF_8);
-        String outputFilename = doctype + ".json";
-
-        String outputPath = StoragePathBuilder.buildTaskDocsPath(
-                rootFolder, tenantId, workflowKey, ticketId,
-                stageNumber, taskName, outputFilename
-        );
-
-        storage.uploadDocument(outputPath, content, "application/json");
         log.info("Saved OCR result to: {}", outputPath);
-
-        // Update fileProcessMap
-        @SuppressWarnings("unchecked")
-        Map<String, Map<String, Object>> fileProcessMap =
-                (Map<String, Map<String, Object>>) execution.getVariable("fileProcessMap");
-
-        if (fileProcessMap == null) {
-            fileProcessMap = new HashMap<>();
-        }
-
-        Map<String, Object> fileResults = fileProcessMap.getOrDefault(filename, new HashMap<>());
-
-        Map<String, Object> agentResult = new HashMap<>();
-        agentResult.put("statusCode", statusCode);
-        agentResult.put("apiCall", "Success");
-        agentResult.put("extractedData", new HashMap<>());
-        agentResult.put("rawResponse", responseBody);
-
-        fileResults.put("openaiVision", agentResult);
-        fileProcessMap.put(filename, fileResults);
-        execution.setVariable("fileProcessMap", fileProcessMap);
-
         log.info("=== OCR on Documents Completed for {} ===", filename);
     }
 }
