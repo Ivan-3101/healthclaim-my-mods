@@ -87,7 +87,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         log.info("Agent '{}' API status: {}", displayName, statusCode);
         log.debug("Agent '{}' response: {}", displayName, resp);
 
-        // 6. Process response, extract data, and store in MinIO (BOTH locations)
+        // 6. Process response, extract data, and store in MinIO
         processAndStoreResponse(agentId, displayName, statusCode, resp, config,
                 execution, filename, critical, tenantId, ticketId);
 
@@ -169,7 +169,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
     }
 
     /**
-     * Process agent response, extract data, and store in MinIO (BOTH locations)
+     * Process agent response, extract data, and store in MinIO
      */
     @SuppressWarnings("unchecked")
     private void processAndStoreResponse(String agentId, String displayName, int statusCode, String resp,
@@ -196,7 +196,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
                         Object value = responseJson.optQuery(jsonPath);
 
                         if (value != null) {
-// Apply transformation
+                            // Apply transformation
                             if (transformationFn.equals("mapSuspiciousToBoolean")) {
                                 // value is JSONObject with pages: {"1": {...}, "2": {...}}
                                 boolean isForged = false;
@@ -261,13 +261,19 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
             }
         }
 
-        // Store full result in MinIO (stage-wise only)
+        // Store full result in MinIO
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 agentId, statusCode, resp, extractedData);
 
-        // Store in stage-wise location only - no more duplication
-        String minioPath = AgentResultStorageService.storeAgentResultStageWise(
-                tenantId, ticketId, filename, agentId, fullResult);
+        // CHANGED: Retrieve stage folder name, default to agentId if not present
+        String stageFolder = (String) execution.getVariable("currentStageFolder");
+        if (stageFolder == null) {
+            stageFolder = agentId; // Fallback to old behavior
+        }
+
+        // Store in stage-wise location only
+        String minioPath = AgentResultStorageService.storeAgentResultInStage(
+                tenantId, ticketId, filename, stageFolder, fullResult);
 
         log.info("Stored full result for '{}' in MinIO at: {}", agentId, minioPath);
 

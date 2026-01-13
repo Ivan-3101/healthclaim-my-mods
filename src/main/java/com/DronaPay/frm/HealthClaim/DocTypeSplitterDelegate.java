@@ -196,8 +196,9 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
                 }
 
                 // Upload to MinIO
+                // CHANGED: Use "5_DocTypeSplitter" instead of "split"
                 String splitStoragePath = tenantId + "/HealthClaim/" + ticketId +
-                        "/split/" + splitFilename;
+                        "/5_DocTypeSplitter/" + splitFilename;
                 storage.uploadDocument(splitStoragePath, pdfBytes, "application/pdf");
 
                 splitDocumentVars.add(splitFilename);

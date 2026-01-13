@@ -48,6 +48,9 @@ public class IdentifyForgedDocuments implements JavaDelegate {
 
         execution.setVariable("currentAgentConfig", agentConfig);
 
+        // CHANGED: Set specific stage folder name
+        execution.setVariable("currentStageFolder", "3_Identify_forged_documents");
+
         genericDelegate.execute(execution);
 
         log.debug("IdentifyForgedDocuments completed via generic delegate");

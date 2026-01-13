@@ -31,8 +31,11 @@ public class GenericIDGeneratorDelegate implements JavaDelegate {
 
         // 3. Process documents and upload to object storage
         Object docsObject = execution.getVariable("docs");
+
+        // CHANGED: Added stage name parameter
         Map<String, String> documentPaths = DocumentProcessingService.processAndUploadDocuments(
-                docsObject, tenantId, workflowKey, String.valueOf(ticketId)
+                docsObject, tenantId, workflowKey, String.valueOf(ticketId),
+                "1_Generate_TicketID_and_Workflow_Name"
         );
 
         // 4. Set document paths for multi-instance loop

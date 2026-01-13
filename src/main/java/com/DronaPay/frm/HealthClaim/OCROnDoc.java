@@ -83,11 +83,11 @@ public class OCROnDoc implements JavaDelegate {
 
         log.info("Using agent API URL: {}", agentApiUrl);
 
-        // Build request body - CHANGED: doctype -> doc_type
+        // Build request body
         JSONObject requestBody = new JSONObject();
         JSONObject data = new JSONObject();
         data.put("base64_img", base64Content);
-        data.put("doc_type", doctype); // CHANGED: was "doctype"
+        data.put("doc_type", doctype);
         requestBody.put("data", data);
         requestBody.put("agentid", "openaiVision");
 
@@ -118,8 +118,9 @@ public class OCROnDoc implements JavaDelegate {
 
         log.info("Received response from openaiVision agent (status: {})", statusCode);
 
-        // Save response JSON to MinIO as {doctype}.json
-        String outputPath = tenantId + "/HealthClaim/" + ticketId + "/ocr/" + doctype + ".json";
+        // Save response JSON to MinIO
+        // CHANGED: Use "6_Doing_OCR_on_Documents" instead of "ocr"
+        String outputPath = tenantId + "/HealthClaim/" + ticketId + "/6_Doing_OCR_on_Documents/" + doctype + ".json";
         byte[] jsonBytes = responseBody.getBytes(StandardCharsets.UTF_8);
         storage.uploadDocument(outputPath, jsonBytes, "application/json");
 
