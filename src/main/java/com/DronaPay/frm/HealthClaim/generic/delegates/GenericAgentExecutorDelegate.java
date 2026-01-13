@@ -184,10 +184,11 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         Map<String, Object> extractedData = new HashMap<>();
 
         if (statusCode == 200) {
+            JSONObject responseJson = new JSONObject(resp);
+
             JSONObject outputMapping = config.optJSONObject("outputMapping");
             if (outputMapping != null && outputMapping.has("variablesToSet")) {
                 JSONObject variablesToSet = outputMapping.getJSONObject("variablesToSet");
-                JSONObject responseJson = new JSONObject(resp);
 
                 for (String variableName : variablesToSet.keySet()) {
                     JSONObject mapping = variablesToSet.getJSONObject(variableName);
@@ -228,6 +229,13 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
                     }
                 }
             }
+
+            if (responseJson.has("answer")) {
+                Object answerData = responseJson.get("answer");
+                extractedData.put(agentId, answerData);
+                log.debug("Stored raw answer from '{}' in extractedData", agentId);
+            }
+
         } else {
             log.error("Agent '{}' failed with status: {}", displayName, statusCode);
 
