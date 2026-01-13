@@ -55,7 +55,7 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
         for (String filename : documentPaths.keySet()) {
             log.debug("Processing file: {}", filename);
 
-            // Construct path to Stage 7
+            // Read from "7_OCR_to_Static"
             String ocrStaticPath = String.format("%s/HealthClaim/%s/7_OCR_to_Static/%s.json",
                     tenantId, ticketId, filename);
 
@@ -68,31 +68,37 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
                 JSONObject storedResult = new JSONObject(jsonContent);
                 JSONObject answerObj = null;
 
-                // The wrapper typically has "apiResponse" or "rawResponse" as a JSON STRING
-                String innerJsonStr = null;
-
-                if (storedResult.has("apiResponse")) {
-                    Object val = storedResult.get("apiResponse");
-                    if (val instanceof String) innerJsonStr = (String) val;
-                    else if (val instanceof JSONObject) answerObj = getAnswerFromObj((JSONObject) val);
-                } else if (storedResult.has("rawResponse")) {
-                    // Fallback to rawResponse if apiResponse is missing (unlikely with standardized storage)
-                    innerJsonStr = storedResult.getString("rawResponse");
-                }
-
-                // If we found a string, parse it to get the inner object
-                if (innerJsonStr != null) {
+                // Case 1: Check 'rawResponse' (matches your file structure)
+                if (storedResult.has("rawResponse")) {
+                    String rawRespStr = storedResult.getString("rawResponse");
                     try {
-                        JSONObject innerObj = new JSONObject(innerJsonStr);
-                        answerObj = getAnswerFromObj(innerObj);
+                        JSONObject rawResp = new JSONObject(rawRespStr);
+                        if (rawResp.has("answer")) {
+                            answerObj = rawResp.getJSONObject("answer");
+                        }
                     } catch (Exception e) {
-                        log.warn("Failed to parse inner JSON string for file {}: {}", filename, e.getMessage());
+                        log.warn("Failed to parse rawResponse string for file {}: {}", filename, e.getMessage());
                     }
                 }
 
-                // Fallback: Check if 'answer' is at the root of the stored result
-                if (answerObj == null && storedResult.has("answer")) {
-                    answerObj = storedResult.getJSONObject("answer");
+                // Case 2: Check 'apiResponse' (AgentResultStorageService standard)
+                if (answerObj == null && storedResult.has("apiResponse")) {
+                    Object apiResponseObj = storedResult.get("apiResponse");
+                    if (apiResponseObj instanceof String) {
+                        try {
+                            JSONObject apiResp = new JSONObject((String) apiResponseObj);
+                            if (apiResp.has("answer")) {
+                                answerObj = apiResp.getJSONObject("answer");
+                            }
+                        } catch (Exception e) {
+                            log.warn("Failed to parse apiResponse string for file {}: {}", filename, e.getMessage());
+                        }
+                    } else if (apiResponseObj instanceof JSONObject) {
+                        JSONObject apiResp = (JSONObject) apiResponseObj;
+                        if (apiResp.has("answer")) {
+                            answerObj = apiResp.getJSONObject("answer");
+                        }
+                    }
                 }
 
                 if (answerObj != null) {
@@ -110,8 +116,7 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
 
         if (fhirBundles.isEmpty()) {
             log.warn("No FHIR bundles found to consolidate");
-            // Graceful exit for now, as throwing error halts process.
-            // In production, this might warrant a BpmnError.
+            // Graceful exit?
         }
 
         // 3. Prepare Request for Consolidator Agent
@@ -145,16 +150,10 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
         // 6. Set Process Variable (extracting answer for next step)
         JSONObject respJson = new JSONObject(resp);
         if (respJson.has("answer")) {
-            // Store as string to avoid serialization issues with complex objects
             execution.setVariable("consolidatedFhir", respJson.getJSONObject("answer").toString());
         }
 
         execution.setVariable("fhirConsolidatorMinioPath", storedPath);
         log.info("FHIR Consolidation completed. Stored at: {}", storedPath);
-    }
-
-    private JSONObject getAnswerFromObj(JSONObject obj) {
-        if (obj.has("answer")) return obj.getJSONObject("answer");
-        return null;
     }
 }

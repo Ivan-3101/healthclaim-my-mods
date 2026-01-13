@@ -43,7 +43,8 @@ public class FHIRAnalyserDelegate implements JavaDelegate {
                 // retrieveAgentResult handles parsing the raw MinIO file
                 Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, path);
 
-                // AgentResultStorageService puts 'rawResponse' into 'apiResponse' or 'rawResponse'
+                // AgentResultStorageService usually puts 'rawResponse' into 'apiResponse' or 'rawResponse'
+                // But let's be safe and check both
                 String apiRespStr = (String) result.getOrDefault("apiResponse", result.get("rawResponse"));
 
                 if (apiRespStr != null) {
