@@ -55,7 +55,7 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
         for (String filename : documentPaths.keySet()) {
             log.debug("Processing file: {}", filename);
 
-            // Read from "7_OCR_to_Static"
+            // Construct path to Stage 7
             String ocrStaticPath = String.format("%s/HealthClaim/%s/7_OCR_to_Static/%s.json",
                     tenantId, ticketId, filename);
 
@@ -64,42 +64,33 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
                 InputStream stream = storage.downloadDocument(ocrStaticPath);
                 String jsonContent = IOUtils.toString(stream, StandardCharsets.UTF_8);
 
-                // Parse the MinIO file content
+                // Parse the MinIO file content (Wrapper JSON)
                 JSONObject storedResult = new JSONObject(jsonContent);
                 JSONObject answerObj = null;
 
-                // Priority Check 1: Check 'apiResponse' field (most common for AgentResultStorageService)
-                if (storedResult.has("apiResponse")) {
-                    Object apiResponseObj = storedResult.get("apiResponse");
+                // The wrapper typically has "apiResponse" or "rawResponse" as a JSON STRING
+                String innerJsonStr = null;
 
-                    if (apiResponseObj instanceof String) {
-                        // It's a JSON string, parse it!
-                        String apiRespStr = (String) apiResponseObj;
-                        // Clean up escaped quotes if necessary (though JSONObject handles standard JSON)
-                        try {
-                            JSONObject apiResp = new JSONObject(apiRespStr);
-                            if (apiResp.has("answer")) {
-                                answerObj = apiResp.getJSONObject("answer");
-                            }
-                        } catch (Exception e) {
-                            log.warn("Failed to parse apiResponse string for file {}: {}", filename, e.getMessage());
-                        }
-                    } else if (apiResponseObj instanceof JSONObject) {
-                        // It's already an object
-                        JSONObject apiResp = (JSONObject) apiResponseObj;
-                        if (apiResp.has("answer")) {
-                            answerObj = apiResp.getJSONObject("answer");
-                        }
+                if (storedResult.has("apiResponse")) {
+                    Object val = storedResult.get("apiResponse");
+                    if (val instanceof String) innerJsonStr = (String) val;
+                    else if (val instanceof JSONObject) answerObj = getAnswerFromObj((JSONObject) val);
+                } else if (storedResult.has("rawResponse")) {
+                    // Fallback to rawResponse if apiResponse is missing (unlikely with standardized storage)
+                    innerJsonStr = storedResult.getString("rawResponse");
+                }
+
+                // If we found a string, parse it to get the inner object
+                if (innerJsonStr != null) {
+                    try {
+                        JSONObject innerObj = new JSONObject(innerJsonStr);
+                        answerObj = getAnswerFromObj(innerObj);
+                    } catch (Exception e) {
+                        log.warn("Failed to parse inner JSON string for file {}: {}", filename, e.getMessage());
                     }
                 }
 
-                // Priority Check 2: Check 'extractedData'
-                if (answerObj == null && storedResult.has("extractedData") &&
-                        storedResult.getJSONObject("extractedData").has("answer")) {
-                    answerObj = storedResult.getJSONObject("extractedData").getJSONObject("answer");
-                }
-
-                // Priority Check 3: Check root 'answer'
+                // Fallback: Check if 'answer' is at the root of the stored result
                 if (answerObj == null && storedResult.has("answer")) {
                     answerObj = storedResult.getJSONObject("answer");
                 }
@@ -119,8 +110,8 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
 
         if (fhirBundles.isEmpty()) {
             log.warn("No FHIR bundles found to consolidate");
-            // Don't throw error immediately to allow flow to continue if designed to handle partial failures,
-            // but for now, if NO bundles are found, the next agent will likely fail anyway.
+            // Graceful exit for now, as throwing error halts process.
+            // In production, this might warrant a BpmnError.
         }
 
         // 3. Prepare Request for Consolidator Agent
@@ -148,7 +139,6 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "fhirConsolidator", statusCode, resp, new HashMap<>());
 
-        // Store in "8_FHIR_Consolidator"
         String storedPath = AgentResultStorageService.storeAgentResultInStage(
                 tenantId, ticketId, "consolidated_fhir", "8_FHIR_Consolidator", fullResult);
 
@@ -161,5 +151,10 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
 
         execution.setVariable("fhirConsolidatorMinioPath", storedPath);
         log.info("FHIR Consolidation completed. Stored at: {}", storedPath);
+    }
+
+    private JSONObject getAnswerFromObj(JSONObject obj) {
+        if (obj.has("answer")) return obj.getJSONObject("answer");
+        return null;
     }
 }

@@ -40,8 +40,12 @@ public class FHIRAnalyserDelegate implements JavaDelegate {
             }
 
             try {
+                // retrieveAgentResult handles parsing the raw MinIO file
                 Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, path);
-                String apiRespStr = (String) result.get("apiResponse");
+
+                // AgentResultStorageService puts 'rawResponse' into 'apiResponse' or 'rawResponse'
+                String apiRespStr = (String) result.getOrDefault("apiResponse", result.get("rawResponse"));
+
                 if (apiRespStr != null) {
                     JSONObject apiResp = new JSONObject(apiRespStr);
                     if (apiResp.has("answer")) {
@@ -94,7 +98,7 @@ public class FHIRAnalyserDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "fhirAnalyser", statusCode, resp, extractedData);
 
-        // CHANGED: Store in "9_FHIR_Analyser"
+        // Store in "9_FHIR_Analyser"
         String storedPath = AgentResultStorageService.storeAgentResultInStage(
                 tenantId, ticketId, "analysis", "9_FHIR_Analyser", fullResult);
 
