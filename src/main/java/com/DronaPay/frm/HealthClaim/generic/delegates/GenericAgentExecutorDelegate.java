@@ -17,9 +17,7 @@ import org.json.JSONObject;
 
 import java.io.InputStream;
 import java.sql.Connection;
-import java.util.Base64;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 @Slf4j
 public class GenericAgentExecutorDelegate implements JavaDelegate {
@@ -232,7 +230,8 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
 
             if (responseJson.has("answer")) {
                 Object answerData = responseJson.get("answer");
-                extractedData.put(agentId, answerData);
+                Object serializableAnswer = convertToSerializable(answerData);
+                extractedData.put(agentId, serializableAnswer);
                 log.debug("Stored raw answer from '{}' in extractedData", agentId);
             }
 
@@ -271,11 +270,6 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
 
             Map<String, Object> fileResults = fileProcessMap.getOrDefault(filename, new HashMap<>());
 
-            Map<String, Object> agentResult = new HashMap<>();
-            agentResult.put("statusCode", statusCode);
-            agentResult.put("minioPath", minioPath);
-            agentResult.put("apiCall", statusCode == 200 ? "success" : "failed");
-
             if (statusCode == 200) {
                 extractedData.forEach((key, value) -> {
                     if (!fileResults.containsKey(key) || fileResults.get(key) == null || fileResults.get(key).toString().isEmpty()) {
@@ -284,11 +278,36 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
                 });
             }
 
-            fileResults.put(agentId, agentResult);
+            Map<String, Object> agentMetadata = new HashMap<>();
+            agentMetadata.put("statusCode", statusCode);
+            agentMetadata.put("minioPath", minioPath);
+            agentMetadata.put("apiCall", statusCode == 200 ? "success" : "failed");
+            fileResults.put(agentId + "_metadata", agentMetadata);
+
             fileProcessMap.put(filename, fileResults);
             execution.setVariable("fileProcessMap", fileProcessMap);
 
             log.debug("Updated fileProcessMap for file: {}", filename);
+        }
+    }
+
+    private Object convertToSerializable(Object obj) {
+        if (obj instanceof JSONArray) {
+            JSONArray jsonArray = (JSONArray) obj;
+            List<Object> list = new ArrayList<>();
+            for (int i = 0; i < jsonArray.length(); i++) {
+                list.add(convertToSerializable(jsonArray.get(i)));
+            }
+            return list;
+        } else if (obj instanceof JSONObject) {
+            JSONObject jsonObject = (JSONObject) obj;
+            Map<String, Object> map = new HashMap<>();
+            for (String key : jsonObject.keySet()) {
+                map.put(key, convertToSerializable(jsonObject.get(key)));
+            }
+            return map;
+        } else {
+            return obj;
         }
     }
 
