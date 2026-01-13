@@ -106,11 +106,6 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
         List<String> splitDocumentVars = new ArrayList<>();
         StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
 
-        // --- FIX START: Create NEW maps to replace the old ones ---
-        Map<String, String> newDocumentPaths = new HashMap<>();
-        Map<String, Map<String, Object>> newFileProcessMap = new HashMap<>();
-        // --- FIX END ---
-
         for (Map.Entry<String, List<PageInfo>> entry : docTypePages.entrySet()) {
             String docType = entry.getKey();
             List<PageInfo> pages = entry.getValue();
@@ -174,8 +169,13 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
 
                 if (mergedDoc.getNumberOfPages() == 0) {
                     log.warn("No pages added for document type: {}, skipping", docType);
+                    // Close all open source documents
                     for (PDDocument doc : openDocs.values()) {
-                        try { doc.close(); } catch (Exception e) { log.warn("Error closing document", e); }
+                        try {
+                            doc.close();
+                        } catch (Exception e) {
+                            log.warn("Error closing document", e);
+                        }
                     }
                     continue;
                 }
@@ -188,20 +188,21 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
 
                 // NOW close all source documents
                 for (PDDocument doc : openDocs.values()) {
-                    try { doc.close(); } catch (Exception e) { log.warn("Error closing document", e); }
+                    try {
+                        doc.close();
+                    } catch (Exception e) {
+                        log.warn("Error closing document", e);
+                    }
                 }
 
                 // Upload to MinIO
                 String splitStoragePath = tenantId + "/HealthClaim/" + ticketId +
-                        "/5_DocTypeSplitter/" + splitFilename;
+                        "/split/" + splitFilename;
                 storage.uploadDocument(splitStoragePath, pdfBytes, "application/pdf");
 
                 splitDocumentVars.add(splitFilename);
-
-                // --- FIX START: Populate new maps instead of appending to old ones ---
-                newDocumentPaths.put(splitFilename, splitStoragePath);
-                newFileProcessMap.put(splitFilename, new HashMap<>());
-                // --- FIX END ---
+                documentPaths.put(splitFilename, splitStoragePath);
+                fileProcessMap.put(splitFilename, new HashMap<>());
 
                 log.info("Created split document: {} at {} ({} pages, {} bytes)",
                         splitFilename, splitStoragePath, mergedDoc.getNumberOfPages(),
@@ -218,11 +219,8 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
         }
 
         execution.setVariable("splitDocumentVars", splitDocumentVars);
-
-        // --- FIX START: Overwrite variables with new maps ---
-        execution.setVariable("documentPaths", newDocumentPaths);
-        execution.setVariable("fileProcessMap", newFileProcessMap);
-        // --- FIX END ---
+        execution.setVariable("documentPaths", documentPaths);
+        execution.setVariable("fileProcessMap", fileProcessMap);
 
         log.info("=== Doc Type Splitter Completed: {} split documents created ===",
                 splitDocumentVars.size());

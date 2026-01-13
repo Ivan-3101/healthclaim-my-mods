@@ -18,11 +18,10 @@ public class DocumentProcessingService {
      * @param tenantId - tenant ID
      * @param workflowKey - workflow key (e.g., "HealthClaim")
      * @param ticketId - ticket ID
-     * @param stageName - The stage folder name (e.g. "1_Generate_TicketID")
      * @return Map of filename -> storage path
      */
     public static Map<String, String> processAndUploadDocuments(
-            Object docsObject, String tenantId, String workflowKey, String ticketId, String stageName) {
+            Object docsObject, String tenantId, String workflowKey, String ticketId) {
 
         Map<String, String> documentPaths = new HashMap<>();
 
@@ -35,10 +34,10 @@ public class DocumentProcessingService {
             // Get storage provider
             StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
 
-            // Construct path with stageName manually
-            // Format: {tenantId}/{workflowKey}/{ticketId}/{stageName}/
-            String basePath = String.format("%s/%s/%s/%s/",
-                    tenantId, workflowKey, ticketId, stageName);
+            // Get path pattern from properties
+            Properties props = ConfigurationService.getTenantProperties(tenantId);
+            String pathPattern = props.getProperty("storage.pathPattern",
+                    "{tenantId}/{workflowKey}/{ticketId}/");
 
             // Convert docs to list
             List<Map<String, Object>> docsList = convertToDocsList(docsObject);
@@ -52,7 +51,9 @@ public class DocumentProcessingService {
                 byte[] fileContent = Base64.getDecoder().decode(base64Content);
 
                 // Build storage path
-                String storagePath = basePath + filename;
+                String storagePath = ObjectStorageService.buildStoragePath(
+                        pathPattern, tenantId, workflowKey, ticketId, filename
+                );
 
                 // Upload to storage
                 String documentUrl = storage.uploadDocument(storagePath, fileContent, mimetype);

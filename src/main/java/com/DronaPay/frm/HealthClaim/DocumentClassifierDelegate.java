@@ -55,9 +55,6 @@ public class DocumentClassifierDelegate implements JavaDelegate {
         // Set as current agent config
         execution.setVariable("currentAgentConfig", agentConfig);
 
-        // CHANGED: Set specific stage folder name
-        execution.setVariable("currentStageFolder", "4_Doc_Classifier");
-
         // Execute via generic delegate
         genericDelegate.execute(execution);
 

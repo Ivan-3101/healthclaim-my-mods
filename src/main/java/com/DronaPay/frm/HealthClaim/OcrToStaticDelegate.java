@@ -32,10 +32,8 @@ public class OcrToStaticDelegate implements JavaDelegate {
         log.info("=== OcrToStatic Started for file: {} ===", filename);
 
         // 1. Construct MinIO path where OCROnDoc stores results
-        // CHANGED: Read from "6_Doing_OCR_on_Documents" instead of "ocr"
         String filenameWithoutExt = filename.replace(".pdf", "");
-        String minioPath = String.format("%s/HealthClaim/%s/6_Doing_OCR_on_Documents/%s.json",
-                tenantId, ticketId, filenameWithoutExt);
+        String minioPath = String.format("%s/HealthClaim/%s/ocr/%s.json", tenantId, ticketId, filenameWithoutExt);
 
         log.info("Fetching openaiVision result from MinIO: {}", minioPath);
 
@@ -63,10 +61,10 @@ public class OcrToStaticDelegate implements JavaDelegate {
 
         log.info("Retrieved openaiVision answer with doc_type: {}", answer.optString("doc_type", "unknown"));
 
-        // 4. Build request for ocrToStatic
+        // 4. Build request for ocrToStatic - NOTE: lowercase 's' in agentid
         JSONObject requestBody = new JSONObject();
         requestBody.put("data", answer);
-        requestBody.put("agentid", "ocrTostatic");
+        requestBody.put("agentid", "ocrTostatic");  // ← CHANGED: lowercase 's'
 
         log.info("Calling ocrToStatic API with agentid: ocrTostatic");
         log.debug("Request body: {}", requestBody.toString());
@@ -89,9 +87,8 @@ public class OcrToStaticDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "ocrToStatic", statusCode, resp, new HashMap<>());
 
-        // CHANGED: Use storeAgentResultInStage with "7_OCR_to_Static"
-        String storedPath = AgentResultStorageService.storeAgentResultInStage(
-                tenantId, ticketId, filename, "7_OCR_to_Static", fullResult);
+        String storedPath = AgentResultStorageService.storeAgentResultStageWise(
+                tenantId, ticketId, filename, "ocrToStatic", fullResult);
 
         log.info("Stored ocrToStatic result at: {}", storedPath);
 

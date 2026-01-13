@@ -93,7 +93,7 @@ public class SaveFinalFormListener implements ExecutionListener {
             finalResponse.put("ticket_id", ticketId);
             finalResponse.put("fields_updated_count", updatedCount);
 
-            // 5. Store in MinIO - NEW stage folder
+            // 5. Store in MinIO - NEW "final" folder
             Map<String, Object> finalResult = new HashMap<>();
             finalResult.put("agentId", "final");
             finalResult.put("statusCode", 200);
@@ -101,9 +101,10 @@ public class SaveFinalFormListener implements ExecutionListener {
             finalResult.put("version", "v3");
             finalResult.put("timestamp", System.currentTimeMillis());
 
-            // CHANGED: Store in specific stage folder "15_Final_Review_Completed"
-            String finalPath = AgentResultStorageService.storeAgentResultInStage(
-                    tenantId, ticketId, "consolidated", "15_Final_Review_Completed", finalResult);
+            // Store with agentId="final" and stage="consolidated"
+            // This creates: {tenantId}/HealthClaim/{ticketId}/results/final/consolidated.json
+            String finalPath = AgentResultStorageService.storeAgentResultStageWise(
+                    tenantId, ticketId, "consolidated", "final", finalResult);
 
             log.info("Stored final form at: {}", finalPath);
 

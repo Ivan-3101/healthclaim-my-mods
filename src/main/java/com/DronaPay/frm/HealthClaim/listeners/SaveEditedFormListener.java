@@ -101,7 +101,7 @@ public class SaveEditedFormListener implements ExecutionListener {
             updatedResponse.put("ticket_id", ticketId);
             updatedResponse.put("fields_updated_count", updatedCount);
 
-            // 5. Store in MinIO
+            // 5. Store in MinIO - SAME folder as UI_Displayer, different filename
             Map<String, Object> updatedResult = new HashMap<>();
             updatedResult.put("agentId", "UI_Displayer");
             updatedResult.put("statusCode", 200);
@@ -109,11 +109,12 @@ public class SaveEditedFormListener implements ExecutionListener {
             updatedResult.put("version", "v2");
             updatedResult.put("timestamp", System.currentTimeMillis());
 
-            // CHANGED: Store in specific stage folder "11_Final_Review_Edited"
-            String editedPath = AgentResultStorageService.storeAgentResultInStage(
-                    tenantId, ticketId, "edited", "11_Final_Review_Edited", updatedResult);
+            // Store with agentId="UI_Displayer" and stage="edited"
+            // This creates: {tenantId}/HealthClaim/{ticketId}/results/UI_Displayer/edited.json
+            String editedPath = AgentResultStorageService.storeAgentResultStageWise(
+                    tenantId, ticketId, "edited", "UI_Displayer", updatedResult);
 
-            log.info("Stored edited form at: {}", editedPath);
+            log.info("Stored edited form at: {} (same folder as original)", editedPath);
 
             // 6. Set process variable for reference
             execution.setVariable("editedFormMinioPath", editedPath);
