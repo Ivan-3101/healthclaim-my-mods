@@ -26,7 +26,6 @@ public class UIDisplayerDelegate implements JavaDelegate {
 
         log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
 
-        // 1. Load workflow configuration
         Connection conn = execution.getProcessEngine()
                 .getProcessEngineConfiguration()
                 .getDataSource()
@@ -35,7 +34,6 @@ public class UIDisplayerDelegate implements JavaDelegate {
         JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
         conn.close();
 
-        // 2. Get consolidated FHIR request from MinIO
         String consolidatorMinioPath = (String) execution.getVariable("fhirConsolidatorMinioPath");
 
         if (consolidatorMinioPath == null || consolidatorMinioPath.trim().isEmpty()) {
@@ -45,7 +43,6 @@ public class UIDisplayerDelegate implements JavaDelegate {
 
         log.info("Retrieving consolidated FHIR request from MinIO: {}", consolidatorMinioPath);
 
-        // Retrieve from MinIO
         Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, consolidatorMinioPath);
         String consolidatedRequest = (String) result.get("apiResponse");
 
@@ -56,14 +53,12 @@ public class UIDisplayerDelegate implements JavaDelegate {
 
         log.info("Retrieved consolidated FHIR request ({} bytes) from MinIO", consolidatedRequest.length());
 
-        // 3. Change agentid to UI_Displayer
         JSONObject requestJson = new JSONObject(consolidatedRequest);
         requestJson.put("agentid", "UI_Displayer");
         String modifiedRequest = requestJson.toString();
 
         log.info("Modified agentid to UI_Displayer");
 
-        // 4. Call UI_Displayer agent
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
         CloseableHttpResponse response = apiServices.callAgent(modifiedRequest);
 
@@ -80,16 +75,14 @@ public class UIDisplayerDelegate implements JavaDelegate {
             return;
         }
 
-        // 5. Store result in MinIO
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "UI_Displayer", statusCode, resp, new HashMap<>());
 
-        String uiDisplayerMinioPath = AgentResultStorageService.storeAgentResultStageWise(
-                tenantId, ticketId, "consolidated", "UI_Displayer", fullResult);
+        String uiDisplayerMinioPath = AgentResultStorageService.storeAgentResult(
+                tenantId, ticketId, "UI_Displayer", "consolidated", fullResult);
 
         log.info("Stored UI_Displayer result at: {}", uiDisplayerMinioPath);
 
-        // 6. Set MinIO path for reference
         execution.setVariable("uiDisplayerMinioPath", uiDisplayerMinioPath);
         execution.setVariable("uiDisplayerSuccess", true);
 

@@ -31,13 +31,11 @@ public class OcrToStaticDelegate implements JavaDelegate {
 
         log.info("=== OcrToStatic Started for file: {} ===", filename);
 
-        // 1. Construct MinIO path where OCROnDoc stores results
         String filenameWithoutExt = filename.replace(".pdf", "");
         String minioPath = String.format("%s/HealthClaim/%s/ocr/%s.json", tenantId, ticketId, filenameWithoutExt);
 
         log.info("Fetching openaiVision result from MinIO: {}", minioPath);
 
-        // 2. Load workflow config
         Connection conn = execution.getProcessEngine()
                 .getProcessEngineConfiguration()
                 .getDataSource()
@@ -46,7 +44,6 @@ public class OcrToStaticDelegate implements JavaDelegate {
         JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
         conn.close();
 
-        // 3. Fetch openaiVision output from MinIO
         StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
         InputStream resultStream = storage.downloadDocument(minioPath);
         String resultJson = IOUtils.toString(resultStream, "UTF-8");
@@ -61,15 +58,13 @@ public class OcrToStaticDelegate implements JavaDelegate {
 
         log.info("Retrieved openaiVision answer with doc_type: {}", answer.optString("doc_type", "unknown"));
 
-        // 4. Build request for ocrToStatic - NOTE: lowercase 's' in agentid
         JSONObject requestBody = new JSONObject();
         requestBody.put("data", answer);
-        requestBody.put("agentid", "ocrTostatic");  // ← CHANGED: lowercase 's'
+        requestBody.put("agentid", "ocrTostatic");
 
         log.info("Calling ocrToStatic API with agentid: ocrTostatic");
         log.debug("Request body: {}", requestBody.toString());
 
-        // 5. Call API
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
         CloseableHttpResponse response = apiServices.callAgent(requestBody.toString());
 
@@ -83,12 +78,11 @@ public class OcrToStaticDelegate implements JavaDelegate {
             throw new BpmnError("ocrToStaticFailed", "OcrToStatic agent failed with status: " + statusCode);
         }
 
-        // 6. Store result in MinIO
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "ocrToStatic", statusCode, resp, new HashMap<>());
 
-        String storedPath = AgentResultStorageService.storeAgentResultStageWise(
-                tenantId, ticketId, filename, "ocrToStatic", fullResult);
+        String storedPath = AgentResultStorageService.storeAgentResult(
+                tenantId, ticketId, "ocrToStatic", filename, fullResult);
 
         log.info("Stored ocrToStatic result at: {}", storedPath);
 

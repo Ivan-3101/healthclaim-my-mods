@@ -31,10 +31,7 @@ storage.minio.accessKey=minioadmin
 storage.minio.secretKey=minioadmin123
 storage.minio.bucketName=insurance-claims
 storage.minio.region=us-east-1
-
-# Path pattern: {tenantId}/{workflowKey}/{ticketId}/
-storage.pathPattern={tenantId}/{workflowKey}/{ticketId}/
-
+storage.pathPattern={tenantId}/{workflowKey}/{ticketId}/{stageName}/
 
 
 # =============================================================

@@ -32,6 +32,7 @@ public class OCROnDoc implements JavaDelegate {
         String filename = (String) execution.getVariable("attachment");
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
         String tenantId = execution.getTenantId();
+        String stageName = "openaiVision";
 
         @SuppressWarnings("unchecked")
         Map<String, String> documentPaths = (Map<String, String>) execution.getVariable("documentPaths");
@@ -43,22 +44,18 @@ public class OCROnDoc implements JavaDelegate {
         String storagePath = documentPaths.get(filename);
         log.info("Processing file: {} from path: {}", filename, storagePath);
 
-        // Extract doctype from filename (e.g., diagnostic_report.pdf -> diagnostic_report)
         String doctype = filename.substring(0, filename.lastIndexOf("."));
         log.info("Extracted doctype: {}", doctype);
 
-        // Download document from MinIO
         StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
         byte[] pdfBytes;
         try (InputStream fileContent = storage.downloadDocument(storagePath)) {
             pdfBytes = IOUtils.toByteArray(fileContent);
         }
 
-        // Convert to base64
         String base64Content = Base64.getEncoder().encodeToString(pdfBytes);
         log.info("Converted document to base64 ({} bytes)", pdfBytes.length);
 
-        // Get AI agent URL from database
         Connection conn = execution.getProcessEngine()
                 .getProcessEngineConfiguration()
                 .getDataSource()
@@ -83,22 +80,19 @@ public class OCROnDoc implements JavaDelegate {
 
         log.info("Using agent API URL: {}", agentApiUrl);
 
-        // Build request body - CHANGED: doctype -> doc_type
         JSONObject requestBody = new JSONObject();
         JSONObject data = new JSONObject();
         data.put("base64_img", base64Content);
-        data.put("doc_type", doctype); // CHANGED: was "doctype"
+        data.put("doc_type", doctype);
         requestBody.put("data", data);
         requestBody.put("agentid", "openaiVision");
 
         log.info("Calling openaiVision agent for doc_type: {}", doctype);
 
-        // Call agent using Apache HttpClient
         CloseableHttpClient httpClient = HttpClients.createDefault();
         HttpPost httpPost = new HttpPost(new URI(agentApiUrl + "/agent"));
         httpPost.setHeader("Content-Type", "application/json");
 
-        // Add Basic Auth
         String auth = username + ":" + password;
         String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
         httpPost.setHeader("Authorization", "Basic " + encodedAuth);
@@ -118,8 +112,7 @@ public class OCROnDoc implements JavaDelegate {
 
         log.info("Received response from openaiVision agent (status: {})", statusCode);
 
-        // Save response JSON to MinIO as {doctype}.json
-        String outputPath = tenantId + "/HealthClaim/" + ticketId + "/ocr/" + doctype + ".json";
+        String outputPath = tenantId + "/HealthClaim/" + ticketId + "/" + stageName + "/" + doctype + ".json";
         byte[] jsonBytes = responseBody.getBytes(StandardCharsets.UTF_8);
         storage.uploadDocument(outputPath, jsonBytes, "application/json");
 

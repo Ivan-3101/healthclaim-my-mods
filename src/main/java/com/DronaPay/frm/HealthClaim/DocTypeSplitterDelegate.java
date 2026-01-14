@@ -24,6 +24,7 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
 
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
         String tenantId = execution.getTenantId();
+        String stageName = "DocTypeSplitter";
 
         @SuppressWarnings("unchecked")
         Map<String, Map<String, Object>> fileProcessMap =
@@ -38,10 +39,8 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
             throw new RuntimeException("fileProcessMap is null or empty");
         }
 
-        // Group pages by document type
         Map<String, List<PageInfo>> docTypePages = new LinkedHashMap<>();
 
-        // Process each file's classifier output
         for (String filename : fileProcessMap.keySet()) {
             Map<String, Object> fileResults = fileProcessMap.get(filename);
 
@@ -68,7 +67,6 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
                 continue;
             }
 
-            // Retrieve classifier result from MinIO
             Map<String, Object> result =
                     AgentResultStorageService.retrieveAgentResult(tenantId, minioPath);
             String apiResponse = (String) result.get("apiResponse");
@@ -82,7 +80,6 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
 
             JSONArray answer = response.getJSONArray("answer");
 
-            // Group pages by category
             for (int i = 0; i < answer.length(); i++) {
                 JSONObject item = answer.getJSONObject(i);
                 String category = item.getString("category");
@@ -102,7 +99,6 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
 
         log.info("Grouped pages into {} document types", docTypePages.size());
 
-        // Create split documents
         List<String> splitDocumentVars = new ArrayList<>();
         StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
 
@@ -110,21 +106,17 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
             String docType = entry.getKey();
             List<PageInfo> pages = entry.getValue();
 
-            // Sanitize doc type for filename
             String sanitizedDocType = docType.replaceAll("[^a-zA-Z0-9]", "_").toLowerCase();
             String splitFilename = sanitizedDocType + ".pdf";
 
             log.info("Creating split document: {} with {} pages", splitFilename, pages.size());
 
-            // Create new merged document
             PDDocument mergedDoc = new PDDocument();
 
             try {
-                // Load all source documents first and keep them open
                 Map<String, PDDocument> openDocs = new HashMap<>();
 
                 for (PageInfo pageInfo : pages) {
-                    // Only load each document once
                     if (!openDocs.containsKey(pageInfo.storagePath)) {
                         try {
                             InputStream stream = storage.downloadDocument(pageInfo.storagePath);
@@ -138,7 +130,6 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
                     }
                 }
 
-                // Now extract pages (all source docs are still open)
                 for (PageInfo pageInfo : pages) {
                     PDDocument sourceDoc = openDocs.get(pageInfo.storagePath);
                     if (sourceDoc == null) {
@@ -147,7 +138,6 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
                     }
 
                     try {
-                        // PDF pages are 0-indexed, but classifier returns 1-indexed
                         int pageIndex = pageInfo.pageNumber - 1;
 
                         if (pageIndex >= 0 && pageIndex < sourceDoc.getNumberOfPages()) {
@@ -169,7 +159,6 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
 
                 if (mergedDoc.getNumberOfPages() == 0) {
                     log.warn("No pages added for document type: {}, skipping", docType);
-                    // Close all open source documents
                     for (PDDocument doc : openDocs.values()) {
                         try {
                             doc.close();
@@ -180,13 +169,11 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
                     continue;
                 }
 
-                // Save merged document BEFORE closing source documents
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 mergedDoc.save(baos);
                 byte[] pdfBytes = baos.toByteArray();
                 baos.close();
 
-                // NOW close all source documents
                 for (PDDocument doc : openDocs.values()) {
                     try {
                         doc.close();
@@ -195,9 +182,8 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
                     }
                 }
 
-                // Upload to MinIO
                 String splitStoragePath = tenantId + "/HealthClaim/" + ticketId +
-                        "/split/" + splitFilename;
+                        "/" + stageName + "/" + splitFilename;
                 storage.uploadDocument(splitStoragePath, pdfBytes, "application/pdf");
 
                 splitDocumentVars.add(splitFilename);

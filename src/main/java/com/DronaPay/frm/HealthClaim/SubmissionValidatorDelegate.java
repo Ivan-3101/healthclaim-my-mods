@@ -15,17 +15,6 @@ import java.sql.Connection;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Submission Validator Delegate
- *
- * Calls the Submission_Validator agent with the consolidated FHIR request.
- *
- * Input: Consolidated FHIR request from MinIO (built by FHIRConsolidatorDelegate)
- * Output: Missing documents list
- *
- * Stores the response in MinIO and sets process variables:
- * - missingDocuments: JSON array of missing document types
- */
 @Slf4j
 public class SubmissionValidatorDelegate implements JavaDelegate {
 
@@ -38,7 +27,6 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
 
         log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
 
-        // 1. Load workflow configuration
         Connection conn = execution.getProcessEngine()
                 .getProcessEngineConfiguration()
                 .getDataSource()
@@ -47,7 +35,6 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
         JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
         conn.close();
 
-        // 2. Get consolidated FHIR request from MinIO
         String consolidatorMinioPath = (String) execution.getVariable("fhirConsolidatorMinioPath");
 
         if (consolidatorMinioPath == null || consolidatorMinioPath.trim().isEmpty()) {
@@ -57,7 +44,6 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
 
         log.info("Retrieving consolidated FHIR request from MinIO: {}", consolidatorMinioPath);
 
-        // Retrieve from MinIO
         Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, consolidatorMinioPath);
         String consolidatedRequest = (String) result.get("apiResponse");
 
@@ -68,14 +54,12 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
 
         log.info("Retrieved consolidated FHIR request ({} bytes) from MinIO", consolidatedRequest.length());
 
-        // 3. Change agentid to Submission_Validator
         JSONObject requestJson = new JSONObject(consolidatedRequest);
         requestJson.put("agentid", "Submission_Validator");
         String modifiedRequest = requestJson.toString();
 
         log.info("Modified agentid to Submission_Validator");
 
-        // 4. Call Submission_Validator agent
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
         CloseableHttpResponse response = apiServices.callAgent(modifiedRequest);
 
@@ -91,33 +75,26 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
                     "Submission_Validator agent failed with status: " + statusCode);
         }
 
-        // 5. Store result in MinIO
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "Submission_Validator", statusCode, resp, new HashMap<>());
 
-        String validatorMinioPath = AgentResultStorageService.storeAgentResultStageWise(
-                tenantId, ticketId, "consolidated", "Submission_Validator", fullResult);
+        String validatorMinioPath = AgentResultStorageService.storeAgentResult(
+                tenantId, ticketId, "Submission_Validator", "consolidated", fullResult);
 
         log.info("Stored Submission_Validator result at: {}", validatorMinioPath);
 
-        // 6. Extract missing documents and set as process variable
         extractAndSetProcessVariables(execution, resp);
 
-        // 7. Set MinIO path for reference
         execution.setVariable("submissionValidatorMinioPath", validatorMinioPath);
         execution.setVariable("submissionValidatorSuccess", true);
 
         log.info("=== Submission Validator Completed ===");
     }
 
-    /**
-     * Extract missing documents from Submission Validator response and set as process variable
-     */
     private void extractAndSetProcessVariables(DelegateExecution execution, String response) {
         try {
             JSONObject responseJson = new JSONObject(response);
 
-            // Extract answer.missing_documents
             if (responseJson.has("answer")) {
                 JSONObject answer = responseJson.getJSONObject("answer");
 
@@ -131,7 +108,6 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
 
         } catch (Exception e) {
             log.error("Error extracting process variables from Submission Validator response", e);
-            // Don't throw - we've stored the full response in MinIO
         }
     }
 }
