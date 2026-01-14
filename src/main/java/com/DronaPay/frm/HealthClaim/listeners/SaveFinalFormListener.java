@@ -56,13 +56,12 @@ public class SaveFinalFormListener implements ExecutionListener {
                 Object editedValue = execution.getVariable(varName);
 
                 if (editedValue != null) {
-                    String originalValue = field.opt("value") != null ?
-                            field.opt("value").toString() : "";
-                    String newValue = editedValue.toString();
+                    String originalValue = normalizeValue(field.opt("value"));
+                    String newValue = normalizeValue(editedValue.toString());
 
-                    updatedField.put("value", newValue);
+                    updatedField.put("value", editedValue.toString().isEmpty() ? null : editedValue.toString());
                     updatedField.put("final_edited", true);
-                    updatedField.put("pre_final_value", originalValue);
+                    updatedField.put("pre_final_value", field.opt("value"));
 
                     if (!originalValue.equals(newValue)) {
                         updatedCount++;
@@ -125,5 +124,16 @@ public class SaveFinalFormListener implements ExecutionListener {
         }
 
         return null;
+    }
+
+    private String normalizeValue(Object value) {
+        if (value == null || JSONObject.NULL.equals(value)) {
+            return "";
+        }
+        String str = value.toString();
+        if ("null".equals(str)) {
+            return "";
+        }
+        return str.trim();
     }
 }

@@ -65,12 +65,12 @@ public class SaveEditedFormListener implements ExecutionListener {
                 Object editedValue = execution.getVariable(varName);
 
                 if (editedValue != null) {
-                    String originalValue = field.opt("value") != null ? field.opt("value").toString() : "";
-                    String newValue = editedValue.toString();
+                    String originalValue = normalizeValue(field.opt("value"));
+                    String newValue = normalizeValue(editedValue.toString());
 
-                    updatedField.put("value", newValue);
+                    updatedField.put("value", editedValue.toString().isEmpty() ? null : editedValue.toString());
                     updatedField.put("user_edited", true);
-                    updatedField.put("original_value", originalValue);
+                    updatedField.put("original_value", field.opt("value"));
 
                     if (!originalValue.equals(newValue)) {
                         updatedCount++;
@@ -113,5 +113,16 @@ public class SaveEditedFormListener implements ExecutionListener {
             log.error("Error in SaveEditedFormListener", e);
             execution.setVariable("editedFormSaveError", e.getMessage());
         }
+    }
+
+    private String normalizeValue(Object value) {
+        if (value == null || JSONObject.NULL.equals(value)) {
+            return "";
+        }
+        String str = value.toString();
+        if ("null".equals(str)) {
+            return "";
+        }
+        return str.trim();
     }
 }
