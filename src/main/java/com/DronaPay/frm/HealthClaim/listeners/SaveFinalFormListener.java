@@ -86,7 +86,7 @@ public class SaveFinalFormListener implements ExecutionListener {
             Map<String, Object> finalResult = new HashMap<>();
             finalResult.put("agentId", "final");
             finalResult.put("statusCode", 200);
-            finalResult.put("apiResponse", finalResponse.toString());
+            finalResult.put("rawResponse", finalResponse.toString());
             finalResult.put("version", "v3");
             finalResult.put("timestamp", System.currentTimeMillis());
 

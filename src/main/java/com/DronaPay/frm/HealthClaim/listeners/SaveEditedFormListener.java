@@ -95,14 +95,14 @@ public class SaveEditedFormListener implements ExecutionListener {
             Map<String, Object> updatedResult = new HashMap<>();
             updatedResult.put("agentId", "UI_Displayer");
             updatedResult.put("statusCode", 200);
-            updatedResult.put("apiResponse", updatedResponse.toString());
+            updatedResult.put("rawResponse", updatedResponse.toString());
             updatedResult.put("version", "v2");
             updatedResult.put("timestamp", System.currentTimeMillis());
 
             String editedPath = AgentResultStorageService.storeAgentResult(
                     tenantId, ticketId, "UI_Displayer", "edited", updatedResult);
 
-            log.info("Stored edited form at: {} (same folder as original)", editedPath);
+            log.info("Stored edited form at: {}", editedPath);
 
             execution.setVariable("editedFormMinioPath", editedPath);
             execution.setVariable("fieldsUpdatedCount", updatedCount);
