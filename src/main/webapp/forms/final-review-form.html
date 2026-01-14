@@ -55,14 +55,10 @@
 
         // Save modified values before submission
         camForm.on('submit', function() {
-          console.log('=== FORM SUBMIT DEBUG ===');
-          $scope.fields.forEach(function(field) {  // or $scope.uiFields for final form
-            var inputElement = document.getElementById(field.varName);
-            var inputValue = inputElement ? inputElement.value : 'ELEMENT NOT FOUND';
-            console.log('Field:', field.label, '| varName:', field.varName, '| value:', inputValue);
+          $scope.uiFields.forEach(function(field) {
+            var inputValue = document.getElementById(field.varName).value;
             camForm.variableManager.variableValue(field.varName, inputValue);
           });
-          console.log('=== END SUBMIT DEBUG ===');
         });
     </script>
 
@@ -187,6 +183,8 @@
             <input type="text"
                    class="field-input"
                    id="{{field.varName}}"
+                   cam-variable-name="{{field.varName}}"
+                   cam-variable-type="String"
                    ng-model="field.value" />
             <div class="doc-type" ng-if="field.docType">Source: {{field.docType}}</div>
         </div>
