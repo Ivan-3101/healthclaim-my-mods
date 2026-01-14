@@ -40,7 +40,7 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
         for (String filename : splitDocumentVars) {
             log.debug("Processing file: {}", filename);
 
-            String minioPath = String.format("%s/HealthClaim/%s/results/ocrToStatic/%s.json",
+            String minioPath = String.format("%s/HealthClaim/%s/ocrToStatic/%s.json",
                     tenantId, ticketId, filename);
 
             try {

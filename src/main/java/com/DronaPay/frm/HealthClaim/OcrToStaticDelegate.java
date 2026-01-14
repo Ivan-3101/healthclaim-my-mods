@@ -32,7 +32,7 @@ public class OcrToStaticDelegate implements JavaDelegate {
         log.info("=== OcrToStatic Started for file: {} ===", filename);
 
         String filenameWithoutExt = filename.replace(".pdf", "");
-        String minioPath = String.format("%s/HealthClaim/%s/ocr/%s.json", tenantId, ticketId, filenameWithoutExt);
+        String minioPath = String.format("%s/HealthClaim/%s/openaiVision/%s.json", tenantId, ticketId, filenameWithoutExt);
 
         log.info("Fetching openaiVision result from MinIO: {}", minioPath);
 
