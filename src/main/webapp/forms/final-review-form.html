@@ -55,10 +55,14 @@
 
         // Save modified values before submission
         camForm.on('submit', function() {
+          console.log('=== FINAL FORM SUBMIT DEBUG ===');
           $scope.uiFields.forEach(function(field) {
-            var inputValue = document.getElementById(field.varName).value;
+            var inputElement = document.getElementById(field.varName);
+            var inputValue = inputElement ? inputElement.value : 'ELEMENT NOT FOUND';
+            console.log('Field:', field.label, '| varName:', field.varName, '| value:', inputValue);
             camForm.variableManager.variableValue(field.varName, inputValue);
           });
+          console.log('=== END FINAL FORM SUBMIT DEBUG ===');
         });
     </script>
 
