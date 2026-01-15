@@ -25,7 +25,10 @@ public class SaveEditedFormListener implements ExecutionListener {
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
         String tenantId = execution.getTenantId();
 
-        log.info("=== Execution Listener: Saving Edited Form for Ticket {} ===", ticketId);
+        // CHANGE: Use BPMN Activity ID (User Task ID) for folder
+        String stageName = execution.getCurrentActivityId();
+
+        log.info("=== Execution Listener: Saving Edited Form for Ticket {} in stage {} ===", ticketId, stageName);
 
         try {
             String uiDisplayerMinioPath = (String) execution.getVariable("uiDisplayerMinioPath");
@@ -85,7 +88,8 @@ public class SaveEditedFormListener implements ExecutionListener {
             }
 
             JSONObject updatedResponse = new JSONObject();
-            updatedResponse.put("agentid", "UI_Displayer");
+            // CHANGE: Use stageName as agentid for consistency
+            updatedResponse.put("agentid", stageName);
             updatedResponse.put("answer", updatedArray);
             updatedResponse.put("version", "v2_edited");
             updatedResponse.put("edited_timestamp", System.currentTimeMillis());
@@ -93,14 +97,15 @@ public class SaveEditedFormListener implements ExecutionListener {
             updatedResponse.put("fields_updated_count", updatedCount);
 
             Map<String, Object> updatedResult = new HashMap<>();
-            updatedResult.put("agentId", "UI_Displayer");
+            updatedResult.put("agentId", stageName);
             updatedResult.put("statusCode", 200);
             updatedResult.put("rawResponse", updatedResponse.toString());
             updatedResult.put("version", "v2");
             updatedResult.put("timestamp", System.currentTimeMillis());
 
+            // CHANGE: Use stageName in storage path
             String editedPath = AgentResultStorageService.storeAgentResult(
-                    tenantId, ticketId, "UI_Displayer", "edited", updatedResult);
+                    tenantId, ticketId, stageName, "edited", updatedResult);
 
             log.info("Stored edited form at: {}", editedPath);
 

@@ -4,7 +4,7 @@
     <bpmn:startEvent id="Event_1e3l95j" name="Create Ticket">
       <bpmn:outgoing>Flow_15rnuix</bpmn:outgoing>
     </bpmn:startEvent>
-    <bpmn:serviceTask id="Activity_068lxij" name="Generate TicketID and Workflow Name" camunda:class="com.DronaPay.frm.HealthClaim.GenerateIDAndWorkflowName">
+    <bpmn:serviceTask id="Generate_TicketID_and_Workflow_Name" name="Generate TicketID and Workflow Name" camunda:class="com.DronaPay.frm.HealthClaim.GenerateIDAndWorkflowName">
       <bpmn:incoming>Flow_15rnuix</bpmn:incoming>
       <bpmn:outgoing>Flow_058ecar</bpmn:outgoing>
     </bpmn:serviceTask>
@@ -12,10 +12,10 @@
       <bpmn:incoming>Flow_168aalw</bpmn:incoming>
       <bpmn:incoming>Flow_0j8gdpr</bpmn:incoming>
     </bpmn:endEvent>
-    <bpmn:sequenceFlow id="Flow_15rnuix" sourceRef="Event_1e3l95j" targetRef="Activity_068lxij" />
-    <bpmn:sequenceFlow id="Flow_058ecar" sourceRef="Activity_068lxij" targetRef="Activity_1s9nenk" />
-    <bpmn:sequenceFlow id="Flow_0hxlb17" sourceRef="Activity_1s9nenk" targetRef="Activity_17h17ae" />
-    <bpmn:serviceTask id="Activity_1s9nenk" name="Verification of details from masters data" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.VerifyMasterData">
+    <bpmn:sequenceFlow id="Flow_15rnuix" sourceRef="Event_1e3l95j" targetRef="Generate_TicketID_and_Workflow_Name" />
+    <bpmn:sequenceFlow id="Flow_058ecar" sourceRef="Generate_TicketID_and_Workflow_Name" targetRef="Verify_Master_Data" />
+    <bpmn:sequenceFlow id="Flow_0hxlb17" sourceRef="Verify_Master_Data" targetRef="Activity_17h17ae" />
+    <bpmn:serviceTask id="Verify_Master_Data" name="Verification of details from masters data" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.VerifyMasterData">
       <bpmn:incoming>Flow_058ecar</bpmn:incoming>
       <bpmn:outgoing>Flow_0hxlb17</bpmn:outgoing>
     </bpmn:serviceTask>
@@ -38,8 +38,8 @@
     <bpmn:sequenceFlow id="Flow_1fbkfzh" name="High Risk Score" sourceRef="Gateway_1k0f36m" targetRef="Activity_06f4rl2">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${RiskScore&gt;=20}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="Flow_1446qaa" sourceRef="Activity_05xkaop" targetRef="Policy_Coherence" />
-    <bpmn:userTask id="Activity_05xkaop" name="User Verification" camunda:formKey="embedded:app:forms/claim-review.html">
+    <bpmn:sequenceFlow id="Flow_1446qaa" sourceRef="Activity_User_Verification" targetRef="Policy_Coherence" />
+    <bpmn:userTask id="Activity_User_Verification" name="User Verification" camunda:formKey="embedded:app:forms/claim-review.html">
       <bpmn:extensionElements>
         <camunda:executionListener class="com.DronaPay.frm.HealthClaim.listeners.SaveEditedFormListener" event="end" />
       </bpmn:extensionElements>
@@ -355,15 +355,15 @@
       <bpmn:startEvent id="Event_11ox0g4">
         <bpmn:outgoing>Flow_1c5c7cj</bpmn:outgoing>
       </bpmn:startEvent>
-      <bpmn:serviceTask id="Activity_0k7btnb" name="Identify forged documents" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.IdentifyForgedDocuments">
+      <bpmn:serviceTask id="Identify_Forged_Documents" name="Identify forged documents" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.IdentifyForgedDocuments">
         <bpmn:incoming>Flow_1c5c7cj</bpmn:incoming>
         <bpmn:outgoing>Flow_0vzpcw3</bpmn:outgoing>
       </bpmn:serviceTask>
-      <bpmn:sequenceFlow id="Flow_1c5c7cj" sourceRef="Event_11ox0g4" targetRef="Activity_0k7btnb" />
+      <bpmn:sequenceFlow id="Flow_1c5c7cj" sourceRef="Event_11ox0g4" targetRef="Identify_Forged_Documents" />
       <bpmn:endEvent id="Event_0oqarvk">
         <bpmn:incoming>Flow_0vzpcw3</bpmn:incoming>
       </bpmn:endEvent>
-      <bpmn:sequenceFlow id="Flow_0vzpcw3" sourceRef="Activity_0k7btnb" targetRef="Event_0oqarvk" />
+      <bpmn:sequenceFlow id="Flow_0vzpcw3" sourceRef="Identify_Forged_Documents" targetRef="Event_0oqarvk" />
     </bpmn:subProcess>
     <bpmn:sequenceFlow id="Flow_0450puq" sourceRef="Activity_17h17ae" targetRef="Activity_DocClassifier" />
     <bpmn:subProcess id="Activity_1kzv5fa">
@@ -373,15 +373,15 @@
       <bpmn:startEvent id="Event_0xxno63">
         <bpmn:outgoing>Flow_0we714j</bpmn:outgoing>
       </bpmn:startEvent>
-      <bpmn:serviceTask id="Activity_17tvvhm" name="Doing OCR on Documents" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.OCROnDoc">
+      <bpmn:serviceTask id="Raw_OCR" name="Doing OCR on Documents" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.OCROnDoc">
         <bpmn:incoming>Flow_0we714j</bpmn:incoming>
         <bpmn:outgoing>Flow_0llww76</bpmn:outgoing>
       </bpmn:serviceTask>
-      <bpmn:sequenceFlow id="Flow_0we714j" sourceRef="Event_0xxno63" targetRef="Activity_17tvvhm" />
+      <bpmn:sequenceFlow id="Flow_0we714j" sourceRef="Event_0xxno63" targetRef="Raw_OCR" />
       <bpmn:endEvent id="Event_1i3asb1">
         <bpmn:incoming>Flow_0llww76</bpmn:incoming>
       </bpmn:endEvent>
-      <bpmn:sequenceFlow id="Flow_0llww76" sourceRef="Activity_17tvvhm" targetRef="Event_1i3asb1" />
+      <bpmn:sequenceFlow id="Flow_0llww76" sourceRef="Raw_OCR" targetRef="Event_1i3asb1" />
     </bpmn:subProcess>
     <bpmn:subProcess id="Activity_DocClassifier">
       <bpmn:incoming>Flow_0450puq</bpmn:incoming>
@@ -390,28 +390,28 @@
       <bpmn:startEvent id="Event_1dyf5j7">
         <bpmn:outgoing>Flow_1p7jmc8</bpmn:outgoing>
       </bpmn:startEvent>
-      <bpmn:sequenceFlow id="Flow_1p7jmc8" sourceRef="Event_1dyf5j7" targetRef="Activity_0pz9jth" />
+      <bpmn:sequenceFlow id="Flow_1p7jmc8" sourceRef="Event_1dyf5j7" targetRef="Document_Classifier" />
       <bpmn:endEvent id="Event_0k3yxqs">
         <bpmn:incoming>Flow_1thjhp7</bpmn:incoming>
       </bpmn:endEvent>
-      <bpmn:sequenceFlow id="Flow_1thjhp7" sourceRef="Activity_0pz9jth" targetRef="Event_0k3yxqs" />
-      <bpmn:serviceTask id="Activity_0pz9jth" name="Doc Classifier" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.DocumentClassifierDelegate">
+      <bpmn:sequenceFlow id="Flow_1thjhp7" sourceRef="Document_Classifier" targetRef="Event_0k3yxqs" />
+      <bpmn:serviceTask id="Document_Classifier" name="Doc Classifier" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.DocumentClassifierDelegate">
         <bpmn:incoming>Flow_1p7jmc8</bpmn:incoming>
         <bpmn:outgoing>Flow_1thjhp7</bpmn:outgoing>
       </bpmn:serviceTask>
     </bpmn:subProcess>
-    <bpmn:sequenceFlow id="Flow_0ys2arf" sourceRef="Activity_DocClassifier" targetRef="Activity_00o37kp" />
-    <bpmn:sequenceFlow id="Flow_1edsz88" sourceRef="Activity_00o37kp" targetRef="Activity_1kzv5fa" />
-    <bpmn:serviceTask id="Activity_00o37kp" name="DocTypeSplitter" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.DocTypeSplitterDelegate">
+    <bpmn:sequenceFlow id="Flow_0ys2arf" sourceRef="Activity_DocClassifier" targetRef="Doc_Type_Splitter" />
+    <bpmn:sequenceFlow id="Flow_1edsz88" sourceRef="Doc_Type_Splitter" targetRef="Activity_1kzv5fa" />
+    <bpmn:serviceTask id="Doc_Type_Splitter" name="DocTypeSplitter" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.DocTypeSplitterDelegate">
       <bpmn:incoming>Flow_0ys2arf</bpmn:incoming>
       <bpmn:outgoing>Flow_1edsz88</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:sequenceFlow id="Flow_037ubon" sourceRef="Activity_1kzv5fa" targetRef="Activity_0c8yvg3" />
-    <bpmn:serviceTask id="Activity_1eu27e2" name="Activity_UIDisplayer" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.UIDisplayerDelegate">
+    <bpmn:serviceTask id="UI_Displayer_Agent" name="Activity_UIDisplayer" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.UIDisplayerDelegate">
       <bpmn:incoming>Flow_1y4cq5x</bpmn:incoming>
       <bpmn:outgoing>Flow_0w29skj</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:sequenceFlow id="Flow_0w29skj" sourceRef="Activity_1eu27e2" targetRef="Activity_LoadUIFields" />
+    <bpmn:sequenceFlow id="Flow_0w29skj" sourceRef="UI_Displayer_Agent" targetRef="Activity_LoadUIFields" />
     <bpmn:subProcess id="Activity_0c8yvg3">
       <bpmn:incoming>Flow_037ubon</bpmn:incoming>
       <bpmn:outgoing>Flow_1rugnkq</bpmn:outgoing>
@@ -419,33 +419,33 @@
       <bpmn:startEvent id="Event_1x0b3zu">
         <bpmn:outgoing>Flow_084cttl</bpmn:outgoing>
       </bpmn:startEvent>
-      <bpmn:sequenceFlow id="Flow_084cttl" sourceRef="Event_1x0b3zu" targetRef="Activity_0u7ed5l" />
+      <bpmn:sequenceFlow id="Flow_084cttl" sourceRef="Event_1x0b3zu" targetRef="Raw_To_Structured_OCR" />
       <bpmn:endEvent id="Event_1pojsp1">
         <bpmn:incoming>Flow_0xnnumq</bpmn:incoming>
       </bpmn:endEvent>
-      <bpmn:sequenceFlow id="Flow_0xnnumq" sourceRef="Activity_0u7ed5l" targetRef="Event_1pojsp1" />
-      <bpmn:serviceTask id="Activity_0u7ed5l" name="OCR to Static" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.OcrToStaticDelegate">
+      <bpmn:sequenceFlow id="Flow_0xnnumq" sourceRef="Raw_To_Structured_OCR" targetRef="Event_1pojsp1" />
+      <bpmn:serviceTask id="Raw_To_Structured_OCR" name="OCR to Static" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.OcrToStaticDelegate">
         <bpmn:incoming>Flow_084cttl</bpmn:incoming>
         <bpmn:outgoing>Flow_0xnnumq</bpmn:outgoing>
       </bpmn:serviceTask>
     </bpmn:subProcess>
-    <bpmn:sequenceFlow id="Flow_1rugnkq" sourceRef="Activity_0c8yvg3" targetRef="FHIR_Consolidator" />
-    <bpmn:sequenceFlow id="Flow_0oa3vkg" sourceRef="FHIR_Consolidator" targetRef="Submission_Validator" />
-    <bpmn:sequenceFlow id="Flow_1y4cq5x" sourceRef="FHIR_Analyzer" targetRef="Activity_1eu27e2" />
-    <bpmn:serviceTask id="FHIR_Analyzer" name="Submission Consistency Analyzer" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FHIRAnalyserDelegate">
+    <bpmn:sequenceFlow id="Flow_1rugnkq" sourceRef="Activity_0c8yvg3" targetRef="Document_Consolidator" />
+    <bpmn:sequenceFlow id="Flow_0oa3vkg" sourceRef="Document_Consolidator" targetRef="Submission_Validator" />
+    <bpmn:sequenceFlow id="Flow_1y4cq5x" sourceRef="Submission_Consistency_Analyzer" targetRef="UI_Displayer_Agent" />
+    <bpmn:serviceTask id="Submission_Consistency_Analyzer" name="Submission Consistency Analyzer" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FHIRAnalyserDelegate">
       <bpmn:incoming>Flow_0e8mxy3</bpmn:incoming>
       <bpmn:outgoing>Flow_1y4cq5x</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:serviceTask id="FHIR_Consolidator" name="Document&#10; Consolidator" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FHIRConsolidatorDelegate">
+    <bpmn:serviceTask id="Document_Consolidator" name="Document&#10; Consolidator" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FHIRConsolidatorDelegate">
       <bpmn:incoming>Flow_1rugnkq</bpmn:incoming>
       <bpmn:outgoing>Flow_0oa3vkg</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:sequenceFlow id="Flow_0e8mxy3" sourceRef="Submission_Validator" targetRef="FHIR_Analyzer" />
+    <bpmn:sequenceFlow id="Flow_0e8mxy3" sourceRef="Submission_Validator" targetRef="Submission_Consistency_Analyzer" />
     <bpmn:serviceTask id="Submission_Validator" name="Submission Validator" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.SubmissionValidatorDelegate">
       <bpmn:incoming>Flow_0oa3vkg</bpmn:incoming>
       <bpmn:outgoing>Flow_0e8mxy3</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:sequenceFlow id="Flow_0o84pjf" sourceRef="Activity_LoadUIFields" targetRef="Activity_05xkaop" />
+    <bpmn:sequenceFlow id="Flow_0o84pjf" sourceRef="Activity_LoadUIFields" targetRef="Activity_User_Verification" />
     <bpmn:serviceTask id="Activity_LoadUIFields" name="Load UI Fields" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.LoadUIFieldsDelegate">
       <bpmn:incoming>Flow_0w29skj</bpmn:incoming>
       <bpmn:outgoing>Flow_0o84pjf</bpmn:outgoing>
@@ -489,25 +489,18 @@
           <dc:Bounds x="157" y="865" width="66" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_068lxij_di" bpmnElement="Activity_068lxij">
+      <bpmndi:BPMNShape id="Activity_068lxij_di" bpmnElement="Generate_TicketID_and_Workflow_Name">
         <dc:Bounds x="290" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_19n0d2o_di" bpmnElement="Activity_1s9nenk">
-        <dc:Bounds x="470" y="800" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_147tfbt_di" bpmnElement="Activity_05xkaop">
-        <dc:Bounds x="3620" y="800" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0wm5iil_di" bpmnElement="Medical_Coherence" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
-        <dc:Bounds x="3960" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_1dn2bub_di" bpmnElement="Event_1dn2bub">
         <dc:Bounds x="7102" y="822" width="36" height="36" />
         <bpmndi:BPMNLabel>
           <dc:Bounds x="7148" y="833" width="61" height="14" />
         </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_19n0d2o_di" bpmnElement="Verify_Master_Data">
+        <dc:Bounds x="470" y="800" width="100" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_0txw8dc_di" bpmnElement="Activity_04nhqma">
         <dc:Bounds x="4650" y="800" width="100" height="80" />
@@ -518,6 +511,10 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_1k0f36m_di" bpmnElement="Gateway_1k0f36m" isMarkerVisible="true" bioc:stroke="#6b3c00" bioc:fill="#ffe0b2" color:background-color="#ffe0b2" color:border-color="#6b3c00">
         <dc:Bounds x="5625" y="815" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_147tfbt_di" bpmnElement="Activity_User_Verification">
+        <dc:Bounds x="3620" y="800" width="100" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_0aphohc_di" bpmnElement="Gateway_0aphohc" isMarkerVisible="true" bioc:stroke="#6b3c00" bioc:fill="#ffe0b2" color:background-color="#ffe0b2" color:border-color="#6b3c00">
         <dc:Bounds x="4495" y="815" width="50" height="50" />
@@ -599,22 +596,15 @@
         <dc:Bounds x="4650" y="500" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0m5cnkt_di" bpmnElement="FinalReviewTask">
-        <dc:Bounds x="4340" y="800" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0fn18y3_di" bpmnElement="LoadFinalReviewFields">
-        <dc:Bounds x="4140" y="800" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_17h17ae_di" bpmnElement="Activity_17h17ae" isExpanded="true">
         <dc:Bounds x="670" y="740" width="330" height="200" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_11ox0g4_di" bpmnElement="Event_11ox0g4">
         <dc:Bounds x="702" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0n9gc57_di" bpmnElement="Activity_0k7btnb" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+      <bpmndi:BPMNShape id="Activity_0n9gc57_di" bpmnElement="Identify_Forged_Documents" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="780" y="800" width="100" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_0oqarvk_di" bpmnElement="Event_0oqarvk">
         <dc:Bounds x="932" y="822" width="36" height="36" />
@@ -633,7 +623,7 @@
       <bpmndi:BPMNShape id="Event_0xxno63_di" bpmnElement="Event_0xxno63">
         <dc:Bounds x="1940" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1yzgvj0_di" bpmnElement="Activity_17tvvhm" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+      <bpmndi:BPMNShape id="Activity_1yzgvj0_di" bpmnElement="Raw_OCR" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="2030" y="800" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
@@ -657,7 +647,7 @@
       <bpmndi:BPMNShape id="Event_0k3yxqs_di" bpmnElement="Event_0k3yxqs">
         <dc:Bounds x="1372" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0p36ok7_di" bpmnElement="Activity_0pz9jth" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+      <bpmndi:BPMNShape id="Activity_0p36ok7_di" bpmnElement="Document_Classifier" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="1210" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_1p7jmc8_di" bpmnElement="Flow_1p7jmc8">
@@ -668,11 +658,11 @@
         <di:waypoint x="1310" y="840" />
         <di:waypoint x="1372" y="840" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="Activity_0s72swl_di" bpmnElement="Activity_00o37kp">
+      <bpmndi:BPMNShape id="Activity_0s72swl_di" bpmnElement="Doc_Type_Splitter">
         <dc:Bounds x="1600" y="800" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1349e5d_di" bpmnElement="Activity_1eu27e2" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+      <bpmndi:BPMNShape id="Activity_1349e5d_di" bpmnElement="UI_Displayer_Agent" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="3280" y="800" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
@@ -685,7 +675,7 @@
       <bpmndi:BPMNShape id="Event_1pojsp1_di" bpmnElement="Event_1pojsp1">
         <dc:Bounds x="2642" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0ilyu2a_di" bpmnElement="Activity_0u7ed5l" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+      <bpmndi:BPMNShape id="Activity_0ilyu2a_di" bpmnElement="Raw_To_Structured_OCR" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="2480" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_084cttl_di" bpmnElement="Flow_084cttl">
@@ -696,11 +686,11 @@
         <di:waypoint x="2580" y="840" />
         <di:waypoint x="2642" y="840" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="Activity_1gr5j3s_di" bpmnElement="FHIR_Analyzer" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+      <bpmndi:BPMNShape id="Activity_1gr5j3s_di" bpmnElement="Submission_Consistency_Analyzer" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="3110" y="800" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1pe8iyi_di" bpmnElement="FHIR_Consolidator">
+      <bpmndi:BPMNShape id="Activity_1pe8iyi_di" bpmnElement="Document_Consolidator">
         <dc:Bounds x="2780" y="800" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
@@ -710,26 +700,19 @@
       <bpmndi:BPMNShape id="Activity_0p3hr0z_di" bpmnElement="Activity_LoadUIFields">
         <dc:Bounds x="3450" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0wm5iil_di" bpmnElement="Medical_Coherence" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+        <dc:Bounds x="3960" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_1so80se_di" bpmnElement="Policy_Coherence" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="3800" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Event_15ndmjn_di" bpmnElement="Event_1wb0mkj" bioc:stroke="#831311" bioc:fill="#ffcdd2" color:background-color="#ffcdd2" color:border-color="#831311">
-        <dc:Bounds x="4682" y="862" width="36" height="36" />
+      <bpmndi:BPMNShape id="Activity_0m5cnkt_di" bpmnElement="FinalReviewTask">
+        <dc:Bounds x="4340" y="800" width="100" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Event_0a5hlg8_di" bpmnElement="Event_1qmso98" bioc:stroke="#831311" bioc:fill="#ffcdd2" color:background-color="#ffcdd2" color:border-color="#831311">
-        <dc:Bounds x="5472" y="782" width="36" height="36" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Event_1180965_di" bpmnElement="Event_0zodq4c">
-        <dc:Bounds x="5962" y="482" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="5995" y="473" width="30" height="14" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Event_0iwxnay_di" bpmnElement="Event_0jl58lu">
-        <dc:Bounds x="5912" y="522" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="5899" y="565" width="23" height="14" />
-        </bpmndi:BPMNLabel>
+      <bpmndi:BPMNShape id="Activity_0fn18y3_di" bpmnElement="LoadFinalReviewFields">
+        <dc:Bounds x="4140" y="800" width="100" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_1me4x9n" bpmnElement="Event_100gl67">
         <dc:Bounds x="4832" y="522" width="36" height="36" />
@@ -741,6 +724,24 @@
         <dc:Bounds x="4882" y="482" width="36" height="36" />
         <bpmndi:BPMNLabel>
           <dc:Bounds x="4915" y="473" width="30" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_0a5hlg8_di" bpmnElement="Event_1qmso98" bioc:stroke="#831311" bioc:fill="#ffcdd2" color:background-color="#ffcdd2" color:border-color="#831311">
+        <dc:Bounds x="5472" y="782" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_15ndmjn_di" bpmnElement="Event_1wb0mkj" bioc:stroke="#831311" bioc:fill="#ffcdd2" color:background-color="#ffcdd2" color:border-color="#831311">
+        <dc:Bounds x="4682" y="862" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_1180965_di" bpmnElement="Event_0zodq4c">
+        <dc:Bounds x="5962" y="482" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="5995" y="473" width="30" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_0iwxnay_di" bpmnElement="Event_0jl58lu">
+        <dc:Bounds x="5912" y="522" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="5899" y="565" width="23" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_15rnuix_di" bpmnElement="Flow_15rnuix">

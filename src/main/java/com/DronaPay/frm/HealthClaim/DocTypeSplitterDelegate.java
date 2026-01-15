@@ -24,7 +24,9 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
 
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
         String tenantId = execution.getTenantId();
-        String stageName = "DocTypeSplitter";
+
+        // CHANGE: Use BPMN Activity ID
+        String stageName = execution.getCurrentActivityId();
 
         @SuppressWarnings("unchecked")
         Map<String, Map<String, Object>> fileProcessMap =
@@ -44,6 +46,7 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
         for (String filename : fileProcessMap.keySet()) {
             Map<String, Object> fileResults = fileProcessMap.get(filename);
 
+            // Note: We check for "Document_ClassifierOutput" because GenericDelegate still maps results using agentId
             if (!fileResults.containsKey("Document_ClassifierOutput")) {
                 log.warn("No classifier output for file: {}, skipping", filename);
                 continue;
@@ -182,6 +185,7 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
                     }
                 }
 
+                // CHANGE: Use stageName in path
                 String splitStoragePath = tenantId + "/HealthClaim/" + ticketId +
                         "/" + stageName + "/" + splitFilename;
                 storage.uploadDocument(splitStoragePath, pdfBytes, "application/pdf");

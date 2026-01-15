@@ -26,7 +26,9 @@ public class GenericIDGeneratorDelegate implements JavaDelegate {
         log.info("Generated TicketID: {}", ticketId);
 
         String workflowKey = "HealthClaim";
-        String stageName = "Generate_TicketID_and_Workflow_Name";
+
+        // CHANGE: Use BPMN Activity ID for the folder name
+        String stageName = execution.getCurrentActivityId();
 
         Object docsObject = execution.getVariable("docs");
         Map<String, String> documentPaths = DocumentProcessingService.processAndUploadDocuments(

@@ -24,6 +24,9 @@ public class FHIRAnalyserDelegate implements JavaDelegate {
         String tenantId = execution.getTenantId();
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
 
+        // CHANGE: Use BPMN Activity ID
+        String stageName = execution.getCurrentActivityId();
+
         log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
 
         Connection conn = execution.getProcessEngine()
@@ -71,8 +74,9 @@ public class FHIRAnalyserDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "FHIR_Analyser", statusCode, resp, new HashMap<>());
 
+        // CHANGE: Use stageName
         String analyserMinioPath = AgentResultStorageService.storeAgentResult(
-                tenantId, ticketId, "FHIR_Analyser", "consolidated", fullResult);
+                tenantId, ticketId, stageName, "consolidated", fullResult);
 
         log.info("Stored FHIR_Analyser result at: {}", analyserMinioPath);
 

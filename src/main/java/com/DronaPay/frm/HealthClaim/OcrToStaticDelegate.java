@@ -29,10 +29,26 @@ public class OcrToStaticDelegate implements JavaDelegate {
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
         String tenantId = execution.getTenantId();
 
+        // CHANGE: Use BPMN Activity ID
+        String stageName = execution.getCurrentActivityId();
+
         log.info("=== OcrToStatic Started for file: {} ===", filename);
 
-        String filenameWithoutExt = filename.replace(".pdf", "");
-        String minioPath = String.format("%s/HealthClaim/%s/openaiVision/%s.json", tenantId, ticketId, filenameWithoutExt);
+        // CHANGE: Retrieve path from map instead of guessing
+        Map<String, String> ocrRawResults = (Map<String, String>) execution.getVariable("ocrRawResults");
+        String minioPath = null;
+
+        if (ocrRawResults != null && ocrRawResults.containsKey(filename)) {
+            minioPath = ocrRawResults.get(filename);
+        } else {
+            // Fallback just in case, though variable should exist
+            String filenameWithoutExt = filename.replace(".pdf", "");
+            // Warning: This path assumption might be broken if OCROnDoc ID changed but map wasn't passed.
+            log.warn("ocrRawResults variable missing for {}, attempting default path construction", filename);
+            // We can't reliably guess the folder name if it was dynamic, defaulting to what it might be?
+            // Ideally we throw error, but let's try assuming previous behavior or strict error.
+            throw new BpmnError("ocrToStaticFailed", "Missing input path for " + filename);
+        }
 
         log.info("Fetching openaiVision result from MinIO: {}", minioPath);
 
@@ -81,8 +97,17 @@ public class OcrToStaticDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "ocrToStatic", statusCode, resp, new HashMap<>());
 
+        // CHANGE: Use stageName (Activity ID)
         String storedPath = AgentResultStorageService.storeAgentResult(
-                tenantId, ticketId, "ocrToStatic", filename, fullResult);
+                tenantId, ticketId, stageName, filename, fullResult);
+
+        // CHANGE: Store result path in variable for Consolidator
+        Map<String, String> ocrToStaticResults = (Map<String, String>) execution.getVariable("ocrToStaticResults");
+        if (ocrToStaticResults == null) {
+            ocrToStaticResults = new HashMap<>();
+        }
+        ocrToStaticResults.put(filename, storedPath);
+        execution.setVariable("ocrToStaticResults", ocrToStaticResults);
 
         log.info("Stored ocrToStatic result at: {}", storedPath);
 

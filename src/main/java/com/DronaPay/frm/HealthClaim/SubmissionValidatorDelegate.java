@@ -25,6 +25,9 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
         String tenantId = execution.getTenantId();
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
 
+        // CHANGE: Use BPMN Activity ID
+        String stageName = execution.getCurrentActivityId();
+
         log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
 
         Connection conn = execution.getProcessEngine()
@@ -78,8 +81,9 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "Submission_Validator", statusCode, resp, new HashMap<>());
 
+        // CHANGE: Use stageName
         String validatorMinioPath = AgentResultStorageService.storeAgentResult(
-                tenantId, ticketId, "Submission_Validator", "consolidated", fullResult);
+                tenantId, ticketId, stageName, "consolidated", fullResult);
 
         log.info("Stored Submission_Validator result at: {}", validatorMinioPath);
 

@@ -25,7 +25,10 @@ public class SaveFinalFormListener implements ExecutionListener {
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
         String tenantId = execution.getTenantId();
 
-        log.info("=== Execution Listener: Saving Final Form for Ticket {} ===", ticketId);
+        // CHANGE: Use BPMN Activity ID
+        String stageName = execution.getCurrentActivityId();
+
+        log.info("=== Execution Listener: Saving Final Form for Ticket {} in stage {} ===", ticketId, stageName);
 
         try {
             String currentData = getCurrentUIDisplayerData(execution, tenantId);
@@ -76,7 +79,8 @@ public class SaveFinalFormListener implements ExecutionListener {
             }
 
             JSONObject finalResponse = new JSONObject();
-            finalResponse.put("agentid", "final");
+            // CHANGE: Use stageName
+            finalResponse.put("agentid", stageName);
             finalResponse.put("answer", updatedArray);
             finalResponse.put("version", "v3_final");
             finalResponse.put("final_timestamp", System.currentTimeMillis());
@@ -84,14 +88,15 @@ public class SaveFinalFormListener implements ExecutionListener {
             finalResponse.put("fields_updated_count", updatedCount);
 
             Map<String, Object> finalResult = new HashMap<>();
-            finalResult.put("agentId", "final");
+            finalResult.put("agentId", stageName);
             finalResult.put("statusCode", 200);
             finalResult.put("rawResponse", finalResponse.toString());
             finalResult.put("version", "v3");
             finalResult.put("timestamp", System.currentTimeMillis());
 
+            // CHANGE: Use stageName
             String finalPath = AgentResultStorageService.storeAgentResult(
-                    tenantId, ticketId, "final", "consolidated", finalResult);
+                    tenantId, ticketId, stageName, "consolidated", finalResult);
 
             log.info("Stored final form at: {}", finalPath);
 

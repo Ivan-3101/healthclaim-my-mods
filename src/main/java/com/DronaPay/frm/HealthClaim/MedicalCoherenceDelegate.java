@@ -25,6 +25,9 @@ public class MedicalCoherenceDelegate implements JavaDelegate {
         String tenantId = execution.getTenantId();
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
 
+        // CHANGE: Use BPMN Activity ID
+        String stageName = execution.getCurrentActivityId();
+
         log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
 
         Connection conn = execution.getProcessEngine()
@@ -83,8 +86,9 @@ public class MedicalCoherenceDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "medical_comp", statusCode, resp, new HashMap<>());
 
+        // CHANGE: Use stageName
         String medicalCoherenceMinioPath = AgentResultStorageService.storeAgentResult(
-                tenantId, ticketId, "medical_comp", "consolidated", fullResult);
+                tenantId, ticketId, stageName, "consolidated", fullResult);
 
         log.info("Stored Medical Coherence result at: {}", medicalCoherenceMinioPath);
 

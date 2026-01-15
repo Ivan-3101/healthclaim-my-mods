@@ -20,6 +20,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
@@ -32,7 +33,9 @@ public class OCROnDoc implements JavaDelegate {
         String filename = (String) execution.getVariable("attachment");
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
         String tenantId = execution.getTenantId();
-        String stageName = "openaiVision";
+
+        // CHANGE: Use BPMN Activity ID
+        String stageName = execution.getCurrentActivityId();
 
         @SuppressWarnings("unchecked")
         Map<String, String> documentPaths = (Map<String, String>) execution.getVariable("documentPaths");
@@ -112,9 +115,18 @@ public class OCROnDoc implements JavaDelegate {
 
         log.info("Received response from openaiVision agent (status: {})", statusCode);
 
+        // CHANGE: Use stageName in path
         String outputPath = tenantId + "/HealthClaim/" + ticketId + "/" + stageName + "/" + doctype + ".json";
         byte[] jsonBytes = responseBody.getBytes(StandardCharsets.UTF_8);
         storage.uploadDocument(outputPath, jsonBytes, "application/json");
+
+        // CHANGE: Store output path in variable for next step to find
+        Map<String, String> ocrRawResults = (Map<String, String>) execution.getVariable("ocrRawResults");
+        if (ocrRawResults == null) {
+            ocrRawResults = new HashMap<>();
+        }
+        ocrRawResults.put(filename, outputPath);
+        execution.setVariable("ocrRawResults", ocrRawResults);
 
         log.info("Saved OCR result to: {}", outputPath);
         log.info("=== OCR on Documents Completed for {} ===", filename);

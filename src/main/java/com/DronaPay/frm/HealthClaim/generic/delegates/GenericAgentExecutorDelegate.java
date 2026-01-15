@@ -40,7 +40,10 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         boolean enabled = agentConfig.optBoolean("enabled", true);
         boolean critical = agentConfig.optBoolean("critical", false);
 
-        log.info("=== Generic Agent Executor Started for {} ({}) ===", displayName, agentId);
+        // CHANGE: Use the BPMN Activity ID as the stage/folder name
+        String stageName = execution.getCurrentActivityId();
+
+        log.info("=== Generic Agent Executor Started for {} (Agent: {}) ===", stageName, agentId);
 
         if (!enabled) {
             log.info("Agent '{}' is disabled, skipping execution", displayName);
@@ -76,10 +79,10 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         log.info("Agent '{}' API status: {}", displayName, statusCode);
         log.debug("Agent '{}' response: {}", displayName, resp);
 
-        processAndStoreResponse(agentId, displayName, statusCode, resp, config,
+        processAndStoreResponse(agentId, stageName, displayName, statusCode, resp, config,
                 execution, filename, critical, tenantId, ticketId);
 
-        log.info("=== Generic Agent Executor Completed for {} ===", displayName);
+        log.info("=== Generic Agent Executor Completed for {} ===", stageName);
     }
 
     @SuppressWarnings("unchecked")
@@ -148,7 +151,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
     }
 
     @SuppressWarnings("unchecked")
-    private void processAndStoreResponse(String agentId, String displayName, int statusCode, String resp,
+    private void processAndStoreResponse(String agentId, String stageName, String displayName, int statusCode, String resp,
                                          JSONObject config, DelegateExecution execution,
                                          String filename, boolean critical, String tenantId, String ticketId) throws Exception {
 
@@ -231,8 +234,9 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 agentId, statusCode, resp, extractedData);
 
+        // CHANGE: Use stageName (Activity ID) for folder path instead of agentId
         String minioPath = AgentResultStorageService.storeAgentResult(
-                tenantId, ticketId, agentId, filename, fullResult);
+                tenantId, ticketId, stageName, filename, fullResult);
 
         log.info("Stored full result for '{}' in MinIO at: {}", agentId, minioPath);
 
@@ -251,6 +255,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
             agentResult.put("minioPath", minioPath);
             agentResult.put("apiCall", statusCode == 200 ? "success" : "failed");
 
+            // We keep the map key as "agentId + Output" so downstream logic (like Splitter) doesn't break
             fileResults.put(agentId + "Output", agentResult);
             fileProcessMap.put(filename, fileResults);
 

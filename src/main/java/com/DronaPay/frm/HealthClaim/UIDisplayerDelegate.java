@@ -24,6 +24,9 @@ public class UIDisplayerDelegate implements JavaDelegate {
         String tenantId = execution.getTenantId();
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
 
+        // CHANGE: Use BPMN Activity ID
+        String stageName = execution.getCurrentActivityId();
+
         log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
 
         Connection conn = execution.getProcessEngine()
@@ -78,8 +81,9 @@ public class UIDisplayerDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "UI_Displayer", statusCode, resp, new HashMap<>());
 
+        // CHANGE: Use stageName
         String uiDisplayerMinioPath = AgentResultStorageService.storeAgentResult(
-                tenantId, ticketId, "UI_Displayer", "consolidated", fullResult);
+                tenantId, ticketId, stageName, "consolidated", fullResult);
 
         log.info("Stored UI_Displayer result at: {}", uiDisplayerMinioPath);
 

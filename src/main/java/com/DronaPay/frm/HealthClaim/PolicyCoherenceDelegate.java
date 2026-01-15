@@ -25,6 +25,9 @@ public class PolicyCoherenceDelegate implements JavaDelegate {
         String tenantId = execution.getTenantId();
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
 
+        // CHANGE: Use BPMN Activity ID
+        String stageName = execution.getCurrentActivityId();
+
         log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
 
         Connection conn = execution.getProcessEngine()
@@ -83,8 +86,9 @@ public class PolicyCoherenceDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "policy_comp1", statusCode, resp, new HashMap<>());
 
+        // CHANGE: Use stageName
         String policyCoherenceMinioPath = AgentResultStorageService.storeAgentResult(
-                tenantId, ticketId, "policy_comp1", "consolidated", fullResult);
+                tenantId, ticketId, stageName, "consolidated", fullResult);
 
         log.info("Stored Policy Coherence result at: {}", policyCoherenceMinioPath);
 
