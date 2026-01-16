@@ -4,19 +4,6 @@
     <bpmn:startEvent id="Event_1e3l95j" name="Create Ticket">
       <bpmn:outgoing>Flow_15rnuix</bpmn:outgoing>
     </bpmn:startEvent>
-    <bpmn:serviceTask id="Generate_TicketID_and_Workflow_Name" name="Generate TicketID and Workflow Name" camunda:modelerTemplate="com.dronapay.generic.ticketgenerator" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericIDGeneratorDelegate">
-      <bpmn:extensionElements>
-        <camunda:field name="workflowKey">
-          <camunda:expression>HealthClaim</camunda:expression>
-        </camunda:field>
-        <camunda:field name="expiryDuration" />
-        <camunda:field name="docsVariableName">
-          <camunda:expression>docs</camunda:expression>
-        </camunda:field>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_15rnuix</bpmn:incoming>
-      <bpmn:outgoing>Flow_058ecar</bpmn:outgoing>
-    </bpmn:serviceTask>
     <bpmn:endEvent id="Event_1dn2bub" name="Close Ticket">
       <bpmn:incoming>Flow_168aalw</bpmn:incoming>
       <bpmn:incoming>Flow_0j8gdpr</bpmn:incoming>
@@ -482,6 +469,21 @@
       <bpmn:incoming>Flow_1hfmdqo</bpmn:incoming>
       <bpmn:outgoing>Flow_1rhou26</bpmn:outgoing>
     </bpmn:serviceTask>
+    <bpmn:serviceTask id="Generate_TicketID_and_Workflow_Name" name="Generate TicketID and Workflow Name" camunda:modelerTemplate="com.dronapay.generic.ticketgenerator" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericIDGeneratorDelegate">
+      <bpmn:extensionElements>
+        <camunda:field name="workflowKey">
+          <camunda:expression>HealthClaim</camunda:expression>
+        </camunda:field>
+        <camunda:field name="expiryDuration">
+          <camunda:expression>24h</camunda:expression>
+        </camunda:field>
+        <camunda:field name="docsVariableName">
+          <camunda:expression>docs</camunda:expression>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_15rnuix</bpmn:incoming>
+      <bpmn:outgoing>Flow_058ecar</bpmn:outgoing>
+    </bpmn:serviceTask>
   </bpmn:process>
   <bpmn:error id="Error_1brcit7" name="forgeddoc" />
   <bpmn:message id="Message_3r951pg" name="policyHolderResponse" />
@@ -497,9 +499,6 @@
         <bpmndi:BPMNLabel>
           <dc:Bounds x="157" y="865" width="66" height="14" />
         </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_068lxij_di" bpmnElement="Generate_TicketID_and_Workflow_Name">
-        <dc:Bounds x="290" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_1dn2bub_di" bpmnElement="Event_1dn2bub">
         <dc:Bounds x="7102" y="822" width="36" height="36" />
@@ -604,6 +603,9 @@
       <bpmndi:BPMNShape id="BPMNShape_1wbctoh" bpmnElement="Activity_0ytppf9">
         <dc:Bounds x="4650" y="500" width="100" height="80" />
         <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1s3pyve_di" bpmnElement="Generate_TicketID_and_Workflow_Name">
+        <dc:Bounds x="290" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_17h17ae_di" bpmnElement="Activity_17h17ae" isExpanded="true">
         <dc:Bounds x="670" y="740" width="330" height="200" />

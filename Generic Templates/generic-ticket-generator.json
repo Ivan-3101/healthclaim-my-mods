@@ -1,0 +1,67 @@
+{
+  "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
+  "name": "Generic Ticket Generator",
+  "id": "com.dronapay.generic.ticketgenerator",
+  "appliesTo": [
+    "bpmn:ServiceTask"
+  ],
+  "description": "Generates a Ticket ID and processes initial document uploads for any claim workflow.",
+  "groups": [
+    {
+      "id": "configuration",
+      "label": "Configuration"
+    },
+    {
+      "id": "advanced",
+      "label": "Advanced Settings"
+    }
+  ],
+  "properties": [
+    {
+      "type": "Hidden",
+      "value": "com.DronaPay.frm.HealthClaim.generic.delegates.GenericIDGeneratorDelegate",
+      "binding": {
+        "type": "property",
+        "name": "camunda:class"
+      }
+    },
+    {
+      "label": "Workflow Key",
+      "description": "Unique key for this workflow type (e.g., HealthClaim, MotorClaim).",
+      "group": "configuration",
+      "type": "String",
+      "binding": {
+        "type": "camunda:field",
+        "name": "workflowKey",
+        "expression": true
+      },
+      "constraints": {
+        "notEmpty": true
+      }
+    },
+    {
+      "label": "Expiry Duration",
+      "description": "Time until the ticket/link expires (e.g., PT24H, P7D).",
+      "group": "configuration",
+      "type": "String",
+      "value": "24h",
+      "binding": {
+        "type": "camunda:field",
+        "name": "expiryDuration",
+        "expression": true
+      }
+    },
+    {
+      "label": "Input Document Variable",
+      "description": "The process variable name containing the uploaded files.",
+      "group": "advanced",
+      "type": "String",
+      "value": "docs",
+      "binding": {
+        "type": "camunda:field",
+        "name": "docsVariableName",
+        "expression": true
+      }
+    }
+  ]
+}
