@@ -31,7 +31,7 @@ public class GenericIDGeneratorDelegate implements JavaDelegate {
         }
 
         // --- FIX ADDED HERE ---
-        // Saving this as a Process Variable so downstream forms/delegates (like LoadUIFields) can use it.
+        // Saving this as a Process Variable
         execution.setVariable("workflowKey", workflowKeyStr);
         log.info("Set process variable 'workflowKey' to: {}", workflowKeyStr);
         // ----------------------
