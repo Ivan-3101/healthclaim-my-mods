@@ -30,6 +30,12 @@ public class GenericIDGeneratorDelegate implements JavaDelegate {
             throw new RuntimeException("GenericIDGenerator: 'workflowKey' field is missing in BPMN. Please configure the element template.");
         }
 
+        // --- FIX ADDED HERE ---
+        // Saving this as a Process Variable so downstream forms/delegates (like LoadUIFields) can use it.
+        execution.setVariable("workflowKey", workflowKeyStr);
+        log.info("Set process variable 'workflowKey' to: {}", workflowKeyStr);
+        // ----------------------
+
         // 2. Resolve Docs Variable Name (Default to "docs")
         String docsVarNameStr = (docsVariableName != null) ? (String) docsVariableName.getValue(execution) : "docs";
         if (docsVarNameStr == null || docsVarNameStr.trim().isEmpty()) {
