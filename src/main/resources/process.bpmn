@@ -4,7 +4,16 @@
     <bpmn:startEvent id="Event_1e3l95j" name="Create Ticket">
       <bpmn:outgoing>Flow_15rnuix</bpmn:outgoing>
     </bpmn:startEvent>
-    <bpmn:serviceTask id="Generate_TicketID_and_Workflow_Name" name="Generate TicketID and Workflow Name" camunda:class="com.DronaPay.frm.HealthClaim.GenerateIDAndWorkflowName">
+    <bpmn:serviceTask id="Generate_TicketID_and_Workflow_Name" name="Generate TicketID and Workflow Name" camunda:modelerTemplate="com.dronapay.generic.ticketgenerator" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericIDGeneratorDelegate">
+      <bpmn:extensionElements>
+        <camunda:field name="workflowKey">
+          <camunda:expression>HealthClaim</camunda:expression>
+        </camunda:field>
+        <camunda:field name="expiryDuration" />
+        <camunda:field name="docsVariableName">
+          <camunda:expression>docs</camunda:expression>
+        </camunda:field>
+      </bpmn:extensionElements>
       <bpmn:incoming>Flow_15rnuix</bpmn:incoming>
       <bpmn:outgoing>Flow_058ecar</bpmn:outgoing>
     </bpmn:serviceTask>
