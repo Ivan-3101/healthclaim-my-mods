@@ -19,42 +19,48 @@ import java.sql.Connection;
 @Slf4j
 public class GenericMasterDataVerificationDelegate implements JavaDelegate {
 
+    // CONSTANTS
+    private static final String IDENTIFIER_VAR = "policy_id";
+    private static final String SUCCESS_VAR = "policyFound";
+
     @Override
     public void execute(DelegateExecution execution) throws Exception {
         log.info("=== Generic Master Data Verification Started ===");
-        log.info("TicketID: {}", execution.getVariable("TicketID"));
+
+        // 1. Get Workflow Key from Process Variable
+        String workflowKey = (String) execution.getVariable("workflowKey");
+
+        // STRICT CHECK: Fail if missing (No more fallback to "HealthClaim")
+        if (workflowKey == null || workflowKey.trim().isEmpty()) {
+            throw new RuntimeException("GenericMasterDataVerification: 'workflowKey' process variable is missing! Ensure the Ticket Generator stage executed correctly.");
+        }
 
         String tenantId = execution.getTenantId();
-        String workflowKey = "HealthClaim"; // TODO: Make this configurable
+        log.info("Verifying Master Data for Workflow: {}", workflowKey);
 
-        // 1. Load workflow configuration from database
-        Connection conn = execution.getProcessEngine()
-                .getProcessEngineConfiguration()
-                .getDataSource()
-                .getConnection();
-
+        // 2. Load workflow configuration from DB
+        Connection conn = execution.getProcessEngine().getProcessEngineConfiguration().getDataSource().getConnection();
         JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig(workflowKey, tenantId, conn);
         conn.close();
 
-        // 2. Load verification configuration from database (NO FALLBACK)
+        // 3. Load verification config (URLs, API Keys)
         VerificationConfig config = loadConfiguration(workflowConfig);
 
-        // 3. Get the identifier to verify (e.g., policy_id)
-        String identifier = (String) execution.getVariable(config.identifierVariable);
-        if (identifier == null || identifier.isEmpty()) {
-            log.error("Identifier variable '{}' is null or empty", config.identifierVariable);
-            execution.setVariable("policyFound", "no");
+        // 4. Get the Policy ID to verify
+        String identifierValue = (String) execution.getVariable(IDENTIFIER_VAR);
+
+        if (identifierValue == null || identifierValue.isEmpty()) {
+            log.error("Identifier variable '{}' is null or empty", IDENTIFIER_VAR);
+            execution.setVariable(SUCCESS_VAR, "no");
             execution.setVariable("statusCode", 400);
             return;
         }
 
-        log.info("Verifying {} with value: {}", config.identifierVariable, identifier);
+        log.info("Verifying {}: {}", IDENTIFIER_VAR, identifierValue);
 
-        // 4. Build API URL
-        String apiUrl = buildApiUrl(config, identifier);
-        log.info("API URL: {}", apiUrl);
+        // 5. Build and Call API
+        String apiUrl = buildApiUrl(config, identifierValue);
 
-        // 5. Make API call
         try (CloseableHttpClient client = HttpClients.createDefault()) {
             HttpGet httpGet = new HttpGet(new URI(apiUrl));
             httpGet.addHeader("X-API-Key", config.apiKey);
@@ -63,92 +69,56 @@ public class GenericMasterDataVerificationDelegate implements JavaDelegate {
                 int statusCode = response.getStatusLine().getStatusCode();
                 String responseBody = EntityUtils.toString(response.getEntity());
 
-                log.info("Master Data Verification Status: {}", statusCode);
-                log.debug("Response: {}", responseBody);
+                log.info("Verification Status: {}", statusCode);
 
-                // 6. Set process variables
-                ObjectValue respJson = Variables
-                        .objectValue(responseBody)
-                        .serializationDataFormat("application/json")
-                        .create();
+                ObjectValue respJson = Variables.objectValue(responseBody)
+                        .serializationDataFormat("application/json").create();
 
                 execution.setVariable("verifyResponse", respJson);
                 execution.setVariable("statusCode", statusCode);
 
                 if (statusCode == 200) {
-                    execution.setVariable("policyFound", "yes");
-                    log.info("Master data verification successful");
+                    execution.setVariable(SUCCESS_VAR, "yes");
+                    log.info("Verification Successful. Set {} = 'yes'", SUCCESS_VAR);
                 } else {
-                    execution.setVariable("policyFound", "no");
-                    log.warn("Master data verification failed with status: {}", statusCode);
+                    execution.setVariable(SUCCESS_VAR, "no");
+                    log.warn("Verification Failed. Set {} = 'no'", SUCCESS_VAR);
                 }
             }
         }
-
         log.info("=== Generic Master Data Verification Completed ===");
     }
 
-    /**
-     * Load verification configuration from database - NO FALLBACK
-     * Throws exception if configuration not found
-     */
     private VerificationConfig loadConfiguration(JSONObject workflowConfig) {
         if (!workflowConfig.has("externalAPIs")) {
-            throw new IllegalArgumentException(
-                    "External API configuration not found in database. " +
-                            "Please ensure 'externalAPIs' section exists in ui.workflowmasters.filterparams"
-            );
+            throw new IllegalArgumentException("External API configuration not found in database.");
         }
-
         JSONObject externalAPIs = workflowConfig.getJSONObject("externalAPIs");
 
         if (!externalAPIs.has("springAPI")) {
-            throw new IllegalArgumentException(
-                    "Spring API configuration not found in externalAPIs. " +
-                            "Please add 'springAPI' section to database configuration"
-            );
+            throw new IllegalArgumentException("Spring API configuration not found.");
         }
-
         JSONObject springAPI = externalAPIs.getJSONObject("springAPI");
-
-        if (!springAPI.has("baseUrl") || !springAPI.has("apiKey")) {
-            throw new IllegalArgumentException(
-                    "Spring API configuration incomplete. Required fields: baseUrl, apiKey"
-            );
-        }
 
         VerificationConfig config = new VerificationConfig();
         config.baseUrl = springAPI.getString("baseUrl");
         config.apiKey = springAPI.getString("apiKey");
 
-        // Get endpoint pattern from config
         if (springAPI.has("endpoints") && springAPI.getJSONObject("endpoints").has("accounts")) {
             config.endpointPattern = springAPI.getJSONObject("endpoints").getString("accounts");
         } else {
             config.endpointPattern = "/accounts/{identifier}";
         }
-
-        // Identifier variable name (can be made configurable)
-        config.identifierVariable = "policy_id";
-
-        log.info("Loaded master data verification config from database - URL: {}", config.baseUrl);
         return config;
     }
 
-    /**
-     * Build complete API URL by replacing placeholders
-     */
     private String buildApiUrl(VerificationConfig config, String identifier) {
         return config.baseUrl + config.endpointPattern.replace("{identifier}", identifier);
     }
 
-    /**
-     * Configuration holder class
-     */
     private static class VerificationConfig {
         String baseUrl;
         String apiKey;
         String endpointPattern;
-        String identifierVariable;
     }
 }
