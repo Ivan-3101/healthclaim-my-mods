@@ -28,6 +28,12 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
     @Override
     public void execute(DelegateExecution execution) throws Exception {
 
+        // =================================================================================
+        // STEP 1: THE "WAKE UP" (RECEIVING INSTRUCTIONS)
+        // This is the "handover" point. The previous delegate (e.g., IdentifyForgedDocuments)
+        // placed a specific JSON configuration into the 'currentAgentConfig' variable.
+        // We now retrieve that instruction set to know what to do.
+        // =================================================================================
         Object configObj = execution.getVariable("currentAgentConfig");
         if (configObj == null) {
             throw new IllegalStateException("currentAgentConfig variable not set");
@@ -35,6 +41,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
 
         JSONObject agentConfig = (JSONObject) configObj;
 
+        // Extract high-level details (Who is this agent? Is it enabled?)
         String agentId = agentConfig.getString("agentId");
         String displayName = agentConfig.getString("displayName");
         boolean enabled = agentConfig.optBoolean("enabled", true);
@@ -58,6 +65,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
             log.info("Agent '{}' is processing consolidated/non-document data (filename is null)", displayName);
         }
 
+        // Get the specific technical config (Endpoint URL, Input/Output Mappings)
         JSONObject config = agentConfig.getJSONObject("config");
 
         Connection conn = execution.getProcessEngine()
@@ -68,8 +76,18 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
         conn.close();
 
+        // =================================================================================
+        // STEP 2: GATHERING MATERIALS (REQUEST CONSTRUCTION)
+        // We call 'buildRequest' to prepare the actual payload.
+        // This handles logic like downloading files from MinIO or fetching process variables.
+        // =================================================================================
         JSONObject requestBody = buildRequest(config, execution, filename, tenantId, agentId);
 
+        // =================================================================================
+        // STEP 3: MAKING THE CALL (EXECUTION)
+        // We now have the URL (from config) and the Data (from buildRequest).
+        // We execute the actual HTTP POST request to the external AI/Agent service.
+        // =================================================================================
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
         CloseableHttpResponse response = apiServices.callAgent(requestBody.toString());
 
@@ -79,6 +97,11 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         log.info("Agent '{}' API status: {}", displayName, statusCode);
         log.debug("Agent '{}' response: {}", displayName, resp);
 
+        // =================================================================================
+        // STEP 4 & 5: PROCESSING RESULT & ARCHIVING
+        // We handle the response (extracting variables like 'isForged') and then
+        // save the full raw result to storage for auditing.
+        // =================================================================================
         processAndStoreResponse(agentId, stageName, displayName, statusCode, resp, config,
                 execution, filename, critical, tenantId, ticketId);
 
@@ -96,6 +119,7 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
         String source = inputMapping.getString("source");
         String transformation = inputMapping.optString("transformation", "none");
 
+        // CASE A: The agent needs a document (e.g., Forgery Detection, OCR)
         if (source.equals("documentVariable")) {
             Map<String, String> documentPaths = (Map<String, String>) execution.getVariable("documentPaths");
 
@@ -103,18 +127,23 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
                 throw new IllegalStateException("filename is null but agent requires documentVariable source");
             }
 
+            // 1. Find where the file is stored
             String storagePath = documentPaths.get(filename);
 
+            // 2. Download the raw file bytes from MinIO
             StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
             InputStream fileContent = storage.downloadDocument(storagePath);
             byte[] bytes = IOUtils.toByteArray(fileContent);
 
+            // 3. Transform bytes (e.g., to Base64) for the JSON payload
             if (transformation.equals("toBase64")) {
                 String base64 = Base64.getEncoder().encodeToString(bytes);
                 data.put("base64_img", base64);
             }
 
-        } else if (source.equals("processVariable")) {
+        }
+        // CASE B: The agent needs data variables (e.g., Risk Scoring)
+        else if (source.equals("processVariable")) {
             String variableName = inputMapping.getString("variableName");
             Object value = execution.getVariable(variableName);
 
@@ -157,6 +186,11 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
 
         Map<String, Object> extractedData = new HashMap<>();
 
+        // =================================================================================
+        // STEP 4: PROCESSING THE RESULT (OUTPUT LOGIC)
+        // If the call was successful (200 OK), we look at 'outputMapping' rules.
+        // We extract specific fields (like "answer") and save them to Camunda variables.
+        // =================================================================================
         if (statusCode == 200) {
             JSONObject outputMapping = config.optJSONObject("outputMapping");
             if (outputMapping != null && outputMapping.has("variablesToSet")) {
@@ -173,6 +207,8 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
                         Object value = responseJson.optQuery(jsonPath);
 
                         if (value != null) {
+                            // Special logic for Forgery Detection:
+                            // Check if the classification text contains "Suspicious"
                             if (transformationFn.equals("mapSuspiciousToBoolean")) {
                                 boolean isForged = false;
                                 if (value instanceof org.json.JSONObject) {
@@ -231,6 +267,11 @@ public class GenericAgentExecutorDelegate implements JavaDelegate {
             }
         }
 
+        // =================================================================================
+        // STEP 5: ARCHIVING (AUDIT TRAIL)
+        // Regardless of success/failure, we package the *full* result (raw response + metadata)
+        // and upload it to MinIO. This ensures we have a permanent record.
+        // =================================================================================
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 agentId, statusCode, resp, extractedData);
 
