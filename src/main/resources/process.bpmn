@@ -351,7 +351,12 @@
       <bpmn:startEvent id="Event_11ox0g4">
         <bpmn:outgoing>Flow_1c5c7cj</bpmn:outgoing>
       </bpmn:startEvent>
-      <bpmn:serviceTask id="Identify_Forged_Documents" name="Identify forged documents" camunda:modelerTemplate="com.dronapay.generic.agent" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericSingleAgentDelegate">
+      <bpmn:sequenceFlow id="Flow_1c5c7cj" sourceRef="Event_11ox0g4" targetRef="Identify_Forged_Documents" />
+      <bpmn:endEvent id="Event_0oqarvk">
+        <bpmn:incoming>Flow_0vzpcw3</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_0vzpcw3" sourceRef="Identify_Forged_Documents" targetRef="Event_0oqarvk" />
+      <bpmn:serviceTask id="Identify_Forged_Documents" name="Identify forged documents" camunda:modelerTemplate="com.dronapay.generic.agent" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericSingleAgentDelegate">
         <bpmn:extensionElements>
           <camunda:field name="agentId">
             <camunda:string>forgeryagent</camunda:string>
@@ -360,11 +365,6 @@
         <bpmn:incoming>Flow_1c5c7cj</bpmn:incoming>
         <bpmn:outgoing>Flow_0vzpcw3</bpmn:outgoing>
       </bpmn:serviceTask>
-      <bpmn:sequenceFlow id="Flow_1c5c7cj" sourceRef="Event_11ox0g4" targetRef="Identify_Forged_Documents" />
-      <bpmn:endEvent id="Event_0oqarvk">
-        <bpmn:incoming>Flow_0vzpcw3</bpmn:incoming>
-      </bpmn:endEvent>
-      <bpmn:sequenceFlow id="Flow_0vzpcw3" sourceRef="Identify_Forged_Documents" targetRef="Event_0oqarvk" />
     </bpmn:subProcess>
     <bpmn:sequenceFlow id="Flow_0450puq" sourceRef="Activity_17h17ae" targetRef="Activity_DocClassifier" />
     <bpmn:subProcess id="Activity_1kzv5fa">
@@ -615,12 +615,11 @@
       <bpmndi:BPMNShape id="Event_11ox0g4_di" bpmnElement="Event_11ox0g4">
         <dc:Bounds x="702" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0n9gc57_di" bpmnElement="Identify_Forged_Documents" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
-        <dc:Bounds x="780" y="800" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_0oqarvk_di" bpmnElement="Event_0oqarvk">
         <dc:Bounds x="932" y="822" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_05yeav4_di" bpmnElement="Identify_Forged_Documents">
+        <dc:Bounds x="780" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_1c5c7cj_di" bpmnElement="Flow_1c5c7cj">
         <di:waypoint x="738" y="840" />
