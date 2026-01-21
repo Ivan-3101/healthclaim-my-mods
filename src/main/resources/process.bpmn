@@ -351,7 +351,12 @@
       <bpmn:startEvent id="Event_11ox0g4">
         <bpmn:outgoing>Flow_1c5c7cj</bpmn:outgoing>
       </bpmn:startEvent>
-      <bpmn:serviceTask id="Identify_Forged_Documents" name="Identify forged documents" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.IdentifyForgedDocuments">
+      <bpmn:serviceTask id="Identify_Forged_Documents" name="Identify forged documents" camunda:modelerTemplate="com.dronapay.generic.agent" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericSingleAgentDelegate">
+        <bpmn:extensionElements>
+          <camunda:field name="agentId">
+            <camunda:string>forgeryagent</camunda:string>
+          </camunda:field>
+        </bpmn:extensionElements>
         <bpmn:incoming>Flow_1c5c7cj</bpmn:incoming>
         <bpmn:outgoing>Flow_0vzpcw3</bpmn:outgoing>
       </bpmn:serviceTask>

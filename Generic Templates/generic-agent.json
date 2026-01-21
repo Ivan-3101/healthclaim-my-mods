@@ -1,0 +1,32 @@
+{
+  "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/schema.json",
+  "name": "Generic Agent Task",
+  "id": "com.dronapay.generic.agent",
+  "description": "Executes a specific agent configured in the database",
+  "appliesTo": [
+    "bpmn:ServiceTask"
+  ],
+  "properties": [
+    {
+      "label": "Implementation Type",
+      "type": "Hidden",
+      "value": "com.DronaPay.frm.HealthClaim.generic.delegates.GenericSingleAgentDelegate",
+      "binding": {
+        "type": "property",
+        "name": "camunda:class"
+      }
+    },
+    {
+      "label": "Agent ID",
+      "description": "The unique ID of the agent as defined in the database (e.g., forgeryagent, ocrToStatic)",
+      "type": "String",
+      "binding": {
+        "type": "camunda:field",
+        "name": "agentId"
+      },
+      "constraints": {
+        "notEmpty": true
+      }
+    }
+  ]
+}
