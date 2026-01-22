@@ -474,16 +474,10 @@
       <bpmn:incoming>Flow_1hfmdqo</bpmn:incoming>
       <bpmn:outgoing>Flow_1rhou26</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:serviceTask id="Generate_TicketID_and_Workflow_Name" name="Generate TicketID and Workflow Name" camunda:modelerTemplate="com.dronapay.generic.ticketgenerator" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericIDGeneratorDelegate">
+    <bpmn:serviceTask id="Generate_TicketID_and_Workflow_Name" name="Generate TicketID and Workflow Name" camunda:modelerTemplate="com.dronapay.generic.ticketgenerator" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericTicketIdGenerator">
       <bpmn:extensionElements>
-        <camunda:field name="workflowKey">
-          <camunda:expression>HealthClaim</camunda:expression>
-        </camunda:field>
-        <camunda:field name="expiryDuration">
-          <camunda:expression>24h</camunda:expression>
-        </camunda:field>
-        <camunda:field name="docsVariableName">
-          <camunda:expression>docs</camunda:expression>
+        <camunda:field name="configKey">
+          <camunda:expression>Generate TicketID and Workflow Name</camunda:expression>
         </camunda:field>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_15rnuix</bpmn:incoming>

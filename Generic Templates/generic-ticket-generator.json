@@ -5,62 +5,34 @@
   "appliesTo": [
     "bpmn:ServiceTask"
   ],
-  "description": "Generates a Ticket ID and processes initial document uploads for any claim workflow.",
+  "description": "Data-driven ticket generator. Configuration is fetched from the database using the Config Key.",
   "groups": [
     {
       "id": "configuration",
       "label": "Configuration"
-    },
-    {
-      "id": "advanced",
-      "label": "Advanced Settings"
     }
   ],
   "properties": [
     {
       "type": "Hidden",
-      "value": "com.DronaPay.frm.HealthClaim.generic.delegates.GenericIDGeneratorDelegate",
+      "value": "com.DronaPay.frm.HealthClaim.generic.delegates.GenericTicketIdGenerator",
       "binding": {
         "type": "property",
         "name": "camunda:class"
       }
     },
     {
-      "label": "Workflow Key",
-      "description": "Unique key for this workflow type (e.g., HealthClaim, MotorClaim).",
+      "label": "Configuration Key",
+      "description": "The key used to fetch the JSON configuration from ui.workflowmasters (e.g., 'Generate TicketID and Workflow Name').",
       "group": "configuration",
       "type": "String",
       "binding": {
         "type": "camunda:field",
-        "name": "workflowKey",
+        "name": "configKey",
         "expression": true
       },
       "constraints": {
         "notEmpty": true
-      }
-    },
-    {
-      "label": "Expiry Duration",
-      "description": "Time until the ticket/link expires (e.g., PT24H, P7D).",
-      "group": "configuration",
-      "type": "String",
-      "value": "24h",
-      "binding": {
-        "type": "camunda:field",
-        "name": "expiryDuration",
-        "expression": true
-      }
-    },
-    {
-      "label": "Input Document Variable",
-      "description": "The process variable name containing the uploaded files.",
-      "group": "advanced",
-      "type": "String",
-      "value": "docs",
-      "binding": {
-        "type": "camunda:field",
-        "name": "docsVariableName",
-        "expression": true
       }
     }
   ]
