@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.Expression;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
+import org.cibseven.bpm.engine.variable.Variables;
+import org.cibseven.bpm.engine.variable.value.ObjectValue;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -40,8 +42,13 @@ public class GenericTicketIdGenerator implements JavaDelegate {
         try {
             connection = execution.getProcessEngine().getProcessEngineConfiguration().getDataSource().getConnection();
 
+            // 1. Load Full Configuration
             JSONObject fullWorkflowConfig = ConfigurationService.loadWorkflowConfig(workflowKey, tenantId, connection);
 
+            // 2. Load Agent List (Fix for Agents getting skipped)
+            loadAgentConfiguration(execution, fullWorkflowConfig);
+
+            // 3. Load Stage Config
             if (!fullWorkflowConfig.has("genericWorkflowDelegateConfigurations") ||
                     !fullWorkflowConfig.getJSONObject("genericWorkflowDelegateConfigurations").has(configKeyStr)) {
                 throw new RuntimeException("Configuration not found for key: " + configKeyStr);
@@ -70,6 +77,29 @@ public class GenericTicketIdGenerator implements JavaDelegate {
         log.info("=== Generic Ticket Generator Completed Successfully ===");
     }
 
+    // --- NEW: Populates the agentList variable ---
+    private void loadAgentConfiguration(DelegateExecution execution, JSONObject fullWorkflowConfig) {
+        if (fullWorkflowConfig.has("agents")) {
+            JSONArray agentsArray = fullWorkflowConfig.getJSONArray("agents");
+            List<Map<String, Object>> agentList = new ArrayList<>();
+
+            for (int i = 0; i < agentsArray.length(); i++) {
+                JSONObject agent = agentsArray.getJSONObject(i);
+                agentList.add(agent.toMap());
+            }
+
+            // Serialize as JSON for Camunda
+            ObjectValue agentListJson = Variables.objectValue(agentList)
+                    .serializationDataFormat(Variables.SerializationDataFormats.JSON)
+                    .create();
+
+            execution.setVariable("agentList", agentListJson);
+            log.info("Loaded {} agents into 'agentList' variable.", agentList.size());
+        } else {
+            log.warn("No 'agents' configuration found in workflow master.");
+        }
+    }
+
     private void resolveInitialVariables(DelegateExecution execution, JSONArray variablesConfig, Map<String, Object> context, String tenantId, String workflowKey) {
         for (int i = 0; i < variablesConfig.length(); i++) {
             JSONObject varConf = variablesConfig.getJSONObject(i);
@@ -86,7 +116,8 @@ public class GenericTicketIdGenerator implements JavaDelegate {
             } else if (varConf.has("processVariable") && varConf.getBoolean("processVariable")) {
                 String sourceVar = varConf.optString("source", key);
                 Object val = execution.getVariable(sourceVar);
-                context.put(key, val != null ? val : new HashMap<>());
+                // Don't default to empty Map here; allow null so we can check type later
+                context.put(key, val);
             } else if (varConf.has("staticValue")) {
                 context.put(key, varConf.get("staticValue"));
             }
@@ -148,24 +179,16 @@ public class GenericTicketIdGenerator implements JavaDelegate {
     private void executeUploadStep(DelegateExecution execution, JSONObject step, Map<String, Object> context, String tenantId) throws Exception {
         Object docsObj = context.get("docsObj");
 
-        // --- LOGIC CHANGE FOR PATH PATTERN ---
-        // 1. Try to get it from the JSON Step configuration
         String pathPattern = step.optString("pathPattern");
-
         Properties props = ConfigurationService.getTenantProperties(tenantId);
-
-        // 2. If missing in JSON, fetch from application.properties
         if (pathPattern == null || pathPattern.trim().isEmpty()) {
             pathPattern = props.getProperty("storage.pathPattern", "{tenantId}/{workflowKey}/{ticketId}/{stageName}/");
-            log.info("Using 'storage.pathPattern' from application.properties: {}", pathPattern);
-        } else {
-            log.info("Using 'pathPattern' from JSON Config: {}", pathPattern);
         }
-        // -------------------------------------
 
         String resolvedPath = pathPattern;
         for (String key : context.keySet()) {
-            resolvedPath = resolvedPath.replace("{" + key + "}", String.valueOf(context.get(key)));
+            Object val = context.get(key);
+            resolvedPath = resolvedPath.replace("{" + key + "}", String.valueOf(val != null ? val : ""));
         }
 
         log.info("Processing upload to path: {}", resolvedPath);
@@ -174,17 +197,15 @@ public class GenericTicketIdGenerator implements JavaDelegate {
         Map<String, String> documentPaths = new HashMap<>();
 
         try {
+            // --- FIX: Handle both Map (Single Object) and List (Array of Objects) ---
             if (docsObj instanceof Map) {
-                Map<String, Object> docsMap = (Map<String, Object>) docsObj;
-                for (Map.Entry<String, Object> entry : docsMap.entrySet()) {
-                    String docName = entry.getKey();
-                    String base64Content = (String) entry.getValue();
-                    byte[] content = Base64.getDecoder().decode(base64Content);
-
-                    String fullPath = resolvedPath + docName;
-                    String url = storage.uploadDocument(fullPath, content, "application/octet-stream");
-                    documentPaths.put(docName, fullPath);
-                }
+                processDocsMap((Map<String, Object>) docsObj, resolvedPath, storage, documentPaths);
+            }
+            else if (docsObj instanceof List) {
+                processDocsList((List<Map<String, Object>>) docsObj, resolvedPath, storage, documentPaths);
+            }
+            else {
+                log.warn("docsObj is neither Map nor List. Type: {}", (docsObj != null ? docsObj.getClass().getName() : "null"));
             }
 
             execution.setVariable("documentPaths", documentPaths);
@@ -199,6 +220,33 @@ public class GenericTicketIdGenerator implements JavaDelegate {
             if (storage instanceof MinIOStorageProvider) {
                 ((MinIOStorageProvider) storage).close();
             }
+        }
+    }
+
+    private void processDocsMap(Map<String, Object> docsMap, String basePath, StorageProvider storage, Map<String, String> documentPaths) {
+        for (Map.Entry<String, Object> entry : docsMap.entrySet()) {
+            uploadSingleDoc(entry.getKey(), (String) entry.getValue(), basePath, storage, documentPaths);
+        }
+    }
+
+    private void processDocsList(List<Map<String, Object>> docsList, String basePath, StorageProvider storage, Map<String, String> documentPaths) {
+        for (Map<String, Object> doc : docsList) {
+            String name = (String) doc.get("filename");
+            String content = (String) doc.get("content");
+            uploadSingleDoc(name, content, basePath, storage, documentPaths);
+        }
+    }
+
+    private void uploadSingleDoc(String name, String base64Content, String basePath, StorageProvider storage, Map<String, String> documentPaths) {
+        try {
+            if (name != null && base64Content != null) {
+                byte[] content = Base64.getDecoder().decode(base64Content);
+                String fullPath = basePath + name;
+                storage.uploadDocument(fullPath, content, "application/octet-stream");
+                documentPaths.put(name, fullPath);
+            }
+        } catch (Exception e) {
+            log.error("Failed to upload document: {}", name, e);
         }
     }
 

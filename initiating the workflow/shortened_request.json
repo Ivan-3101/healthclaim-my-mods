@@ -13,7 +13,7 @@
       "type": "String"
     },
     "docs": {
-      "value": "[{\"filename\":\"Doc1.pdf\",\"mimetype\":\"application/pdf\",\"encoding\":\"base64\",\"content\":\"<BASE64_CONTENT_DOC1_PLACEHOLDER>\"}, {\"filename\":\"Doc2.pdf\",\"mimetype\":\"application/pdf\",\"encoding\":\"base64\",\"content\":\"<BASE64_CONTENT_DOC2_PLACEHOLDER>\"}]",
+      "value": "[{\"filename\":\"Doc1.pdf\",\"mimetype\":\"application/pdf\",\"encoding\":\"base64\",\"content\":\"<BASE64_CONTENT_DOC1_PLACEHOLDER>\"}, {\"filename\":\"Doc2.pdf\",\"mimetype\":\"application/pdf\",\"encoding\":\"base64\",\"content\":\"<BASE64_CONTENT_DOC2_PLACEHOLDER>\"}, {\"filename\":\"Doc3.pdf\",\"mimetype\":\"application/pdf\",\"encoding\":\"base64\",\"content\":\"<BASE64_CONTENT_DOC3_PLACEHOLDER>\"}]",
       "type": "Object",
       "valueInfo": {
         "serializationDataFormat": "application/json",
