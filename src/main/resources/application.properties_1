@@ -22,6 +22,8 @@ uiserver.url=https://main.dev.dronapay.net
 uiserver.apikey=f877a5b1-b6d6-4733-9d2e-0509538e536e
 
 
+springapi.url=https://main.dev.dronapay.net/springapi
+springapi.api.key=4643a381-16e2-41c6-87ea-fac8df253dee
 
 
 # Object Storage Configuration

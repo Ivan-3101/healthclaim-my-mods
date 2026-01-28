@@ -1,0 +1,75 @@
+{
+  "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
+  "name": "Generic API Call",
+  "id": "com.dronapay.generic.apicall",
+  "appliesTo": [
+    "bpmn:ServiceTask"
+  ],
+  "description": "Makes a generic HTTP call using App Properties and Process Variables",
+  "properties": [
+    {
+      "type": "Hidden",
+      "value": "com.DronaPay.frm.HealthClaim.generic.delegates.GenericApiCallDelegate",
+      "binding": {
+        "type": "property",
+        "name": "camunda:class"
+      }
+    },
+    {
+      "label": "URL",
+      "description": "Example: ${appproperties.springapi.url}/accounts/${processVariable.policyId}",
+      "type": "String",
+      "binding": {
+        "type": "camunda:field",
+        "name": "url"
+      },
+      "constraints": {
+        "notEmpty": true
+      }
+    },
+    {
+      "label": "Method",
+      "type": "Dropdown",
+      "choices": [
+        { "name": "GET", "value": "GET" },
+        { "name": "POST", "value": "POST" },
+        { "name": "PUT", "value": "PUT" },
+        { "name": "DELETE", "value": "DELETE" }
+      ],
+      "value": "GET",
+      "binding": {
+        "type": "camunda:field",
+        "name": "method"
+      }
+    },
+    {
+      "label": "Headers (JSON)",
+      "description": "Example: [{\"key\":\"X-API-KEY\", \"value\":\"${appproperties.springapi.api.key}\"}]",
+      "type": "String",
+      "value": "[]",
+      "binding": {
+        "type": "camunda:field",
+        "name": "headers"
+      }
+    },
+    {
+      "label": "Request Body",
+      "description": "JSON body for POST/PUT",
+      "type": "Text",
+      "binding": {
+        "type": "camunda:field",
+        "name": "body"
+      }
+    },
+    {
+      "label": "Output Variable Name",
+      "description": "Name of the variable to store the JSON response",
+      "type": "String",
+      "value": "apiResponse",
+      "binding": {
+        "type": "camunda:field",
+        "name": "outputVar"
+      }
+    }
+  ]
+}
