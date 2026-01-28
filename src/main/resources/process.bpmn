@@ -11,10 +11,6 @@
     <bpmn:sequenceFlow id="Flow_15rnuix" sourceRef="Event_1e3l95j" targetRef="Generate_TicketID_and_Workflow_Name" />
     <bpmn:sequenceFlow id="Flow_058ecar" sourceRef="Generate_TicketID_and_Workflow_Name" targetRef="Verify_Master_Data" />
     <bpmn:sequenceFlow id="Flow_0hxlb17" sourceRef="Verify_Master_Data" targetRef="Activity_17h17ae" />
-    <bpmn:serviceTask id="Verify_Master_Data" name="Verification of details from masters data" camunda:modelerTemplate="com.dronapay.generic.masterdata" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericMasterDataVerificationDelegate">
-      <bpmn:incoming>Flow_058ecar</bpmn:incoming>
-      <bpmn:outgoing>Flow_0hxlb17</bpmn:outgoing>
-    </bpmn:serviceTask>
     <bpmn:serviceTask id="Activity_04nhqma" name="FWA Decisioning" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FWADecisioning">
       <bpmn:incoming>Flow_0xp9ktd</bpmn:incoming>
       <bpmn:incoming>Flow_171ffw7</bpmn:incoming>
@@ -482,6 +478,27 @@
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_15rnuix</bpmn:incoming>
       <bpmn:outgoing>Flow_058ecar</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Verify_Master_Data" name="Verification of details from masters data" camunda:modelerTemplate="com.dronapay.generic.apicall" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericApiCallDelegate">
+      <bpmn:extensionElements>
+        <camunda:field name="url">
+          <camunda:string>${appproperties.springapi.url}/accounts/${processVariable.policy_id}</camunda:string>
+        </camunda:field>
+        <camunda:field name="method">
+          <camunda:string>GET</camunda:string>
+        </camunda:field>
+        <camunda:field name="headers">
+          <camunda:string>[{"key": "X-API-Key", "value": "${appproperties.springapi.api.key}"}]</camunda:string>
+        </camunda:field>
+        <camunda:field name="body">
+          <camunda:string>{}</camunda:string>
+        </camunda:field>
+        <camunda:field name="outputVar">
+          <camunda:string>verifyResponse</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_058ecar</bpmn:incoming>
+      <bpmn:outgoing>Flow_0hxlb17</bpmn:outgoing>
     </bpmn:serviceTask>
   </bpmn:process>
   <bpmn:error id="Error_1brcit7" name="forgeddoc" />
