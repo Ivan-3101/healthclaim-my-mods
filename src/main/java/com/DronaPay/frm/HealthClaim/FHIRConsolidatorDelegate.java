@@ -94,7 +94,6 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
                 tenantId, ticketId, stageName, "consolidated", resultMap);
 
         execution.setVariable("fhirConsolidatorMinioPath", fhirConsolidatorMinioPath);
-        execution.setVariable("fhirConsolidatedRequest", consolidatedJson);
 
         log.info("=== Completed: {} successful, {} failed ===", successCount, failCount);
         log.info("Stored at: {}", fhirConsolidatorMinioPath);
