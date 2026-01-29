@@ -513,7 +513,7 @@
   {
     "key": "ocr_text",
     "type": "minioJson",
-    "value": "${openaiVision_MinioPath}",
+    "value": "1/HealthClaim/${TicketID}/Raw_OCR/${attachment}.json",
     "sourceJsonPath": "$.answer.ocr_text"
   }
 ]</camunda:string>
