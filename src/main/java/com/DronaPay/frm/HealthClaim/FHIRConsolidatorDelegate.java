@@ -8,6 +8,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -20,6 +21,7 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
 
         String tenantId = execution.getTenantId();
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
+        String stageName = execution.getCurrentActivityId();
 
         @SuppressWarnings("unchecked")
         List<String> splitDocumentVars = (List<String>) execution.getVariable("splitDocumentVars");
@@ -83,8 +85,18 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
         consolidatedRequest.put("doc_fhir", docFhirList);
 
         String consolidatedJson = consolidatedRequest.toString();
+
+        // Store consolidated result to MinIO
+        Map<String, Object> resultMap = AgentResultStorageService.buildResultMap(
+                "fhir_consolidator", 200, consolidatedJson, new HashMap<>());
+
+        String fhirConsolidatorMinioPath = AgentResultStorageService.storeAgentResult(
+                tenantId, ticketId, stageName, "consolidated", resultMap);
+
+        execution.setVariable("fhirConsolidatorMinioPath", fhirConsolidatorMinioPath);
         execution.setVariable("fhirConsolidatedRequest", consolidatedJson);
 
         log.info("=== Completed: {} successful, {} failed ===", successCount, failCount);
+        log.info("Stored at: {}", fhirConsolidatorMinioPath);
     }
 }
