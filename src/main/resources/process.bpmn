@@ -352,10 +352,30 @@
         <bpmn:incoming>Flow_0vzpcw3</bpmn:incoming>
       </bpmn:endEvent>
       <bpmn:sequenceFlow id="Flow_0vzpcw3" sourceRef="Identify_Forged_Documents" targetRef="Event_0oqarvk" />
-      <bpmn:serviceTask id="Identify_Forged_Documents" name="Identify forged documents" camunda:modelerTemplate="com.dronapay.generic.agent" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericSingleAgentDelegate">
+      <bpmn:serviceTask id="Identify_Forged_Documents" name="Identify forged documents" camunda:modelerTemplate="com.dronapay.generic.agent" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
         <bpmn:extensionElements>
           <camunda:field name="agentId">
             <camunda:string>forgeryagent</camunda:string>
+          </camunda:field>
+          <camunda:field name="url">
+            <camunda:string>${appproperties.agent.api.url}</camunda:string>
+          </camunda:field>
+          <camunda:field name="method">
+            <camunda:string>POST</camunda:string>
+          </camunda:field>
+          <camunda:field name="inputParams">
+            <camunda:string>[
+  {
+    "key": "base64_img",
+    "type": "minioFile",
+    "value": "${documentPaths[attachment]}"
+  }
+]</camunda:string>
+          </camunda:field>
+          <camunda:field name="outputMapping">
+            <camunda:string>{
+  "isForged": "$.answer"
+}</camunda:string>
           </camunda:field>
         </bpmn:extensionElements>
         <bpmn:incoming>Flow_1c5c7cj</bpmn:incoming>
@@ -522,10 +542,6 @@
           <dc:Bounds x="7148" y="833" width="61" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_19n0d2o_di" bpmnElement="Verify_Master_Data">
-        <dc:Bounds x="470" y="800" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_0txw8dc_di" bpmnElement="Activity_04nhqma">
         <dc:Bounds x="4650" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
@@ -629,7 +645,7 @@
       <bpmndi:BPMNShape id="Event_0oqarvk_di" bpmnElement="Event_0oqarvk">
         <dc:Bounds x="932" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_05yeav4_di" bpmnElement="Identify_Forged_Documents">
+      <bpmndi:BPMNShape id="Activity_1mnqc9m_di" bpmnElement="Identify_Forged_Documents">
         <dc:Bounds x="780" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_1c5c7cj_di" bpmnElement="Flow_1c5c7cj">
@@ -739,6 +755,10 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_1s3pyve_di" bpmnElement="Generate_TicketID_and_Workflow_Name">
         <dc:Bounds x="290" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_19n0d2o_di" bpmnElement="Verify_Master_Data">
+        <dc:Bounds x="470" y="800" width="100" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_1me4x9n" bpmnElement="Event_100gl67">
         <dc:Bounds x="4832" y="522" width="36" height="36" />

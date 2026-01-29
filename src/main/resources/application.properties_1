@@ -26,6 +26,11 @@ springapi.url=https://main.dev.dronapay.net/springapi
 springapi.api.key=4643a381-16e2-41c6-87ea-fac8df253dee
 
 
+agent.api.url=https://main.dev.dronapay.net/dia/agent
+agent.api.username=batchuser
+agent.api.password=100!batch
+
+
 # Object Storage Configuration
 storage.provider=minio
 storage.minio.endpoint=http://host.docker.internal:9000

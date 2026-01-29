@@ -2,15 +2,13 @@
   "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
   "name": "Generic Agent Task",
   "id": "com.dronapay.generic.agent",
-  "description": "Executes a specific agent configured in the database",
   "appliesTo": [
     "bpmn:ServiceTask"
   ],
   "properties": [
     {
-      "label": "Implementation Type",
       "type": "Hidden",
-      "value": "com.DronaPay.frm.HealthClaim.generic.delegates.GenericSingleAgentDelegate",
+      "value": "com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate",
       "binding": {
         "type": "property",
         "name": "camunda:class"
@@ -18,7 +16,7 @@
     },
     {
       "label": "Agent ID",
-      "description": "The unique ID of the agent as defined in the database (e.g., forgeryagent, ocrToStatic)",
+      "description": "Unique ID for this agent (e.g. forgeryagent)",
       "type": "String",
       "binding": {
         "type": "camunda:field",
@@ -26,6 +24,49 @@
       },
       "constraints": {
         "notEmpty": true
+      }
+    },
+    {
+      "label": "Endpoint URL",
+      "description": "Default: ${appproperties.agent.api.url}",
+      "type": "String",
+      "value": "${appproperties.agent.api.url}",
+      "binding": {
+        "type": "camunda:field",
+        "name": "url"
+      }
+    },
+    {
+      "label": "HTTP Method",
+      "type": "Dropdown",
+      "choices": [
+        { "name": "POST", "value": "POST" },
+        { "name": "GET", "value": "GET" }
+      ],
+      "value": "POST",
+      "binding": {
+        "type": "camunda:field",
+        "name": "method"
+      }
+    },
+    {
+      "label": "Input Parameters (JSON)",
+      "description": "JSON Array of inputs. Types: 'value', 'minioFile', 'minioJson'.",
+      "type": "Text",
+      "value": "[]",
+      "binding": {
+        "type": "camunda:field",
+        "name": "inputParams"
+      }
+    },
+    {
+      "label": "Output Mapping (JSON)",
+      "description": "Map JSON response paths to variables. Ex: {\"isForged\": \"$.answer\"}",
+      "type": "Text",
+      "value": "{}",
+      "binding": {
+        "type": "camunda:field",
+        "name": "outputMapping"
       }
     }
   ]
