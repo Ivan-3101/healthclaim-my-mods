@@ -55,15 +55,25 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
                     // Handle both Map (from Jackson) and JSONObject (from org.json) to be safe
                     if (resultObj instanceof Map) {
                         Map<?, ?> resMap = (Map<?, ?>) resultObj;
+
+                        // FIX: Check for BOTH rawResponse and apiResponse keys
                         if (resMap.containsKey("rawResponse")) {
                             rawResponse = resMap.get("rawResponse").toString();
+                        } else if (resMap.containsKey("apiResponse")) {
+                            rawResponse = resMap.get("apiResponse").toString();
+                            log.debug("Using 'apiResponse' key for {}", filename);
                         } else {
                             log.warn("Result Map for {} contains keys: {}", filename, resMap.keySet());
                         }
                     } else if (resultObj instanceof JSONObject) {
                         JSONObject resJson = (JSONObject) resultObj;
+
+                        // FIX: Check for BOTH rawResponse and apiResponse keys
                         if (resJson.has("rawResponse")) {
                             rawResponse = resJson.getString("rawResponse");
+                        } else if (resJson.has("apiResponse")) {
+                            rawResponse = resJson.getString("apiResponse");
+                            log.debug("Using 'apiResponse' key for {}", filename);
                         }
                     }
 
@@ -71,7 +81,8 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
                         response = new JSONObject(rawResponse);
                         log.info("Successfully retrieved classifier result for: {}", filename);
                     } else {
-                        log.warn("Retrieved result for {} but 'rawResponse' key was missing. Object type: {}", filename, resultObj.getClass().getName());
+                        log.warn("Retrieved result for {} but neither 'rawResponse' nor 'apiResponse' key was found. Object type: {}",
+                                filename, resultObj.getClass().getName());
                     }
                 }
             } catch (Exception e) {
@@ -113,80 +124,47 @@ public class DocTypeSplitterDelegate implements JavaDelegate {
             String docType = entry.getKey();
             List<PageInfo> pages = entry.getValue();
 
-            String sanitizedDocType = docType.replaceAll("[^a-zA-Z0-9]", "_").toLowerCase();
-            String splitFilename = sanitizedDocType + ".pdf";
+            String sanitizedDocType = docType.replaceAll("[^a-zA-Z0-9_-]", "_");
+            PDDocument outputDoc = new PDDocument();
 
-            PDDocument mergedDoc = new PDDocument();
-            Map<String, PDDocument> openDocs = new HashMap<>();
+            for (PageInfo pageInfo : pages) {
+                try (InputStream inputStream = storage.downloadDocument(pageInfo.storagePath);
+                     PDDocument sourceDoc = PDDocument.load(inputStream)) {
 
-            try {
-                for (PageInfo pageInfo : pages) {
-                    if (!openDocs.containsKey(pageInfo.storagePath)) {
-                        try {
-                            InputStream stream = storage.downloadDocument(pageInfo.storagePath);
-                            PDDocument doc = PDDocument.load(stream);
-                            stream.close();
-                            openDocs.put(pageInfo.storagePath, doc);
-                        } catch (Exception e) {
-                            log.error("Error loading document {}", pageInfo.filename, e);
-                        }
+                    if (pageInfo.pageNumber > 0 && pageInfo.pageNumber <= sourceDoc.getNumberOfPages()) {
+                        outputDoc.addPage(sourceDoc.getPage(pageInfo.pageNumber - 1));
+                    } else {
+                        log.warn("Invalid page number {} for document {}", pageInfo.pageNumber, pageInfo.filename);
                     }
                 }
+            }
 
-                for (PageInfo pageInfo : pages) {
-                    PDDocument sourceDoc = openDocs.get(pageInfo.storagePath);
-                    if (sourceDoc != null) {
-                        try {
-                            int pageIndex = pageInfo.pageNumber - 1;
-                            if (pageIndex >= 0 && pageIndex < sourceDoc.getNumberOfPages()) {
-                                mergedDoc.addPage(sourceDoc.getPage(pageIndex));
-                            }
-                        } catch (Exception e) {
-                            log.error("Error adding page", e);
-                        }
-                    }
-                }
+            if (outputDoc.getNumberOfPages() > 0) {
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                outputDoc.save(baos);
+                outputDoc.close();
 
-                if (mergedDoc.getNumberOfPages() > 0) {
-                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                    mergedDoc.save(baos);
-                    byte[] pdfBytes = baos.toByteArray();
-                    baos.close();
+                byte[] pdfBytes = baos.toByteArray();
+                String splitPath = String.format("1/HealthClaim/%s/%s/%s.pdf",
+                        ticketId, currentStage, sanitizedDocType);
 
-                    String splitStoragePath = tenantId + "/HealthClaim/" + ticketId + "/" + currentStage + "/" + splitFilename;
-                    storage.uploadDocument(splitStoragePath, pdfBytes, "application/pdf");
+                storage.uploadDocument(splitPath, pdfBytes, "application/pdf");
+                log.info("Created split document: {} ({} pages)", splitPath, pages.size());
 
-                    // Store Object for Multi-Instance compatibility
-                    Map<String, String> splitDocInfo = new HashMap<>();
-                    splitDocInfo.put("name", splitFilename);
-                    splitDocInfo.put("type", docType);
-                    // Add filename to list (as String, or handle as Map if your next stage expects Map)
-                    splitDocumentVars.add(splitFilename);
-
-                    documentPaths.put(splitFilename, splitStoragePath);
-                    fileProcessMap.put(splitFilename, new HashMap<>());
-                }
-            } finally {
-                mergedDoc.close();
-                for (PDDocument doc : openDocs.values()) doc.close();
+                String varName = "split_" + sanitizedDocType;
+                execution.setVariable(varName, splitPath);
+                splitDocumentVars.add(varName);
             }
         }
 
-        if (splitDocumentVars.isEmpty()) {
-            throw new RuntimeException("Failed to create any split documents");
-        }
-
-        execution.setVariable("splitDocumentVars", splitDocumentVars);
-        execution.setVariable("documentPaths", documentPaths);
-        execution.setVariable("fileProcessMap", fileProcessMap);
-
-        log.info("=== Doc Type Splitter Completed ===");
+        execution.setVariable("splitDocumentPaths", splitDocumentVars);
+        log.info("=== Doc Type Splitter Completed: {} documents created ===", splitDocumentVars.size());
     }
 
     private static class PageInfo {
-        final String filename;
-        final String storagePath;
-        final int pageNumber;
+        String filename;
+        String storagePath;
+        int pageNumber;
 
         PageInfo(String filename, String storagePath, int pageNumber) {
             this.filename = filename;
