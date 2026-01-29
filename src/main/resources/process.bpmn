@@ -390,7 +390,37 @@
       <bpmn:startEvent id="Event_0xxno63">
         <bpmn:outgoing>Flow_0we714j</bpmn:outgoing>
       </bpmn:startEvent>
-      <bpmn:serviceTask id="Raw_OCR" name="Doing OCR on Documents" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.OCROnDoc">
+      <bpmn:serviceTask id="Raw_OCR" name="Doing OCR on Documents" camunda:modelerTemplate="com.dronapay.generic.agent" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+        <bpmn:extensionElements>
+          <camunda:field name="agentId">
+            <camunda:string>openaiVision</camunda:string>
+          </camunda:field>
+          <camunda:field name="url">
+            <camunda:string>${appproperties.agent.api.url}</camunda:string>
+          </camunda:field>
+          <camunda:field name="method">
+            <camunda:string>POST</camunda:string>
+          </camunda:field>
+          <camunda:field name="inputParams">
+            <camunda:string>[
+  {
+    "key": "base64_img",
+    "type": "minioFile",
+    "value": "${documentPaths[attachment]}"
+  },
+  {
+    "key": "doc_type",
+    "type": "value",
+    "value": "${doc_type}"
+  }
+]</camunda:string>
+          </camunda:field>
+          <camunda:field name="outputMapping">
+            <camunda:string>{
+  "ocr_raw_output": "$.answer"
+}</camunda:string>
+          </camunda:field>
+        </bpmn:extensionElements>
         <bpmn:incoming>Flow_0we714j</bpmn:incoming>
         <bpmn:outgoing>Flow_0llww76</bpmn:outgoing>
       </bpmn:serviceTask>
@@ -412,7 +442,32 @@
         <bpmn:incoming>Flow_1thjhp7</bpmn:incoming>
       </bpmn:endEvent>
       <bpmn:sequenceFlow id="Flow_1thjhp7" sourceRef="Document_Classifier" targetRef="Event_0k3yxqs" />
-      <bpmn:serviceTask id="Document_Classifier" name="Doc Classifier" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.DocumentClassifierDelegate">
+      <bpmn:serviceTask id="Document_Classifier" name="Doc Classifier" camunda:modelerTemplate="com.dronapay.generic.agent" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+        <bpmn:extensionElements>
+          <camunda:field name="agentId">
+            <camunda:string>Document_Classifier</camunda:string>
+          </camunda:field>
+          <camunda:field name="url">
+            <camunda:string>${appproperties.agent.api.url}</camunda:string>
+          </camunda:field>
+          <camunda:field name="method">
+            <camunda:string>POST</camunda:string>
+          </camunda:field>
+          <camunda:field name="inputParams">
+            <camunda:string>[
+  {
+    "key": "base64_img",
+    "type": "minioFile",
+    "value": "${documentPaths[attachment]}"
+  }
+]</camunda:string>
+          </camunda:field>
+          <camunda:field name="outputMapping">
+            <camunda:string>{
+  "classification_result": "$.answer"
+}</camunda:string>
+          </camunda:field>
+        </bpmn:extensionElements>
         <bpmn:incoming>Flow_1p7jmc8</bpmn:incoming>
         <bpmn:outgoing>Flow_1thjhp7</bpmn:outgoing>
       </bpmn:serviceTask>
@@ -441,7 +496,38 @@
         <bpmn:incoming>Flow_0xnnumq</bpmn:incoming>
       </bpmn:endEvent>
       <bpmn:sequenceFlow id="Flow_0xnnumq" sourceRef="Raw_To_Structured_OCR" targetRef="Event_1pojsp1" />
-      <bpmn:serviceTask id="Raw_To_Structured_OCR" name="OCR to Static" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.OcrToStaticDelegate">
+      <bpmn:serviceTask id="Raw_To_Structured_OCR" name="OCR to Static" camunda:modelerTemplate="com.dronapay.generic.agent" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+        <bpmn:extensionElements>
+          <camunda:field name="agentId">
+            <camunda:string>ocrTostatic</camunda:string>
+          </camunda:field>
+          <camunda:field name="url">
+            <camunda:string>${appproperties.agent.api.url}</camunda:string>
+          </camunda:field>
+          <camunda:field name="method">
+            <camunda:string>POST</camunda:string>
+          </camunda:field>
+          <camunda:field name="inputParams">
+            <camunda:string>[
+  {
+    "key": "doc_type",
+    "type": "value",
+    "value": "${doc_type}"
+  },
+  {
+    "key": "ocr_text",
+    "type": "minioJson",
+    "value": "${openaiVision_MinioPath}",
+    "sourceJsonPath": "$.answer.ocr_text"
+  }
+]</camunda:string>
+          </camunda:field>
+          <camunda:field name="outputMapping">
+            <camunda:string>{
+  "structured_data": "$.answer"
+}</camunda:string>
+          </camunda:field>
+        </bpmn:extensionElements>
         <bpmn:incoming>Flow_084cttl</bpmn:incoming>
         <bpmn:outgoing>Flow_0xnnumq</bpmn:outgoing>
       </bpmn:serviceTask>
@@ -645,7 +731,7 @@
       <bpmndi:BPMNShape id="Event_0oqarvk_di" bpmnElement="Event_0oqarvk">
         <dc:Bounds x="932" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1mnqc9m_di" bpmnElement="Identify_Forged_Documents">
+      <bpmndi:BPMNShape id="Activity_1mnqc9m_di" bpmnElement="Identify_Forged_Documents" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="780" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_1c5c7cj_di" bpmnElement="Flow_1c5c7cj">

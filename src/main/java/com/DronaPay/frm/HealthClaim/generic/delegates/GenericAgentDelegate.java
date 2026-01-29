@@ -38,80 +38,94 @@ import java.util.regex.Pattern;
 @Slf4j
 public class GenericAgentDelegate implements JavaDelegate {
 
-    // Inputs from Template
     private Expression url;
     private Expression method;
     private Expression agentId;
-    private Expression inputParams;   // JSON Array: [{"key": "...", "type": "...", "value": "..."}]
-    private Expression outputMapping; // JSON Object: {"varName": "$.json.path"}
+    private Expression inputParams;
+    private Expression outputMapping;
 
     @Override
     public void execute(DelegateExecution execution) throws Exception {
         String tenantId = execution.getTenantId();
 
-        // 1. Resolve Agent ID
         String rawAgentId = (agentId != null) ? (String) agentId.getValue(execution) : "unknown_agent";
         String currentAgentId = resolvePlaceholders(rawAgentId, execution, null);
-
         String stageName = execution.getCurrentActivityId();
 
-        // Safe casting of TicketID
         Object ticketIdObj = execution.getVariable("TicketID");
         String ticketId = (ticketIdObj != null) ? String.valueOf(ticketIdObj) : "UNKNOWN";
 
         log.info("=== Generic Agent Delegate Started: {} (Stage: {}) TicketID: {} ===", currentAgentId, stageName, ticketId);
 
-        // 2. Load Config & Resolve URL
         Properties props = TenantPropertiesUtil.getTenantProps(tenantId);
         String rawUrl = (url != null) ? (String) url.getValue(execution) : "${appproperties.agent.api.url}";
         String finalUrl = resolvePlaceholders(rawUrl, execution, props);
-
         String reqMethod = (method != null) ? (String) method.getValue(execution) : "POST";
 
         String apiUser = props.getProperty("agent.api.username");
         String apiPass = props.getProperty("agent.api.password");
 
-        // 3. Build Request Data Object
         String inputJsonStr = (inputParams != null) ? (String) inputParams.getValue(execution) : "[]";
         String resolvedInputJson = resolvePlaceholders(inputJsonStr, execution, props);
-
         JSONObject dataObject = buildDataObject(resolvedInputJson, tenantId);
 
-        // Construct Final Payload
         JSONObject requestBody = new JSONObject();
         requestBody.put("agentid", currentAgentId);
         requestBody.put("data", dataObject);
 
-        // 4. Execute API Call
         log.info("Calling Agent API: {} [{}]", finalUrl, reqMethod);
         String responseBody = executeAgentCall(reqMethod, finalUrl, apiUser, apiPass, requestBody.toString());
 
-        // 5. Archive Full Result to MinIO (Audit Trail)
         Map<String, Object> resultMap = AgentResultStorageService.buildResultMap(
                 currentAgentId, 200, responseBody, new HashMap<>());
 
-        // --- MULTI-INSTANCE FIX START ---
-        // If we are in a loop, append the loop counter to the filename to avoid overwrites
-        String resultFileName = currentAgentId + "_result";
-        Object loopCounter = execution.getVariable("loopCounter");
-        if (loopCounter != null) {
-            resultFileName = resultFileName + "_" + loopCounter;
-            log.info("Multi-Instance detected. Using unique filename: {}", resultFileName);
-        }
-        // --- MULTI-INSTANCE FIX END ---
+        // --- FILENAME FIX START ---
+        // We do NOT append .json manually anymore, as the StorageService likely adds it.
+        String resultFileName = getResultFileName(execution, currentAgentId);
+        // --- FILENAME FIX END ---
 
         String minioPath = AgentResultStorageService.storeAgentResult(
                 tenantId, ticketId, stageName, resultFileName, resultMap);
 
-        // Save local path variable (valid only for this loop iteration)
         execution.setVariable(currentAgentId + "_MinioPath", minioPath);
         log.info("Agent Result saved to MinIO: {}", minioPath);
 
-        // 6. Output Mapping
         String outputMapStr = (outputMapping != null) ? (String) outputMapping.getValue(execution) : "{}";
         mapOutputs(responseBody, outputMapStr, execution);
 
         log.info("=== Generic Agent Delegate Completed ===");
+    }
+
+    private String getResultFileName(DelegateExecution execution, String agentId) {
+        String baseName = null;
+        Object attachmentObj = execution.getVariable("attachment");
+
+        if (attachmentObj != null) {
+            if (attachmentObj instanceof String) {
+                baseName = (String) attachmentObj;
+            } else if (attachmentObj instanceof Map) {
+                Map<?, ?> attMap = (Map<?, ?>) attachmentObj;
+                if (attMap.containsKey("name")) {
+                    baseName = attMap.get("name").toString();
+                } else if (attMap.containsKey("fileName")) {
+                    baseName = attMap.get("fileName").toString();
+                }
+            }
+        }
+
+        // Return the clean name (e.g. "Doc1.pdf").
+        // Let the Storage Service handle the extension to avoid "Doc1.pdf.json.json"
+        if (baseName != null && !baseName.isEmpty()) {
+            return baseName;
+        }
+
+        // Fallback: Use Loop Counter
+        Object loopCounter = execution.getVariable("loopCounter");
+        if (loopCounter != null) {
+            return agentId + "_result_" + loopCounter;
+        }
+
+        return agentId + "_result";
     }
 
     private JSONObject buildDataObject(String inputJsonStr, String tenantId) throws Exception {
@@ -137,18 +151,23 @@ public class GenericAgentDelegate implements JavaDelegate {
                     log.error("Failed to download/encode file at path: {}", value, e);
                     throw new BpmnError("FILE_ERROR", "Could not process file: " + value);
                 }
-            }
-            else if ("minioJson".equalsIgnoreCase(type)) {
+            } else if ("minioJson".equalsIgnoreCase(type)) {
                 try {
                     InputStream fileContent = storage.downloadDocument(value);
                     String jsonContent = IOUtils.toString(fileContent, StandardCharsets.UTF_8);
-                    data.put(key, new JSONObject(jsonContent));
+
+                    String sourcePath = input.optString("sourceJsonPath", "");
+                    if (!sourcePath.isEmpty()) {
+                        Object extractedValue = JsonPath.read(jsonContent, sourcePath);
+                        data.put(key, extractedValue);
+                    } else {
+                        data.put(key, new JSONObject(jsonContent));
+                    }
                 } catch (Exception e) {
                     log.error("Failed to download/parse JSON at path: {}", value, e);
                     throw new BpmnError("FILE_ERROR", "Could not process JSON: " + value);
                 }
-            }
-            else {
+            } else {
                 data.put(key, value);
             }
         }
@@ -161,7 +180,6 @@ public class GenericAgentDelegate implements JavaDelegate {
 
         try (CloseableHttpClient client = HttpClients.custom().setDefaultCredentialsProvider(provider).build()) {
             HttpRequestBase request;
-
             if ("GET".equalsIgnoreCase(method)) {
                 request = new HttpGet(url);
             } else {
@@ -174,7 +192,6 @@ public class GenericAgentDelegate implements JavaDelegate {
             try (CloseableHttpResponse response = client.execute(request)) {
                 int status = response.getStatusLine().getStatusCode();
                 String respStr = EntityUtils.toString(response.getEntity());
-
                 if (status != 200) {
                     throw new BpmnError("AGENT_ERROR", "Agent returned " + status + ": " + respStr);
                 }
@@ -185,7 +202,6 @@ public class GenericAgentDelegate implements JavaDelegate {
 
     private void mapOutputs(String responseBody, String mappingStr, DelegateExecution execution) {
         if (mappingStr == null || mappingStr.equals("{}")) return;
-
         JSONObject mapping = new JSONObject(mappingStr);
         Object jsonDoc = com.jayway.jsonpath.Configuration.defaultConfiguration().jsonProvider().parse(responseBody);
 
@@ -213,13 +229,10 @@ public class GenericAgentDelegate implements JavaDelegate {
             if (token.startsWith("appproperties.") && props != null) {
                 String key = token.substring("appproperties.".length());
                 replacement = props.getProperty(key, "");
-            }
-            else if (token.contains("[") && token.endsWith("]")) {
+            } else if (token.contains("[") && token.endsWith("]")) {
                 replacement = resolveMapValue(token, execution);
-            }
-            else {
-                String varName = token.startsWith("processVariable.")
-                        ? token.substring("processVariable.".length()) : token;
+            } else {
+                String varName = token.startsWith("processVariable.") ? token.substring("processVariable.".length()) : token;
                 Object val = execution.getVariable(varName);
                 if (val != null) {
                     replacement = val.toString();
@@ -238,7 +251,6 @@ public class GenericAgentDelegate implements JavaDelegate {
             int bracketIndex = token.indexOf("[");
             String mapName = token.substring(0, bracketIndex);
             String keyVarName = token.substring(bracketIndex + 1, token.length() - 1);
-
             Object mapObj = execution.getVariable(mapName);
             Object keyValObj = execution.getVariable(keyVarName);
             String resolvedKey = (keyValObj != null) ? keyValObj.toString() : keyVarName;
