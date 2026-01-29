@@ -47,7 +47,6 @@ public class GenericAgentDelegate implements JavaDelegate {
     @Override
     public void execute(DelegateExecution execution) throws Exception {
         String tenantId = execution.getTenantId();
-
         String rawAgentId = (agentId != null) ? (String) agentId.getValue(execution) : "unknown_agent";
         String currentAgentId = resolvePlaceholders(rawAgentId, execution, null);
         String stageName = execution.getCurrentActivityId();
@@ -61,7 +60,6 @@ public class GenericAgentDelegate implements JavaDelegate {
         String rawUrl = (url != null) ? (String) url.getValue(execution) : "${appproperties.agent.api.url}";
         String finalUrl = resolvePlaceholders(rawUrl, execution, props);
         String reqMethod = (method != null) ? (String) method.getValue(execution) : "POST";
-
         String apiUser = props.getProperty("agent.api.username");
         String apiPass = props.getProperty("agent.api.password");
 
@@ -79,10 +77,13 @@ public class GenericAgentDelegate implements JavaDelegate {
         Map<String, Object> resultMap = AgentResultStorageService.buildResultMap(
                 currentAgentId, 200, responseBody, new HashMap<>());
 
-        // --- FILENAME FIX START ---
-        // We do NOT append .json manually anymore, as the StorageService likely adds it.
-        String resultFileName = getResultFileName(execution, currentAgentId);
-        // --- FILENAME FIX END ---
+        Object attachmentObj = execution.getVariable("attachment");
+        String filename = null;
+        if (attachmentObj != null) {
+            filename = attachmentObj.toString();
+        }
+
+        String resultFileName = (filename != null) ? filename : currentAgentId + "_result";
 
         String minioPath = AgentResultStorageService.storeAgentResult(
                 tenantId, ticketId, stageName, resultFileName, resultMap);
@@ -94,38 +95,6 @@ public class GenericAgentDelegate implements JavaDelegate {
         mapOutputs(responseBody, outputMapStr, execution);
 
         log.info("=== Generic Agent Delegate Completed ===");
-    }
-
-    private String getResultFileName(DelegateExecution execution, String agentId) {
-        String baseName = null;
-        Object attachmentObj = execution.getVariable("attachment");
-
-        if (attachmentObj != null) {
-            if (attachmentObj instanceof String) {
-                baseName = (String) attachmentObj;
-            } else if (attachmentObj instanceof Map) {
-                Map<?, ?> attMap = (Map<?, ?>) attachmentObj;
-                if (attMap.containsKey("name")) {
-                    baseName = attMap.get("name").toString();
-                } else if (attMap.containsKey("fileName")) {
-                    baseName = attMap.get("fileName").toString();
-                }
-            }
-        }
-
-        // Return the clean name (e.g. "Doc1.pdf").
-        // Let the Storage Service handle the extension to avoid "Doc1.pdf.json.json"
-        if (baseName != null && !baseName.isEmpty()) {
-            return baseName;
-        }
-
-        // Fallback: Use Loop Counter
-        Object loopCounter = execution.getVariable("loopCounter");
-        if (loopCounter != null) {
-            return agentId + "_result_" + loopCounter;
-        }
-
-        return agentId + "_result";
     }
 
     private JSONObject buildDataObject(String inputJsonStr, String tenantId) throws Exception {
@@ -151,23 +120,26 @@ public class GenericAgentDelegate implements JavaDelegate {
                     log.error("Failed to download/encode file at path: {}", value, e);
                     throw new BpmnError("FILE_ERROR", "Could not process file: " + value);
                 }
-            } else if ("minioJson".equalsIgnoreCase(type)) {
+            }
+            else if ("minioJson".equalsIgnoreCase(type)) {
                 try {
-                    InputStream fileContent = storage.downloadDocument(value);
-                    String jsonContent = IOUtils.toString(fileContent, StandardCharsets.UTF_8);
+                    // Use AgentResultStorageService which extracts apiResponse/rawResponse
+                    Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, value);
+                    String apiResponse = (String) result.get("apiResponse");
 
-                    String sourcePath = input.optString("sourceJsonPath", "");
-                    if (!sourcePath.isEmpty()) {
-                        Object extractedValue = JsonPath.read(jsonContent, sourcePath);
-                        data.put(key, extractedValue);
-                    } else {
-                        data.put(key, new JSONObject(jsonContent));
+                    if (apiResponse == null || apiResponse.trim().isEmpty()) {
+                        throw new Exception("Empty apiResponse from: " + value);
                     }
+
+                    JSONObject jsonContent = new JSONObject(apiResponse);
+                    data.put(key, jsonContent);
+
                 } catch (Exception e) {
                     log.error("Failed to download/parse JSON at path: {}", value, e);
                     throw new BpmnError("FILE_ERROR", "Could not process JSON: " + value);
                 }
-            } else {
+            }
+            else {
                 data.put(key, value);
             }
         }
@@ -180,6 +152,7 @@ public class GenericAgentDelegate implements JavaDelegate {
 
         try (CloseableHttpClient client = HttpClients.custom().setDefaultCredentialsProvider(provider).build()) {
             HttpRequestBase request;
+
             if ("GET".equalsIgnoreCase(method)) {
                 request = new HttpGet(url);
             } else {
@@ -192,6 +165,7 @@ public class GenericAgentDelegate implements JavaDelegate {
             try (CloseableHttpResponse response = client.execute(request)) {
                 int status = response.getStatusLine().getStatusCode();
                 String respStr = EntityUtils.toString(response.getEntity());
+
                 if (status != 200) {
                     throw new BpmnError("AGENT_ERROR", "Agent returned " + status + ": " + respStr);
                 }
@@ -202,6 +176,7 @@ public class GenericAgentDelegate implements JavaDelegate {
 
     private void mapOutputs(String responseBody, String mappingStr, DelegateExecution execution) {
         if (mappingStr == null || mappingStr.equals("{}")) return;
+
         JSONObject mapping = new JSONObject(mappingStr);
         Object jsonDoc = com.jayway.jsonpath.Configuration.defaultConfiguration().jsonProvider().parse(responseBody);
 
@@ -229,10 +204,13 @@ public class GenericAgentDelegate implements JavaDelegate {
             if (token.startsWith("appproperties.") && props != null) {
                 String key = token.substring("appproperties.".length());
                 replacement = props.getProperty(key, "");
-            } else if (token.contains("[") && token.endsWith("]")) {
+            }
+            else if (token.contains("[") && token.endsWith("]")) {
                 replacement = resolveMapValue(token, execution);
-            } else {
-                String varName = token.startsWith("processVariable.") ? token.substring("processVariable.".length()) : token;
+            }
+            else {
+                String varName = token.startsWith("processVariable.")
+                        ? token.substring("processVariable.".length()) : token;
                 Object val = execution.getVariable(varName);
                 if (val != null) {
                     replacement = val.toString();
@@ -251,6 +229,7 @@ public class GenericAgentDelegate implements JavaDelegate {
             int bracketIndex = token.indexOf("[");
             String mapName = token.substring(0, bracketIndex);
             String keyVarName = token.substring(bracketIndex + 1, token.length() - 1);
+
             Object mapObj = execution.getVariable(mapName);
             Object keyValObj = execution.getVariable(keyVarName);
             String resolvedKey = (keyValObj != null) ? keyValObj.toString() : keyVarName;

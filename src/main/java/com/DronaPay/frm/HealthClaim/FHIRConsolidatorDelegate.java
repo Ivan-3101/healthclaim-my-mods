@@ -21,51 +21,28 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
         String tenantId = execution.getTenantId();
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
 
-        // CHANGE: Use BPMN Activity ID
-        String stageName = execution.getCurrentActivityId();
-
-        log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
-
         @SuppressWarnings("unchecked")
         List<String> splitDocumentVars = (List<String>) execution.getVariable("splitDocumentVars");
 
-        // CHANGE: Get map of inputs
-        @SuppressWarnings("unchecked")
-        Map<String, String> ocrToStaticResults = (Map<String, String>) execution.getVariable("ocrToStaticResults");
-
         if (splitDocumentVars == null || splitDocumentVars.isEmpty()) {
-            log.error("No split documents found");
             throw new RuntimeException("No documents to consolidate");
         }
 
-        log.info("Processing {} documents for FHIR consolidation", splitDocumentVars.size());
+        log.info("Processing {} documents", splitDocumentVars.size());
 
         List<Object> docFhirList = new ArrayList<>();
         int successCount = 0;
         int failCount = 0;
 
         for (String filename : splitDocumentVars) {
-            log.debug("Processing file: {}", filename);
-
-            // CHANGE: Read path from map
-            String minioPath = null;
-            if (ocrToStaticResults != null && ocrToStaticResults.containsKey(filename)) {
-                minioPath = ocrToStaticResults.get(filename);
-            }
-
-            if (minioPath == null) {
-                log.error("No input path found for file: {}, skipping", filename);
-                failCount++;
-                continue;
-            }
+            String ocrToStaticPath = tenantId + "/HealthClaim/" + ticketId + "/Raw_To_Structured_OCR/" + filename + ".json";
 
             try {
-                Map<String, Object> result =
-                        AgentResultStorageService.retrieveAgentResult(tenantId, minioPath);
-
+                Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, ocrToStaticPath);
                 String rawResponse = (String) result.get("apiResponse");
+
                 if (rawResponse == null || rawResponse.trim().isEmpty()) {
-                    log.error("Empty apiResponse for file: {}, skipping", filename);
+                    log.error("Empty response for: {}", filename);
                     failCount++;
                     continue;
                 }
@@ -73,7 +50,7 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
                 JSONObject responseJson = new JSONObject(rawResponse);
 
                 if (!responseJson.has("answer")) {
-                    log.warn("No 'answer' field in ocrToStatic response for: {}", filename);
+                    log.warn("No 'answer' field for: {}", filename);
                     failCount++;
                     continue;
                 }
@@ -90,61 +67,24 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
                 }
 
                 successCount++;
-                log.info("Successfully processed ocrToStatic output from: {}", filename);
+                log.info("Processed: {}", filename);
 
             } catch (Exception e) {
-                log.error("Error processing ocrToStatic output for file: {}", filename, e);
+                log.error("Failed to process: {}", filename, e);
                 failCount++;
             }
         }
 
-        log.info("FHIR consolidation complete: {} successful, {} failed", successCount, failCount);
-
         if (docFhirList.isEmpty()) {
-            log.error("No valid ocrToStatic outputs found for consolidation");
             throw new RuntimeException("FHIR consolidation produced no results");
         }
 
         JSONObject consolidatedRequest = new JSONObject();
-        JSONObject data = new JSONObject();
-        data.put("doc_fhir", new JSONArray(docFhirList));
-        consolidatedRequest.put("data", data);
-        consolidatedRequest.put("agentid", "FHIR_Analyser");
+        consolidatedRequest.put("doc_fhir", docFhirList);
 
-        String consolidatedJson = consolidatedRequest.toString(2);
-        log.info("Consolidated FHIR request ({} bytes) ready for FHIR_Analyser",
-                consolidatedJson.length());
+        String consolidatedJson = consolidatedRequest.toString();
+        execution.setVariable("fhirConsolidatedRequest", consolidatedJson);
 
-        // CHANGE: Pass stageName
-        String minioPath = storeConsolidatedRequest(tenantId, ticketId, consolidatedRequest, stageName);
-
-        execution.setVariable("fhirConsolidatorMinioPath", minioPath);
-
-        log.info("=== FHIR Consolidator Completed ===");
-    }
-
-    private String storeConsolidatedRequest(String tenantId, String ticketId,
-                                            JSONObject consolidatedRequest, String stageName) {
-        try {
-            Map<String, Object> resultMap = new java.util.HashMap<>();
-            resultMap.put("agentId", "fhirConsolidator");
-            resultMap.put("statusCode", 200);
-            resultMap.put("success", true);
-            resultMap.put("rawResponse", consolidatedRequest.toString());
-            resultMap.put("extractedData", new java.util.HashMap<>());
-            resultMap.put("timestamp", System.currentTimeMillis());
-
-            // CHANGE: Use stageName
-            String minioPath = AgentResultStorageService.storeAgentResult(
-                    tenantId, ticketId, stageName, "consolidated", resultMap
-            );
-
-            log.info("Stored consolidated FHIR request at: {}", minioPath);
-            return minioPath;
-
-        } catch (Exception e) {
-            log.error("Failed to store consolidated FHIR request in MinIO", e);
-            throw new RuntimeException("Could not store consolidated FHIR request", e);
-        }
+        log.info("=== Completed: {} successful, {} failed ===", successCount, failCount);
     }
 }
