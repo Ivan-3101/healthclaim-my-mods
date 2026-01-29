@@ -519,9 +519,7 @@
 ]</camunda:string>
           </camunda:field>
           <camunda:field name="outputMapping">
-            <camunda:string>{
-  "structured_data": "$.answer"
-}</camunda:string>
+            <camunda:string>{}</camunda:string>
           </camunda:field>
         </bpmn:extensionElements>
         <bpmn:incoming>Flow_084cttl</bpmn:incoming>
