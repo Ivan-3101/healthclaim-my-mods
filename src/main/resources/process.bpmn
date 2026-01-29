@@ -479,10 +479,6 @@
       <bpmn:outgoing>Flow_1edsz88</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:sequenceFlow id="Flow_037ubon" sourceRef="Activity_1kzv5fa" targetRef="Activity_0c8yvg3" />
-    <bpmn:serviceTask id="UI_Displayer_Agent" name="Activity_UIDisplayer" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.UIDisplayerDelegate">
-      <bpmn:incoming>Flow_1y4cq5x</bpmn:incoming>
-      <bpmn:outgoing>Flow_0w29skj</bpmn:outgoing>
-    </bpmn:serviceTask>
     <bpmn:sequenceFlow id="Flow_0w29skj" sourceRef="UI_Displayer_Agent" targetRef="Activity_LoadUIFields" />
     <bpmn:subProcess id="Activity_0c8yvg3">
       <bpmn:incoming>Flow_037ubon</bpmn:incoming>
@@ -535,7 +531,37 @@
     <bpmn:sequenceFlow id="Flow_1rugnkq" sourceRef="Activity_0c8yvg3" targetRef="Document_Consolidator" />
     <bpmn:sequenceFlow id="Flow_0oa3vkg" sourceRef="Document_Consolidator" targetRef="Submission_Validator" />
     <bpmn:sequenceFlow id="Flow_1y4cq5x" sourceRef="Submission_Consistency_Analyzer" targetRef="UI_Displayer_Agent" />
-    <bpmn:serviceTask id="Submission_Consistency_Analyzer" name="Submission Consistency Analyzer" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FHIRAnalyserDelegate">
+    <bpmn:serviceTask id="Submission_Consistency_Analyzer" name="Submission Consistency Analyzer" camunda:modelerTemplate="com.dronapay.generic.agent" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+      <bpmn:extensionElements>
+        <camunda:field name="agentId">
+          <camunda:string>FHIR_Analyser</camunda:string>
+        </camunda:field>
+        <camunda:field name="url">
+          <camunda:string>${appproperties.agent.api.url}</camunda:string>
+        </camunda:field>
+        <camunda:field name="method">
+          <camunda:string>POST</camunda:string>
+        </camunda:field>
+        <camunda:field name="inputParams">
+          <camunda:string>[
+  {
+    "key": "doc_fhir",
+    "type": "minioJson",
+    "value": "${fhirConsolidatorMinioPath}",
+    "sourceJsonPath": "$.doc_fhir"
+  }
+]</camunda:string>
+        </camunda:field>
+        <camunda:field name="outputMapping">
+          <camunda:string>{
+  "claimStatus": "$.claim_status",
+  "claimSummary": "$.claim_summary",
+  "validationChecks": "$.validation_checks",
+  "finalRecommendation": "$.final_recommendation",
+  "sequencedGroups": "$.sequenced_groups"
+}</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
       <bpmn:incoming>Flow_0e8mxy3</bpmn:incoming>
       <bpmn:outgoing>Flow_1y4cq5x</bpmn:outgoing>
     </bpmn:serviceTask>
@@ -544,7 +570,33 @@
       <bpmn:outgoing>Flow_0oa3vkg</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:sequenceFlow id="Flow_0e8mxy3" sourceRef="Submission_Validator" targetRef="Submission_Consistency_Analyzer" />
-    <bpmn:serviceTask id="Submission_Validator" name="Submission Validator" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.SubmissionValidatorDelegate">
+    <bpmn:serviceTask id="Submission_Validator" name="Submission Validator" camunda:modelerTemplate="com.dronapay.generic.agent" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+      <bpmn:extensionElements>
+        <camunda:field name="agentId">
+          <camunda:string>Submission_Validator</camunda:string>
+        </camunda:field>
+        <camunda:field name="url">
+          <camunda:string>${appproperties.agent.api.url}</camunda:string>
+        </camunda:field>
+        <camunda:field name="method">
+          <camunda:string>POST</camunda:string>
+        </camunda:field>
+        <camunda:field name="inputParams">
+          <camunda:string>[
+  {
+    "key": "doc_fhir",
+    "type": "minioJson",
+    "value": "${fhirConsolidatorMinioPath}",
+    "sourceJsonPath": "$.doc_fhir"
+  }
+]</camunda:string>
+        </camunda:field>
+        <camunda:field name="outputMapping">
+          <camunda:string>{
+  "missingDocuments": "$.answer.missing_documents"
+}</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
       <bpmn:incoming>Flow_0oa3vkg</bpmn:incoming>
       <bpmn:outgoing>Flow_0e8mxy3</bpmn:outgoing>
     </bpmn:serviceTask>
@@ -605,6 +657,34 @@
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_058ecar</bpmn:incoming>
       <bpmn:outgoing>Flow_0hxlb17</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="UI_Displayer_Agent" name="Activity_UIDisplayer" camunda:modelerTemplate="com.dronapay.generic.agent" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+      <bpmn:extensionElements>
+        <camunda:field name="agentId">
+          <camunda:string>UI_Displayer</camunda:string>
+        </camunda:field>
+        <camunda:field name="url">
+          <camunda:string>${appproperties.agent.api.url}</camunda:string>
+        </camunda:field>
+        <camunda:field name="method">
+          <camunda:string>POST</camunda:string>
+        </camunda:field>
+        <camunda:field name="inputParams">
+          <camunda:string>[
+  {
+    "key": "doc_fhir",
+    "type": "minioJson",
+    "value": "${fhirConsolidatorMinioPath}",
+    "sourceJsonPath": "$.doc_fhir"
+  }
+]</camunda:string>
+        </camunda:field>
+        <camunda:field name="outputMapping">
+          <camunda:string>{}</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_1y4cq5x</bpmn:incoming>
+      <bpmn:outgoing>Flow_0w29skj</bpmn:outgoing>
     </bpmn:serviceTask>
   </bpmn:process>
   <bpmn:error id="Error_1brcit7" name="forgeddoc" />

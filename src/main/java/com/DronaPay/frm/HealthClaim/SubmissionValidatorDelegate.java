@@ -24,6 +24,8 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
 
         String tenantId = execution.getTenantId();
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
+
+        // CHANGE: Use BPMN Activity ID
         String stageName = execution.getCurrentActivityId();
 
         log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
@@ -55,16 +57,11 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
 
         log.info("Retrieved consolidated FHIR request ({} bytes) from MinIO", consolidatedRequest.length());
 
-        // Parse the consolidated request and wrap it in "data"
-        JSONObject consolidatedJson = new JSONObject(consolidatedRequest);
+        JSONObject requestJson = new JSONObject(consolidatedRequest);
+        requestJson.put("agentid", "Submission_Validator");
+        String modifiedRequest = requestJson.toString();
 
-        JSONObject requestBody = new JSONObject();
-        requestBody.put("agentid", "Submission_Validator");
-        requestBody.put("data", consolidatedJson);
-
-        String modifiedRequest = requestBody.toString();
-
-        log.info("Built request with data wrapper");
+        log.info("Modified agentid to Submission_Validator");
 
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
         CloseableHttpResponse response = apiServices.callAgent(modifiedRequest);
@@ -84,6 +81,7 @@ public class SubmissionValidatorDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "Submission_Validator", statusCode, resp, new HashMap<>());
 
+        // CHANGE: Use stageName
         String validatorMinioPath = AgentResultStorageService.storeAgentResult(
                 tenantId, ticketId, stageName, "consolidated", fullResult);
 

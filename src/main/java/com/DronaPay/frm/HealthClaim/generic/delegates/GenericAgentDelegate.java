@@ -35,6 +35,15 @@ import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Generic Agent Delegate for Camunda 7
+ * Handles communication with external AI Agents/Models.
+ * Supports:
+ * - Dynamic Agent ID and URL resolution
+ * - Input processing from MinIO files (Documents and JSON)
+ * - Output mapping using JSONPath
+ * - JSON extraction using 'sourceJsonPath' to avoid nesting issues
+ */
 @Slf4j
 public class GenericAgentDelegate implements JavaDelegate {
 
@@ -65,8 +74,11 @@ public class GenericAgentDelegate implements JavaDelegate {
 
         String inputJsonStr = (inputParams != null) ? (String) inputParams.getValue(execution) : "[]";
         String resolvedInputJson = resolvePlaceholders(inputJsonStr, execution, props);
+
+        // Build the 'data' object for the request
         JSONObject dataObject = buildDataObject(resolvedInputJson, tenantId);
 
+        // Construct final request body: { "agentid": "...", "data": { ... } }
         JSONObject requestBody = new JSONObject();
         requestBody.put("agentid", currentAgentId);
         requestBody.put("data", dataObject);
@@ -74,6 +86,7 @@ public class GenericAgentDelegate implements JavaDelegate {
         log.info("Calling Agent API: {} [{}]", finalUrl, reqMethod);
         String responseBody = executeAgentCall(reqMethod, finalUrl, apiUser, apiPass, requestBody.toString());
 
+        // Store result to MinIO
         Map<String, Object> resultMap = AgentResultStorageService.buildResultMap(
                 currentAgentId, 200, responseBody, new HashMap<>());
 
@@ -88,9 +101,11 @@ public class GenericAgentDelegate implements JavaDelegate {
         String minioPath = AgentResultStorageService.storeAgentResult(
                 tenantId, ticketId, stageName, resultFileName, resultMap);
 
+        // Save MinIO path to a process variable: [AgentID]_MinioPath
         execution.setVariable(currentAgentId + "_MinioPath", minioPath);
         log.info("Agent Result saved to MinIO: {}", minioPath);
 
+        // Map specific fields from response to process variables
         String outputMapStr = (outputMapping != null) ? (String) outputMapping.getValue(execution) : "{}";
         mapOutputs(responseBody, outputMapStr, execution);
 
@@ -131,8 +146,20 @@ public class GenericAgentDelegate implements JavaDelegate {
                         throw new Exception("Empty apiResponse from: " + value);
                     }
 
-                    JSONObject jsonContent = new JSONObject(apiResponse);
-                    data.put(key, jsonContent);
+                    // --- CRITICAL UPDATE: Handle sourceJsonPath ---
+                    String sourcePath = input.optString("sourceJsonPath", "");
+
+                    if (!sourcePath.isEmpty()) {
+                        // If sourceJsonPath is provided, extract specific part using JsonPath
+                        // This prevents double-nesting issues (e.g., getting $.doc_fhir instead of the whole object)
+                        Object extractedContent = JsonPath.read(apiResponse, sourcePath);
+                        data.put(key, extractedContent);
+                    } else {
+                        // Default behavior: Use the entire JSON object
+                        JSONObject jsonContent = new JSONObject(apiResponse);
+                        data.put(key, jsonContent);
+                    }
+                    // ----------------------------------------------
 
                 } catch (Exception e) {
                     log.error("Failed to download/parse JSON at path: {}", value, e);

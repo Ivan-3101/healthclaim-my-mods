@@ -17,7 +17,7 @@ public class LoadUIFieldsDelegate implements JavaDelegate {
         log.info("=== Load UI Fields Started ===");
 
         String tenantId = execution.getTenantId();
-        String uiDisplayerMinioPath = (String) execution.getVariable("uiDisplayerMinioPath");
+        String uiDisplayerMinioPath = (String) execution.getVariable("UI_Displayer_MinioPath");
 
         if (uiDisplayerMinioPath == null || uiDisplayerMinioPath.trim().isEmpty()) {
             log.warn("No uiDisplayerMinioPath found");

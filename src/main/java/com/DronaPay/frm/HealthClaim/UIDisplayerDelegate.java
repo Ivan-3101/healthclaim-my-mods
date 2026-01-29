@@ -57,8 +57,13 @@ public class UIDisplayerDelegate implements JavaDelegate {
         log.info("Retrieved consolidated FHIR request ({} bytes) from MinIO", consolidatedRequest.length());
 
         JSONObject requestJson = new JSONObject(consolidatedRequest);
-        requestJson.put("agentid", "UI_Displayer");
-        String modifiedRequest = requestJson.toString();
+
+// FIX: Wrap payload in "data" object as expected by the Agent API
+        JSONObject finalRequestBody = new JSONObject();
+        finalRequestBody.put("agentid", "UI_Displayer");
+        finalRequestBody.put("data", requestJson);
+
+        String modifiedRequest = finalRequestBody.toString();
 
         log.info("Modified agentid to UI_Displayer");
 
