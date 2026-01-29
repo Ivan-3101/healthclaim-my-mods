@@ -8,6 +8,7 @@ import org.apache.http.util.EntityUtils;
 import org.cibseven.bpm.engine.delegate.BpmnError;
 import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.sql.Connection;
@@ -23,8 +24,6 @@ public class FHIRAnalyserDelegate implements JavaDelegate {
 
         String tenantId = execution.getTenantId();
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
-
-        // CHANGE: Use BPMN Activity ID
         String stageName = execution.getCurrentActivityId();
 
         log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
@@ -56,8 +55,18 @@ public class FHIRAnalyserDelegate implements JavaDelegate {
 
         log.info("Retrieved consolidated FHIR request ({} bytes) from MinIO", consolidatedRequest.length());
 
+        JSONObject consolidatedJson = new JSONObject(consolidatedRequest);
+
+        JSONObject requestBody = new JSONObject();
+        requestBody.put("agentid", "FHIR_Analyser");
+        requestBody.put("data", consolidatedJson);
+
+        String modifiedRequest = requestBody.toString();
+
+        log.info("Built request with data wrapper");
+
         APIServices apiServices = new APIServices(tenantId, workflowConfig);
-        CloseableHttpResponse response = apiServices.callAgent(consolidatedRequest);
+        CloseableHttpResponse response = apiServices.callAgent(modifiedRequest);
 
         String resp = EntityUtils.toString(response.getEntity());
         int statusCode = response.getStatusLine().getStatusCode();
@@ -74,7 +83,6 @@ public class FHIRAnalyserDelegate implements JavaDelegate {
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "FHIR_Analyser", statusCode, resp, new HashMap<>());
 
-        // CHANGE: Use stageName
         String analyserMinioPath = AgentResultStorageService.storeAgentResult(
                 tenantId, ticketId, stageName, "consolidated", fullResult);
 
@@ -92,34 +100,21 @@ public class FHIRAnalyserDelegate implements JavaDelegate {
         try {
             JSONObject responseJson = new JSONObject(response);
 
-            if (responseJson.has("claim_status")) {
-                String claimStatus = responseJson.getString("claim_status");
-                execution.setVariable("claimStatus", claimStatus);
-                log.info("Claim Status: {}", claimStatus);
-            }
+            if (responseJson.has("answer")) {
+                JSONObject answer = responseJson.getJSONObject("answer");
 
-            if (responseJson.has("claim_summary")) {
-                String claimSummary = responseJson.getString("claim_summary");
-                execution.setVariable("claimSummary", claimSummary);
-                log.info("Claim Summary: {}", claimSummary);
-            }
+                if (answer.has("inconsistencies")) {
+                    JSONArray inconsistencies = answer.getJSONArray("inconsistencies");
+                    String inconsistenciesStr = inconsistencies.toString(2);
+                    execution.setVariable("inconsistencies", inconsistenciesStr);
+                    log.info("Inconsistencies: {}", inconsistenciesStr);
+                }
 
-            if (responseJson.has("validation_checks")) {
-                String validationChecks = responseJson.getJSONArray("validation_checks").toString(2);
-                execution.setVariable("validationChecks", validationChecks);
-                log.debug("Validation Checks: {}", validationChecks);
-            }
-
-            if (responseJson.has("final_recommendation")) {
-                String finalRecommendation = responseJson.getString("final_recommendation");
-                execution.setVariable("finalRecommendation", finalRecommendation);
-                log.info("Final Recommendation: {}", finalRecommendation);
-            }
-
-            if (responseJson.has("sequenced_groups")) {
-                String sequencedGroups = responseJson.getJSONArray("sequenced_groups").toString(2);
-                execution.setVariable("sequencedGroups", sequencedGroups);
-                log.debug("Sequenced Groups: {}", sequencedGroups);
+                if (answer.has("consistency_score")) {
+                    double consistencyScore = answer.getDouble("consistency_score");
+                    execution.setVariable("consistencyScore", consistencyScore);
+                    log.info("Consistency Score: {}", consistencyScore);
+                }
             }
 
         } catch (Exception e) {
