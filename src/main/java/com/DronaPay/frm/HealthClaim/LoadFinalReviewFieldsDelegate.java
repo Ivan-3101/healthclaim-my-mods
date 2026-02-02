@@ -70,8 +70,8 @@ public class LoadFinalReviewFieldsDelegate implements JavaDelegate {
         }
 
         // Fallback to original
-        String uiDisplayerMinioPath = (String) execution.getVariable("uiDisplayerMinioPath");
-
+//        String uiDisplayerMinioPath = (String) execution.getVariable("uiDisplayerMinioPath");
+        String uiDisplayerMinioPath = (String) execution.getVariable("UI_Displayer_MinioPath");
         if (uiDisplayerMinioPath != null && !uiDisplayerMinioPath.trim().isEmpty()) {
             log.info("Using original UI displayer data from: {}", uiDisplayerMinioPath);
             Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, uiDisplayerMinioPath);
