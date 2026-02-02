@@ -135,7 +135,7 @@ public class MedicalCoherenceDelegate implements JavaDelegate {
         JSONObject consolidatedJson = new JSONObject(consolidatedRequest);
         JSONObject uiDisplayerJson = new JSONObject(uiDisplayerData);
 
-        JSONArray docFhirArray = consolidatedJson.getJSONObject("data").getJSONArray("doc_fhir");
+        JSONArray docFhirArray = consolidatedJson.getJSONArray("doc_fhir");
 
         JSONObject uiDisplayerDoc = convertUIDisplayerToDocFhir(uiDisplayerJson, ticketId);
 
