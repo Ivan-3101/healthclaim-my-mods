@@ -1,9 +1,16 @@
 package com.DronaPay.frm.HealthClaim;
 
 import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
-import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.cibseven.bpm.engine.delegate.BpmnError;
 import org.cibseven.bpm.engine.delegate.DelegateExecution;
@@ -11,9 +18,10 @@ import org.cibseven.bpm.engine.delegate.JavaDelegate;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.sql.Connection;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 
 @Slf4j
 public class MedicalCoherenceDelegate implements JavaDelegate {
@@ -24,19 +32,14 @@ public class MedicalCoherenceDelegate implements JavaDelegate {
 
         String tenantId = execution.getTenantId();
         String ticketId = String.valueOf(execution.getVariable("TicketID"));
-
-        // CHANGE: Use BPMN Activity ID
         String stageName = execution.getCurrentActivityId();
 
         log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
 
-        Connection conn = execution.getProcessEngine()
-                .getProcessEngineConfiguration()
-                .getDataSource()
-                .getConnection();
-
-        JSONObject workflowConfig = ConfigurationService.loadWorkflowConfig("HealthClaim", tenantId, conn);
-        conn.close();
+        Properties tenantProps = TenantPropertiesUtil.getTenantProps(tenantId);
+        String agentApiUrl = tenantProps.getProperty("agent.api.url");
+        String agentUsername = tenantProps.getProperty("agent.api.username");
+        String agentPassword = tenantProps.getProperty("agent.api.password");
 
         String consolidatorMinioPath = (String) execution.getVariable("fhirConsolidatorMinioPath");
 
@@ -68,25 +71,14 @@ public class MedicalCoherenceDelegate implements JavaDelegate {
 
         log.info("Built Medical Coherence request ({} bytes)", medicalCoherenceRequest.length());
 
-        APIServices apiServices = new APIServices(tenantId, workflowConfig);
-        CloseableHttpResponse response = apiServices.callAgent(medicalCoherenceRequest);
+        String resp = callAgentAPI(agentApiUrl, agentUsername, agentPassword, medicalCoherenceRequest);
 
-        String resp = EntityUtils.toString(response.getEntity());
-        int statusCode = response.getStatusLine().getStatusCode();
-
-        log.info("Medical Coherence API status: {}", statusCode);
+        log.info("Medical Coherence API call successful");
         log.debug("Medical Coherence API response: {}", resp);
 
-        if (statusCode != 200) {
-            log.error("Medical Coherence agent failed with status: {}", statusCode);
-            throw new BpmnError("medicalCoherenceFailed",
-                    "Medical Coherence agent failed with status: " + statusCode);
-        }
-
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
-                "medical_comp", statusCode, resp, new HashMap<>());
+                "medical_comp", 200, resp, new HashMap<>());
 
-        // CHANGE: Use stageName
         String medicalCoherenceMinioPath = AgentResultStorageService.storeAgentResult(
                 tenantId, ticketId, stageName, "consolidated", fullResult);
 
@@ -98,6 +90,27 @@ public class MedicalCoherenceDelegate implements JavaDelegate {
         log.info("=== Medical Coherence Completed ===");
     }
 
+    private String callAgentAPI(String url, String username, String password, String requestBody) throws Exception {
+        CredentialsProvider provider = new BasicCredentialsProvider();
+        provider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials(username, password));
+
+        try (CloseableHttpClient client = HttpClients.custom().setDefaultCredentialsProvider(provider).build()) {
+            HttpPost post = new HttpPost(url);
+            post.setEntity(new StringEntity(requestBody, StandardCharsets.UTF_8));
+            post.setHeader("Content-Type", "application/json");
+
+            try (CloseableHttpResponse response = client.execute(post)) {
+                int status = response.getStatusLine().getStatusCode();
+                String respStr = EntityUtils.toString(response.getEntity());
+
+                if (status != 200) {
+                    throw new BpmnError("medicalCoherenceFailed", "Medical Coherence agent failed with status: " + status);
+                }
+                return respStr;
+            }
+        }
+    }
+
     private String getUIDisplayerData(DelegateExecution execution, String tenantId) throws Exception {
         String editedFormMinioPath = (String) execution.getVariable("editedFormMinioPath");
 
@@ -107,7 +120,7 @@ public class MedicalCoherenceDelegate implements JavaDelegate {
             return (String) result.get("apiResponse");
         }
 
-        String uiDisplayerMinioPath = (String) execution.getVariable("uiDisplayerMinioPath");
+        String uiDisplayerMinioPath = (String) execution.getVariable("UI_Displayer_MinioPath");
 
         if (uiDisplayerMinioPath != null && !uiDisplayerMinioPath.trim().isEmpty()) {
             log.info("Using original UI displayer data from: {}", uiDisplayerMinioPath);

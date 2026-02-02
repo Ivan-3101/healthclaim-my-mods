@@ -89,7 +89,7 @@ public class GenericAgentDelegate implements JavaDelegate {
         log.info("Calling Agent API: {} [{}]", finalUrl, reqMethod);
 
         // Log the full request for debugging (Crucial for verifying data structure)
-        log.debug(">>> Request Body for {}: {}", currentAgentId, requestBody);
+//        log.debug(">>> Request Body for {}: {}", currentAgentId, requestBody);
 
         String responseBody = executeAgentCall(reqMethod, finalUrl, apiUser, apiPass, requestBody.toString());
 
