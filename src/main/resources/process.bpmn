@@ -242,7 +242,7 @@
     <bpmn:sendTask id="Activity_16cm9bp" name="Send Rejection Email to Policy Holder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailTask">
       <bpmn:extensionElements>
         <camunda:field name="templateId">
-          <camunda:string>13</camunda:string>
+          <camunda:string>14</camunda:string>
         </camunda:field>
         <camunda:field name="recipientEmail">
           <camunda:string>${sender_email}</camunda:string>
