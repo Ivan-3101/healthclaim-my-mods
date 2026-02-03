@@ -304,60 +304,6 @@
       <bpmn:incoming>Flow_0xebx2i</bpmn:incoming>
       <bpmn:outgoing>Flow_0974uhc</bpmn:outgoing>
     </bpmn:receiveTask>
-    <bpmn:sendTask id="Activity_1jck5w8" name="Missing info Rejection Email to Policy Holder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailTask">
-      <bpmn:extensionElements>
-        <camunda:field name="templateId">
-          <camunda:string>18</camunda:string>
-        </camunda:field>
-        <camunda:field name="recipientEmail">
-          <camunda:string>${sender_email}</camunda:string>
-        </camunda:field>
-        <camunda:field name="ccEmails">
-          <camunda:string></camunda:string>
-        </camunda:field>
-        <camunda:field name="bccEmails">
-          <camunda:string> </camunda:string>
-        </camunda:field>
-        <camunda:field name="bodyParams">
-          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
-        </camunda:field>
-        <camunda:field name="enableAutoResponse">
-          <camunda:string>false</camunda:string>
-        </camunda:field>
-        <camunda:field name="autoResponseMessage">
-          <camunda:string> </camunda:string>
-        </camunda:field>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_1d0tsww</bpmn:incoming>
-      <bpmn:outgoing>Flow_0kpfbwi</bpmn:outgoing>
-    </bpmn:sendTask>
-    <bpmn:sendTask id="Activity_0ytppf9" name="Send FWA Reminder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailTask">
-      <bpmn:extensionElements>
-        <camunda:field name="templateId">
-          <camunda:string>17</camunda:string>
-        </camunda:field>
-        <camunda:field name="recipientEmail">
-          <camunda:string>${sender_email}</camunda:string>
-        </camunda:field>
-        <camunda:field name="ccEmails">
-          <camunda:string></camunda:string>
-        </camunda:field>
-        <camunda:field name="bccEmails">
-          <camunda:string> </camunda:string>
-        </camunda:field>
-        <camunda:field name="bodyParams">
-          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
-        </camunda:field>
-        <camunda:field name="enableAutoResponse">
-          <camunda:string>false</camunda:string>
-        </camunda:field>
-        <camunda:field name="autoResponseMessage">
-          <camunda:string> </camunda:string>
-        </camunda:field>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_0k70ifz</bpmn:incoming>
-      <bpmn:outgoing>Flow_1m4191f</bpmn:outgoing>
-    </bpmn:sendTask>
     <bpmn:boundaryEvent id="Event_1x89d5c" name="1 Day" attachedToRef="Activity_ReceiveFWAInfoResponse">
       <bpmn:outgoing>Flow_1d0tsww</bpmn:outgoing>
       <bpmn:timerEventDefinition id="TimerEventDefinition_038yj4l">
@@ -735,16 +681,16 @@
           <camunda:string>${sender_email}</camunda:string>
         </camunda:field>
         <camunda:field name="ccEmails">
-          <camunda:string> </camunda:string>
+          <camunda:string>NA</camunda:string>
         </camunda:field>
         <camunda:field name="bccEmails">
-          <camunda:string> </camunda:string>
+          <camunda:string>NA</camunda:string>
         </camunda:field>
         <camunda:field name="bodyParams">
           <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
         </camunda:field>
         <camunda:field name="enableAutoResponse">
-          <camunda:string>true</camunda:string>
+          <camunda:string>false</camunda:string>
         </camunda:field>
         <camunda:field name="autoResponseMessage">
           <camunda:string>fwaInfoResponse</camunda:string>
@@ -752,6 +698,60 @@
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_1ljexqk</bpmn:incoming>
       <bpmn:outgoing>Flow_0xebx2i</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sendTask id="Activity_1jck5w8" name="Missing info Rejection Email to Policy Holder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailTask">
+      <bpmn:extensionElements>
+        <camunda:field name="templateId">
+          <camunda:string>18</camunda:string>
+        </camunda:field>
+        <camunda:field name="recipientEmail">
+          <camunda:string>${sender_email}</camunda:string>
+        </camunda:field>
+        <camunda:field name="ccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bodyParams">
+          <camunda:string>{}</camunda:string>
+        </camunda:field>
+        <camunda:field name="enableAutoResponse">
+          <camunda:string>false</camunda:string>
+        </camunda:field>
+        <camunda:field name="autoResponseMessage">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_1d0tsww</bpmn:incoming>
+      <bpmn:outgoing>Flow_0kpfbwi</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sendTask id="Activity_0ytppf9" name="Send FWA Reminder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailTask">
+      <bpmn:extensionElements>
+        <camunda:field name="templateId">
+          <camunda:string>17</camunda:string>
+        </camunda:field>
+        <camunda:field name="recipientEmail">
+          <camunda:string>${sender_email}</camunda:string>
+        </camunda:field>
+        <camunda:field name="ccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bodyParams">
+          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
+        </camunda:field>
+        <camunda:field name="enableAutoResponse">
+          <camunda:string>false</camunda:string>
+        </camunda:field>
+        <camunda:field name="autoResponseMessage">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0k70ifz</bpmn:incoming>
+      <bpmn:outgoing>Flow_1m4191f</bpmn:outgoing>
     </bpmn:sendTask>
   </bpmn:process>
   <bpmn:error id="Error_1brcit7" name="forgeddoc" />
@@ -857,16 +857,14 @@
         <dc:Bounds x="4850" y="500" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_0wy7qih" bpmnElement="Activity_1jck5w8">
-        <dc:Bounds x="4850" y="310" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_1wbctoh" bpmnElement="Activity_0ytppf9">
-        <dc:Bounds x="4650" y="500" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0rwpcsn_di" bpmnElement="Activity_RequestFWAInfo">
+      <bpmndi:BPMNShape id="Activity_1p2ko92_di" bpmnElement="Activity_RequestFWAInfo">
         <dc:Bounds x="5030" y="500" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1a39hm6_di" bpmnElement="Activity_1jck5w8">
+        <dc:Bounds x="4850" y="310" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_00pbdht_di" bpmnElement="Activity_0ytppf9">
+        <dc:Bounds x="4650" y="500" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_17h17ae_di" bpmnElement="Activity_17h17ae" isExpanded="true">
         <dc:Bounds x="670" y="740" width="330" height="200" />

@@ -20,8 +20,7 @@
       "type": "String",
       "binding": {
         "type": "camunda:field",
-        "name": "templateId",
-        "expression": false
+        "name": "templateId"
       },
       "constraints": {
         "notEmpty": true
@@ -33,8 +32,7 @@
       "type": "String",
       "binding": {
         "type": "camunda:field",
-        "name": "recipientEmail",
-        "expression": false
+        "name": "recipientEmail"
       },
       "constraints": {
         "notEmpty": true
@@ -42,24 +40,22 @@
     },
     {
       "label": "CC Emails",
-      "description": "Comma-separated emails or variables (optional)",
+      "description": "Comma-separated emails or variables (optional, use NA if none)",
       "type": "String",
-      "value": " ",
+      "value": "NA",
       "binding": {
         "type": "camunda:field",
-        "name": "ccEmails",
-        "expression": false
+        "name": "ccEmails"
       }
     },
     {
       "label": "BCC Emails",
-      "description": "Comma-separated emails or variables (optional)",
+      "description": "Comma-separated emails or variables (optional, use NA if none)",
       "type": "String",
-      "value": " ",
+      "value": "NA",
       "binding": {
         "type": "camunda:field",
-        "name": "bccEmails",
-        "expression": false
+        "name": "bccEmails"
       }
     },
     {
@@ -69,8 +65,7 @@
       "value": "{}",
       "binding": {
         "type": "camunda:field",
-        "name": "bodyParams",
-        "expression": false
+        "name": "bodyParams"
       }
     },
     {
@@ -84,19 +79,17 @@
       "value": "false",
       "binding": {
         "type": "camunda:field",
-        "name": "enableAutoResponse",
-        "expression": false
+        "name": "enableAutoResponse"
       }
     },
     {
       "label": "Auto-Response Message Name",
-      "description": "Camunda message name to correlate (e.g. fwaInfoResponse)",
+      "description": "Camunda message name to correlate (e.g. fwaInfoResponse, use NA if none)",
       "type": "String",
-      "value": " ",
+      "value": "NA",
       "binding": {
         "type": "camunda:field",
-        "name": "autoResponseMessage",
-        "expression": false
+        "name": "autoResponseMessage"
       }
     }
   ]

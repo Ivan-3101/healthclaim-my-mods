@@ -1,5 +1,6 @@
 package com.DronaPay.frm.HealthClaim.generic.delegates;
 
+import com.DronaPay.frm.HealthClaim.TenantPropertiesUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
@@ -40,16 +41,16 @@ public class GenericEmailTask implements JavaDelegate {
         log.info("TicketID: {}, TenantID: {}", ticketId, tenantId);
 
         // Load tenant properties
-        Properties props = loadTenantProperties(tenantId);
+        Properties props = TenantPropertiesUtil.getTenantProps(tenantId);
 
         // Extract field values
-        int templateIdValue = Integer.parseInt((String) templateId.getValue(execution));
-        String recipient = resolveValue((String) recipientEmail.getValue(execution), execution);
-        String cc = ccEmails != null ? resolveValue((String) ccEmails.getValue(execution), execution) : "";
-        String bcc = bccEmails != null ? resolveValue((String) bccEmails.getValue(execution), execution) : "";
-        String bodyParamsJson = bodyParams != null ? (String) bodyParams.getValue(execution) : "{}";
-        boolean autoResponse = enableAutoResponse != null && Boolean.parseBoolean((String) enableAutoResponse.getValue(execution));
-        String messageCorrelation = autoResponseMessage != null ? (String) autoResponseMessage.getValue(execution) : null;
+        int templateIdValue = Integer.parseInt(getFieldValue(templateId, execution));
+        String recipient = resolveValue(getFieldValue(recipientEmail, execution), execution);
+        String cc = getFieldValue(ccEmails, execution);
+        String bcc = getFieldValue(bccEmails, execution);
+        String bodyParamsJson = getFieldValue(bodyParams, execution);
+        boolean autoResponse = Boolean.parseBoolean(getFieldValue(enableAutoResponse, execution));
+        String messageCorrelation = getFieldValue(autoResponseMessage, execution);
 
         log.info("Template ID: {}, Recipient: {}, Auto-Response: {}", templateIdValue, recipient, autoResponse);
 
@@ -62,22 +63,31 @@ public class GenericEmailTask implements JavaDelegate {
         log.info("Email sent successfully");
 
         // Handle auto-response
-        if (autoResponse && messageCorrelation != null) {
+        if (autoResponse && isValidValue(messageCorrelation)) {
             handleAutoResponse(execution, messageCorrelation, tenantId);
         }
 
         log.info("=== Generic Email Task Completed ===");
     }
 
-    private Properties loadTenantProperties(String tenantId) throws Exception {
-        Properties props = new Properties();
-        String propsFile = "application.properties_" + tenantId;
-        props.load(Thread.currentThread().getContextClassLoader().getResourceAsStream(propsFile));
-        return props;
+    private String getFieldValue(Expression field, DelegateExecution execution) {
+        if (field == null) {
+            return "";
+        }
+        Object value = field.getValue(execution);
+        return value != null ? value.toString() : "";
+    }
+
+    private boolean isValidValue(String value) {
+        return value != null
+                && !value.trim().isEmpty()
+                && !value.equalsIgnoreCase("NA")
+                && !value.equals("{}")
+                && !value.equals("[]");
     }
 
     private String resolveValue(String value, DelegateExecution execution) {
-        if (value == null || value.trim().isEmpty()) {
+        if (!isValidValue(value)) {
             return "";
         }
 
@@ -107,18 +117,30 @@ public class GenericEmailTask implements JavaDelegate {
 
         // CC
         JSONArray ccEmails = new JSONArray();
-        if (!cc.isEmpty()) {
-            for (String email : cc.split(",")) {
-                ccEmails.put(email.trim());
+        if (isValidValue(cc)) {
+            String resolvedCc = resolveValue(cc, execution);
+            if (!resolvedCc.isEmpty()) {
+                for (String email : resolvedCc.split(",")) {
+                    String trimmed = email.trim();
+                    if (!trimmed.isEmpty()) {
+                        ccEmails.put(trimmed);
+                    }
+                }
             }
         }
         request.put("ccEmail", ccEmails);
 
         // BCC
         JSONArray bccEmails = new JSONArray();
-        if (!bcc.isEmpty()) {
-            for (String email : bcc.split(",")) {
-                bccEmails.put(email.trim());
+        if (isValidValue(bcc)) {
+            String resolvedBcc = resolveValue(bcc, execution);
+            if (!resolvedBcc.isEmpty()) {
+                for (String email : resolvedBcc.split(",")) {
+                    String trimmed = email.trim();
+                    if (!trimmed.isEmpty()) {
+                        bccEmails.put(trimmed);
+                    }
+                }
             }
         }
         request.put("bccEmail", bccEmails);
@@ -135,7 +157,7 @@ public class GenericEmailTask implements JavaDelegate {
     private JSONObject parseBodyParams(String bodyParamsJson, DelegateExecution execution) {
         JSONObject params = new JSONObject();
 
-        if (bodyParamsJson == null || bodyParamsJson.trim().isEmpty() || bodyParamsJson.equals("{}")) {
+        if (!isValidValue(bodyParamsJson) || bodyParamsJson.equals("{}")) {
             return params;
         }
 
@@ -224,7 +246,7 @@ public class GenericEmailTask implements JavaDelegate {
             String businessKey = execution.getBusinessKey();
             String workflowKey = (String) execution.getVariable("workflowKey");
             if (workflowKey == null) {
-                workflowKey = "HealthClaim"; // fallback
+                workflowKey = "HealthClaim";
             }
 
             Connection finalConn = conn;
@@ -232,7 +254,7 @@ public class GenericEmailTask implements JavaDelegate {
 
             new Thread(() -> {
                 try {
-                    Thread.sleep(60 * 1000); // Wait 60 seconds
+                    Thread.sleep(60 * 1000);
 
                     PreparedStatement stmt = finalConn.prepareStatement(
                             "SELECT activeflag FROM ui.templateresponse WHERE templatename = ?");
