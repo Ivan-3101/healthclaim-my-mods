@@ -92,7 +92,30 @@
     <bpmn:sequenceFlow id="Flow_1bnhbww" name="Approve" sourceRef="Gateway_0p3zjmg" targetRef="Activity_0yzeri4">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${Action1=="approve"}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sendTask id="Activity_1j0nx56" name="Request Info from Policy Holder" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.RequestInfoMail">
+    <bpmn:sendTask id="Activity_1j0nx56" name="Request Info from Policy Holder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailTask">
+      <bpmn:extensionElements>
+        <camunda:field name="templateId">
+          <camunda:string>11</camunda:string>
+        </camunda:field>
+        <camunda:field name="recipientEmail">
+          <camunda:string>${sender_email}</camunda:string>
+        </camunda:field>
+        <camunda:field name="ccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bodyParams">
+          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
+        </camunda:field>
+        <camunda:field name="enableAutoResponse">
+          <camunda:string>true</camunda:string>
+        </camunda:field>
+        <camunda:field name="autoResponseMessage">
+          <camunda:string>policyHolderResponse</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
       <bpmn:incoming>Flow_0e0paeo</bpmn:incoming>
       <bpmn:outgoing>Flow_0dw8jgw</bpmn:outgoing>
     </bpmn:sendTask>
@@ -117,7 +140,30 @@
       <bpmn:incoming>Flow_0qaitho</bpmn:incoming>
     </bpmn:endEvent>
     <bpmn:sequenceFlow id="Flow_1mhzpf0" sourceRef="Activity_02zas1s" targetRef="Event_042633k" />
-    <bpmn:sendTask id="Activity_02zas1s" name="Send Reminder to Policy Holder" camunda:class="com.DronaPay.frm.HealthClaim.SendReminderToPolicyHolder">
+    <bpmn:sendTask id="Activity_02zas1s" name="Send Reminder to Policy Holder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailTask">
+      <bpmn:extensionElements>
+        <camunda:field name="templateId">
+          <camunda:string>12</camunda:string>
+        </camunda:field>
+        <camunda:field name="recipientEmail">
+          <camunda:string>${sender_email}</camunda:string>
+        </camunda:field>
+        <camunda:field name="ccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bodyParams">
+          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
+        </camunda:field>
+        <camunda:field name="enableAutoResponse">
+          <camunda:string>false</camunda:string>
+        </camunda:field>
+        <camunda:field name="autoResponseMessage">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
       <bpmn:incoming>Flow_01d8u69</bpmn:incoming>
       <bpmn:outgoing>Flow_1mhzpf0</bpmn:outgoing>
     </bpmn:sendTask>
@@ -127,7 +173,30 @@
         <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">P1D</bpmn:timeDuration>
       </bpmn:timerEventDefinition>
     </bpmn:boundaryEvent>
-    <bpmn:sendTask id="Activity_1xoniv4" name="Missing info Rejection Email to Policy Holder" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.MissingInfoRejectionMail">
+    <bpmn:sendTask id="Activity_1xoniv4" name="Missing info Rejection Email to Policy Holder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailTask">
+      <bpmn:extensionElements>
+        <camunda:field name="templateId">
+          <camunda:string>13</camunda:string>
+        </camunda:field>
+        <camunda:field name="recipientEmail">
+          <camunda:string>${sender_email}</camunda:string>
+        </camunda:field>
+        <camunda:field name="ccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bodyParams">
+          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
+        </camunda:field>
+        <camunda:field name="enableAutoResponse">
+          <camunda:string>false</camunda:string>
+        </camunda:field>
+        <camunda:field name="autoResponseMessage">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
       <bpmn:incoming>Flow_1qmsn0b</bpmn:incoming>
       <bpmn:outgoing>Flow_0qaitho</bpmn:outgoing>
     </bpmn:sendTask>
