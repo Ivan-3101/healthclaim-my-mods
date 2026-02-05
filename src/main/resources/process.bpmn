@@ -13,7 +13,6 @@
     <bpmn:serviceTask id="Activity_04nhqma" name="FWA Decisioning" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FWADecisioning">
       <bpmn:incoming>Flow_0xp9ktd</bpmn:incoming>
       <bpmn:incoming>Flow_171ffw7</bpmn:incoming>
-      <bpmn:incoming>Flow_024y7gm</bpmn:incoming>
       <bpmn:outgoing>Flow_0vxvqkn</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:sequenceFlow id="Flow_0l7iwzz" sourceRef="Activity_0v6rfa2" targetRef="Gateway_1k0f36m" />
@@ -30,12 +29,12 @@
     <bpmn:sequenceFlow id="Flow_1fbkfzh" name="High Risk Score" sourceRef="Gateway_1k0f36m" targetRef="Activity_06f4rl2">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${RiskScore&gt;=20}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="Flow_1446qaa" sourceRef="Activity_User_Verification" targetRef="Policy_Coherence" />
     <bpmn:userTask id="Activity_User_Verification" name="User Verification" camunda:formKey="embedded:app:forms/claim-review.html">
       <bpmn:extensionElements>
         <camunda:executionListener class="com.DronaPay.frm.HealthClaim.listeners.SaveEditedFormListener" event="end" />
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_0o84pjf</bpmn:incoming>
+      <bpmn:outgoing>Flow_1446qaa</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:exclusiveGateway id="Gateway_0aphohc">
       <bpmn:incoming>Flow_0j2ifcv</bpmn:incoming>
@@ -444,6 +443,7 @@
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="Flow_0974uhc" sourceRef="Activity_ReceiveFWAInfoResponse" targetRef="Activity_ReviewFWAResults" />
     <bpmn:subProcess id="Activity_17h17ae">
+      <bpmn:incoming>Flow_024y7gm</bpmn:incoming>
       <bpmn:outgoing>Flow_0450puq</bpmn:outgoing>
       <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_11ox0g4">
@@ -867,7 +867,8 @@
       <bpmn:incoming>Flow_0k70ifz</bpmn:incoming>
       <bpmn:outgoing>Flow_1m4191f</bpmn:outgoing>
     </bpmn:sendTask>
-    <bpmn:sequenceFlow id="Flow_024y7gm" sourceRef="Verify_Master_Data" targetRef="Activity_04nhqma" />
+    <bpmn:sequenceFlow id="Flow_024y7gm" sourceRef="Verify_Master_Data" targetRef="Activity_17h17ae" />
+    <bpmn:sequenceFlow id="Flow_1446qaa" sourceRef="Activity_User_Verification" targetRef="Policy_Coherence" />
   </bpmn:process>
   <bpmn:error id="Error_1brcit7" name="forgeddoc" />
   <bpmn:message id="Message_3r951pg" name="policyHolderResponse" />
@@ -1398,7 +1399,7 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_024y7gm_di" bpmnElement="Flow_024y7gm">
         <di:waypoint x="570" y="840" />
-        <di:waypoint x="4650" y="840" />
+        <di:waypoint x="670" y="840" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
