@@ -1,0 +1,52 @@
+{
+    "reqid": "{{$guid}}",
+    "org": "EPIFI",
+    "ts": "{{$isoTimestamp}}",
+    "txn": {
+        "ts": "{{$isoTimestamp}}",
+        "id": "{{$randomCountryCode}}{{$timestamp}}",
+        "org_txn_id": "",
+        "note": "",
+        "type": "PAY",
+        "class": "health_claim",
+        "attribs": {
+            
+                "patient_name": "Ravi Kumar",
+                "gender": "Male",
+                "doctor_id": "DR1024",
+                "doctor_name": "Dr. Anjali Mehta",
+                "disease_name": "Type 2 Diabetes",
+                "disease_code": "E11.9",
+                "procedure": "Insulin Therapy",
+                "start_date": "2025-07-15",
+                "end_date": "2025-08-05",
+                "medication_name": "Metformin 500mg",
+                "instruction_for_usage": "Take one tablet twice daily after meals",
+                "patient_contact": "+91-9876543210",
+                "insurance_company": "Star Health Insurance",
+                "expenses": 18500,
+                "time_period": "2025-07-15 to 2025-08-05",
+                "hospital_name": "Apollo Hospital, Delhi",
+                "claim_for": "Treatment of Type 2 Diabetes",
+                "claim_amount": 15000
+            
+        }
+    },
+    "payer": {
+        "addr": "helliiooiiooohooo@1",
+        "mcc": 0,
+        "type": "PERSON",
+        "amount": 500000,
+        "currency": "INR",
+        "attribs": {
+            "mid": "EPIFI101"
+        }
+    },
+    "payee": {
+        "addr": "b5ZbTaCQzpgmlrtCB8DI_cZQPfRVNsC1C1XrzVfGgzWUiHbF6cCKO6-lyYFQ09Vf",
+        "type": "PERSON",
+        "amount": 500000,
+        "currency": "INR",
+        "attribs": {}
+    }
+}
