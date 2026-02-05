@@ -13,6 +13,7 @@
     <bpmn:serviceTask id="Activity_04nhqma" name="FWA Decisioning" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FWADecisioning">
       <bpmn:incoming>Flow_0xp9ktd</bpmn:incoming>
       <bpmn:incoming>Flow_171ffw7</bpmn:incoming>
+      <bpmn:incoming>Flow_024y7gm</bpmn:incoming>
       <bpmn:outgoing>Flow_0vxvqkn</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:sequenceFlow id="Flow_0l7iwzz" sourceRef="Activity_0v6rfa2" targetRef="Gateway_1k0f36m" />
@@ -49,27 +50,11 @@
       <bpmn:extensionElements>
         <camunda:formData>
           <camunda:formField id="RiskScore" label="Risk Score" type="long" />
-          <camunda:formField id="patientName" label="Patient Name" type="string" />
-          <camunda:formField id="gender" label="Gender" type="string" />
-          <camunda:formField id="doctorIdentifier" label="Doctor Identifier" type="string" />
-          <camunda:formField id="doctorName" label="Doctor Name" type="string" />
-          <camunda:formField id="diseaseName" label="Disease Name" type="string" />
-          <camunda:formField id="procedure" label="Procedure" type="string" />
-          <camunda:formField id="startDate" label="Start Date" type="string" />
-          <camunda:formField id="medicationName" label="Medication Name" type="string" />
-          <camunda:formField id="dosageInstruction" label="Instruction For Usage" type="string" />
-          <camunda:formField id="contact" label="Patient Contact" type="string" />
-          <camunda:formField id="insuranceCompany" label="Insurance Company" type="string" />
-          <camunda:formField id="period" label="Time Period" type="string" />
-          <camunda:formField id="hospitalName" label="Hospital Name" type="string" />
           <camunda:formField id="claimFor" label="Claim For" type="string" />
           <camunda:formField id="claimAmount" label="Claim Amount" type="long" />
           <camunda:formField id="approvedAmount" label="Approved Amount" type="long" />
           <camunda:formField id="bonusAmount" label="Bonus" type="long" />
           <camunda:formField id="finalAmount" label="Final Amount" type="long" />
-          <camunda:formField id="policyComparatorStatus" label="Policy Comparison Status" type="string" />
-          <camunda:formField id="policyMissingInfo" label="Missing Policy Information" type="string" />
-          <camunda:formField id="policyPotentialIssues" label="Policy Issues Found" type="string" />
           <camunda:formField id="Action1" label="What action would you like to take?" type="enum">
             <camunda:value id="approve" name="Approve" />
             <camunda:value id="reject" name="Reject" />
@@ -313,27 +298,11 @@
       <bpmn:extensionElements>
         <camunda:formData>
           <camunda:formField id="RiskScore" label="Risk Score" type="long" />
-          <camunda:formField id="patientName" label="Patient Name" type="string" />
-          <camunda:formField id="gender" label="Gender" type="string" />
-          <camunda:formField id="doctorIdentifier" label="Doctor Identifier" type="string" />
-          <camunda:formField id="doctorName" label="Doctor Name" type="string" />
-          <camunda:formField id="diseaseName" label="Disease Name" type="string" />
-          <camunda:formField id="procedure" label="Procedure" type="string" />
-          <camunda:formField id="startDate" label="Start Date" type="string" />
-          <camunda:formField id="medicationName" label="Medication Name" type="string" />
-          <camunda:formField id="dosageInstruction" label="Instruction For Usage" type="string" />
-          <camunda:formField id="contact" label="Patient Contact" type="string" />
-          <camunda:formField id="insuranceCompany" label="Insurance Company" type="string" />
-          <camunda:formField id="period" label="Time Period" type="string" />
-          <camunda:formField id="hospitalName" label="Hospital Name" type="string" />
           <camunda:formField id="claimFor" label="Claim For" type="string" />
           <camunda:formField id="claimAmount" label="Claim Amount" type="long" />
           <camunda:formField id="approvedAmount" label="Approved Amount" type="long" />
           <camunda:formField id="bonusAmount" label="Bonus" type="long" />
           <camunda:formField id="finalAmount" label="Final Amount" type="long" />
-          <camunda:formField id="policyComparatorStatus" label="Policy Comparison Status" type="string" />
-          <camunda:formField id="policyMissingInfo" label="Missing Policy Information" type="string" />
-          <camunda:formField id="policyPotentialIssues" label="Policy Issues Found" type="string" />
           <camunda:formField id="Action2" label="What action would you like to take?" type="enum">
             <camunda:value id="proceed" name="Proceed to Claim Cost Computation" />
             <camunda:value id="retry" name="Retry FWA Decisioning" />
@@ -383,12 +352,8 @@
         <camunda:formData>
           <camunda:formField id="TicketID" label="Ticket ID" type="string" />
           <camunda:formField id="RiskScore" label="Risk Score" type="long" />
-          <camunda:formField id="patientName" label="Patient Name" type="string" />
           <camunda:formField id="claimAmount" label="Claim Amount" type="long" />
           <camunda:formField id="fwaResponse" label="FWA Analysis" type="string" />
-          <camunda:formField id="policyComparatorStatus" label="Policy Comparison Status" type="string" />
-          <camunda:formField id="policyMissingInfo" label="Missing Policy Information" type="string" />
-          <camunda:formField id="policyPotentialIssues" label="Policy Issues Found" type="string" />
           <camunda:formField id="fwaReviewAction" label="Action" type="enum">
             <camunda:value id="proceedToCost" name="Proceed to Cost Computation" />
             <camunda:value id="requestMoreInfo" name="Request More Information" />
@@ -443,7 +408,6 @@
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="Flow_0974uhc" sourceRef="Activity_ReceiveFWAInfoResponse" targetRef="Activity_ReviewFWAResults" />
     <bpmn:subProcess id="Activity_17h17ae">
-      <bpmn:incoming>Flow_024y7gm</bpmn:incoming>
       <bpmn:outgoing>Flow_0450puq</bpmn:outgoing>
       <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_11ox0g4">
@@ -867,7 +831,7 @@
       <bpmn:incoming>Flow_0k70ifz</bpmn:incoming>
       <bpmn:outgoing>Flow_1m4191f</bpmn:outgoing>
     </bpmn:sendTask>
-    <bpmn:sequenceFlow id="Flow_024y7gm" sourceRef="Verify_Master_Data" targetRef="Activity_17h17ae" />
+    <bpmn:sequenceFlow id="Flow_024y7gm" sourceRef="Verify_Master_Data" targetRef="Activity_04nhqma" />
     <bpmn:sequenceFlow id="Flow_1446qaa" sourceRef="Activity_User_Verification" targetRef="Policy_Coherence" />
   </bpmn:process>
   <bpmn:error id="Error_1brcit7" name="forgeddoc" />
@@ -1155,10 +1119,6 @@
           <dc:Bounds x="5764" y="822" width="79" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_1446qaa_di" bpmnElement="Flow_1446qaa">
-        <di:waypoint x="3720" y="840" />
-        <di:waypoint x="3800" y="840" />
-      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0xp9ktd_di" bpmnElement="Flow_0xp9ktd">
         <di:waypoint x="4545" y="840" />
         <di:waypoint x="4650" y="840" />
@@ -1399,7 +1359,11 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_024y7gm_di" bpmnElement="Flow_024y7gm">
         <di:waypoint x="570" y="840" />
-        <di:waypoint x="670" y="840" />
+        <di:waypoint x="4650" y="840" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1446qaa_di" bpmnElement="Flow_1446qaa">
+        <di:waypoint x="3720" y="840" />
+        <di:waypoint x="3800" y="840" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
