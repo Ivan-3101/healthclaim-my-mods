@@ -10,12 +10,6 @@
     </bpmn:endEvent>
     <bpmn:sequenceFlow id="Flow_15rnuix" sourceRef="Event_1e3l95j" targetRef="Generate_TicketID_and_Workflow_Name" />
     <bpmn:sequenceFlow id="Flow_058ecar" sourceRef="Generate_TicketID_and_Workflow_Name" targetRef="Verify_Master_Data" />
-    <bpmn:serviceTask id="Activity_04nhqma" name="FWA Decisioning" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FWADecisioning">
-      <bpmn:incoming>Flow_0xp9ktd</bpmn:incoming>
-      <bpmn:incoming>Flow_171ffw7</bpmn:incoming>
-      <bpmn:incoming>Flow_024y7gm</bpmn:incoming>
-      <bpmn:outgoing>Flow_0vxvqkn</bpmn:outgoing>
-    </bpmn:serviceTask>
     <bpmn:sequenceFlow id="Flow_0l7iwzz" sourceRef="Activity_0v6rfa2" targetRef="Gateway_1k0f36m" />
     <bpmn:serviceTask id="Activity_0v6rfa2" name="Claim Cost Computation" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.ClaimCostComputation">
       <bpmn:incoming>Flow_050y4q1</bpmn:incoming>
@@ -408,6 +402,7 @@
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="Flow_0974uhc" sourceRef="Activity_ReceiveFWAInfoResponse" targetRef="Activity_ReviewFWAResults" />
     <bpmn:subProcess id="Activity_17h17ae">
+      <bpmn:incoming>Flow_024y7gm</bpmn:incoming>
       <bpmn:outgoing>Flow_0450puq</bpmn:outgoing>
       <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_11ox0g4">
@@ -831,8 +826,13 @@
       <bpmn:incoming>Flow_0k70ifz</bpmn:incoming>
       <bpmn:outgoing>Flow_1m4191f</bpmn:outgoing>
     </bpmn:sendTask>
-    <bpmn:sequenceFlow id="Flow_024y7gm" sourceRef="Verify_Master_Data" targetRef="Activity_04nhqma" />
+    <bpmn:sequenceFlow id="Flow_024y7gm" sourceRef="Verify_Master_Data" targetRef="Activity_17h17ae" />
     <bpmn:sequenceFlow id="Flow_1446qaa" sourceRef="Activity_User_Verification" targetRef="Policy_Coherence" />
+    <bpmn:serviceTask id="Activity_04nhqma" name="FWA Decisioning" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FWADecisioning">
+      <bpmn:incoming>Flow_0xp9ktd</bpmn:incoming>
+      <bpmn:incoming>Flow_171ffw7</bpmn:incoming>
+      <bpmn:outgoing>Flow_0vxvqkn</bpmn:outgoing>
+    </bpmn:serviceTask>
   </bpmn:process>
   <bpmn:error id="Error_1brcit7" name="forgeddoc" />
   <bpmn:message id="Message_3r951pg" name="policyHolderResponse" />
@@ -854,9 +854,6 @@
         <bpmndi:BPMNLabel>
           <dc:Bounds x="7148" y="833" width="61" height="14" />
         </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0txw8dc_di" bpmnElement="Activity_04nhqma">
-        <dc:Bounds x="4650" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_1bnxgr3_di" bpmnElement="Activity_0v6rfa2">
         <dc:Bounds x="5440" y="800" width="100" height="80" />
@@ -1069,6 +1066,9 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_00pbdht_di" bpmnElement="Activity_0ytppf9">
         <dc:Bounds x="4650" y="500" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0txw8dc_di" bpmnElement="Activity_04nhqma">
+        <dc:Bounds x="4650" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_1me4x9n" bpmnElement="Event_100gl67">
         <dc:Bounds x="4832" y="522" width="36" height="36" />
@@ -1359,7 +1359,7 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_024y7gm_di" bpmnElement="Flow_024y7gm">
         <di:waypoint x="570" y="840" />
-        <di:waypoint x="4650" y="840" />
+        <di:waypoint x="670" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_1446qaa_di" bpmnElement="Flow_1446qaa">
         <di:waypoint x="3720" y="840" />
