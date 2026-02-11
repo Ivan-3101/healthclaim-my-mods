@@ -440,16 +440,14 @@
 ]</camunda:string>
           </camunda:field>
           <camunda:field name="outputMapping">
-            <camunda:string>{
-  "isForged": "$.answer"
-}</camunda:string>
+            <camunda:string>{"isForged":"$.answer"}</camunda:string>
           </camunda:field>
         </bpmn:extensionElements>
         <bpmn:incoming>Flow_1c5c7cj</bpmn:incoming>
         <bpmn:outgoing>Flow_0vzpcw3</bpmn:outgoing>
       </bpmn:serviceTask>
     </bpmn:subProcess>
-    <bpmn:sequenceFlow id="Flow_0450puq" sourceRef="Activity_17h17ae" targetRef="Activity_04nhqma" />
+    <bpmn:sequenceFlow id="Flow_0450puq" sourceRef="Activity_17h17ae" targetRef="Activity_DocClassifier" />
     <bpmn:subProcess id="Activity_1kzv5fa">
       <bpmn:incoming>Flow_1edsz88</bpmn:incoming>
       <bpmn:outgoing>Flow_037ubon</bpmn:outgoing>
@@ -457,13 +455,24 @@
       <bpmn:startEvent id="Event_0xxno63">
         <bpmn:outgoing>Flow_0we714j</bpmn:outgoing>
       </bpmn:startEvent>
-      <bpmn:serviceTask id="Raw_OCR" name="Doing OCR on Documents" camunda:modelerTemplate="com.dronapay.generic.agent" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+      <bpmn:sequenceFlow id="Flow_0we714j" sourceRef="Event_0xxno63" targetRef="Raw_OCR" />
+      <bpmn:endEvent id="Event_1i3asb1">
+        <bpmn:incoming>Flow_0llww76</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_0llww76" sourceRef="Raw_OCR" targetRef="Event_1i3asb1" />
+      <bpmn:serviceTask id="Raw_OCR" name="Doing OCR on Documents" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
         <bpmn:extensionElements>
           <camunda:field name="agentId">
             <camunda:string>openaiVision</camunda:string>
           </camunda:field>
-          <camunda:field name="url">
-            <camunda:string>${appproperties.agent.api.url}</camunda:string>
+          <camunda:field name="baseUrl">
+            <camunda:string>dia</camunda:string>
+          </camunda:field>
+          <camunda:field name="route">
+            <camunda:string>agent</camunda:string>
+          </camunda:field>
+          <camunda:field name="authType">
+            <camunda:string>basicAuth</camunda:string>
           </camunda:field>
           <camunda:field name="method">
             <camunda:string>POST</camunda:string>
@@ -491,13 +500,9 @@
         <bpmn:incoming>Flow_0we714j</bpmn:incoming>
         <bpmn:outgoing>Flow_0llww76</bpmn:outgoing>
       </bpmn:serviceTask>
-      <bpmn:sequenceFlow id="Flow_0we714j" sourceRef="Event_0xxno63" targetRef="Raw_OCR" />
-      <bpmn:endEvent id="Event_1i3asb1">
-        <bpmn:incoming>Flow_0llww76</bpmn:incoming>
-      </bpmn:endEvent>
-      <bpmn:sequenceFlow id="Flow_0llww76" sourceRef="Raw_OCR" targetRef="Event_1i3asb1" />
     </bpmn:subProcess>
     <bpmn:subProcess id="Activity_DocClassifier">
+      <bpmn:incoming>Flow_0450puq</bpmn:incoming>
       <bpmn:outgoing>Flow_0ys2arf</bpmn:outgoing>
       <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_1dyf5j7">
@@ -508,13 +513,19 @@
         <bpmn:incoming>Flow_1thjhp7</bpmn:incoming>
       </bpmn:endEvent>
       <bpmn:sequenceFlow id="Flow_1thjhp7" sourceRef="Document_Classifier" targetRef="Event_0k3yxqs" />
-      <bpmn:serviceTask id="Document_Classifier" name="Doc Classifier" camunda:modelerTemplate="com.dronapay.generic.agent" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+      <bpmn:serviceTask id="Document_Classifier" name="Doc Classifier" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
         <bpmn:extensionElements>
           <camunda:field name="agentId">
             <camunda:string>Document_Classifier</camunda:string>
           </camunda:field>
-          <camunda:field name="url">
-            <camunda:string>${appproperties.agent.api.url}</camunda:string>
+          <camunda:field name="baseUrl">
+            <camunda:string>dia</camunda:string>
+          </camunda:field>
+          <camunda:field name="route">
+            <camunda:string>agent</camunda:string>
+          </camunda:field>
+          <camunda:field name="authType">
+            <camunda:string>basicAuth</camunda:string>
           </camunda:field>
           <camunda:field name="method">
             <camunda:string>POST</camunda:string>
@@ -558,13 +569,19 @@
         <bpmn:incoming>Flow_0xnnumq</bpmn:incoming>
       </bpmn:endEvent>
       <bpmn:sequenceFlow id="Flow_0xnnumq" sourceRef="Raw_To_Structured_OCR" targetRef="Event_1pojsp1" />
-      <bpmn:serviceTask id="Raw_To_Structured_OCR" name="OCR to Static" camunda:modelerTemplate="com.dronapay.generic.agent" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+      <bpmn:serviceTask id="Raw_To_Structured_OCR" name="OCR to Static" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
         <bpmn:extensionElements>
           <camunda:field name="agentId">
             <camunda:string>ocrTostatic</camunda:string>
           </camunda:field>
-          <camunda:field name="url">
-            <camunda:string>${appproperties.agent.api.url}</camunda:string>
+          <camunda:field name="baseUrl">
+            <camunda:string>dia</camunda:string>
+          </camunda:field>
+          <camunda:field name="route">
+            <camunda:string>agent</camunda:string>
+          </camunda:field>
+          <camunda:field name="authType">
+            <camunda:string>basicAuth</camunda:string>
           </camunda:field>
           <camunda:field name="method">
             <camunda:string>POST</camunda:string>
@@ -595,75 +612,11 @@
     <bpmn:sequenceFlow id="Flow_1rugnkq" sourceRef="Activity_0c8yvg3" targetRef="Document_Consolidator" />
     <bpmn:sequenceFlow id="Flow_0oa3vkg" sourceRef="Document_Consolidator" targetRef="Submission_Validator" />
     <bpmn:sequenceFlow id="Flow_1y4cq5x" sourceRef="Submission_Consistency_Analyzer" targetRef="UI_Displayer_Agent" />
-    <bpmn:serviceTask id="Submission_Consistency_Analyzer" name="Submission Consistency Analyzer" camunda:modelerTemplate="com.dronapay.generic.agent" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
-      <bpmn:extensionElements>
-        <camunda:field name="agentId">
-          <camunda:string>FHIR_Analyser</camunda:string>
-        </camunda:field>
-        <camunda:field name="url">
-          <camunda:string>${appproperties.agent.api.url}</camunda:string>
-        </camunda:field>
-        <camunda:field name="method">
-          <camunda:string>POST</camunda:string>
-        </camunda:field>
-        <camunda:field name="inputParams">
-          <camunda:string>[
-  {
-    "key": "doc_fhir",
-    "type": "minioJson",
-    "value": "${fhirConsolidatorMinioPath}",
-    "sourceJsonPath": "$.doc_fhir"
-  }
-]</camunda:string>
-        </camunda:field>
-        <camunda:field name="outputMapping">
-          <camunda:string>{
-  "claimStatus": "$.claim_status",
-  "claimSummary": "$.claim_summary",
-  "validationChecks": "$.validation_checks",
-  "finalRecommendation": "$.final_recommendation",
-  "sequencedGroups": "$.sequenced_groups"
-}</camunda:string>
-        </camunda:field>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_0e8mxy3</bpmn:incoming>
-      <bpmn:outgoing>Flow_1y4cq5x</bpmn:outgoing>
-    </bpmn:serviceTask>
     <bpmn:serviceTask id="Document_Consolidator" name="Document&#10; Consolidator" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FHIRConsolidatorDelegate">
       <bpmn:incoming>Flow_1rugnkq</bpmn:incoming>
       <bpmn:outgoing>Flow_0oa3vkg</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:sequenceFlow id="Flow_0e8mxy3" sourceRef="Submission_Validator" targetRef="Submission_Consistency_Analyzer" />
-    <bpmn:serviceTask id="Submission_Validator" name="Submission Validator" camunda:modelerTemplate="com.dronapay.generic.agent" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
-      <bpmn:extensionElements>
-        <camunda:field name="agentId">
-          <camunda:string>Submission_Validator</camunda:string>
-        </camunda:field>
-        <camunda:field name="url">
-          <camunda:string>${appproperties.agent.api.url}</camunda:string>
-        </camunda:field>
-        <camunda:field name="method">
-          <camunda:string>POST</camunda:string>
-        </camunda:field>
-        <camunda:field name="inputParams">
-          <camunda:string>[
-  {
-    "key": "doc_fhir",
-    "type": "minioJson",
-    "value": "${fhirConsolidatorMinioPath}",
-    "sourceJsonPath": "$.doc_fhir"
-  }
-]</camunda:string>
-        </camunda:field>
-        <camunda:field name="outputMapping">
-          <camunda:string>{
-  "missingDocuments": "$.answer.missing_documents"
-}</camunda:string>
-        </camunda:field>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_0oa3vkg</bpmn:incoming>
-      <bpmn:outgoing>Flow_0e8mxy3</bpmn:outgoing>
-    </bpmn:serviceTask>
     <bpmn:sequenceFlow id="Flow_0o84pjf" sourceRef="Activity_LoadUIFields" targetRef="Activity_User_Verification" />
     <bpmn:serviceTask id="Activity_LoadUIFields" name="Load UI Fields" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.LoadUIFieldsDelegate">
       <bpmn:incoming>Flow_0w29skj</bpmn:incoming>
@@ -721,34 +674,6 @@
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_058ecar</bpmn:incoming>
       <bpmn:outgoing>Flow_024y7gm</bpmn:outgoing>
-    </bpmn:serviceTask>
-    <bpmn:serviceTask id="UI_Displayer_Agent" name="Activity_UIDisplayer" camunda:modelerTemplate="com.dronapay.generic.agent" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
-      <bpmn:extensionElements>
-        <camunda:field name="agentId">
-          <camunda:string>UI_Displayer</camunda:string>
-        </camunda:field>
-        <camunda:field name="url">
-          <camunda:string>${appproperties.agent.api.url}</camunda:string>
-        </camunda:field>
-        <camunda:field name="method">
-          <camunda:string>POST</camunda:string>
-        </camunda:field>
-        <camunda:field name="inputParams">
-          <camunda:string>[
-  {
-    "key": "doc_fhir",
-    "type": "minioJson",
-    "value": "${fhirConsolidatorMinioPath}",
-    "sourceJsonPath": "$.doc_fhir"
-  }
-]</camunda:string>
-        </camunda:field>
-        <camunda:field name="outputMapping">
-          <camunda:string>{}</camunda:string>
-        </camunda:field>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_1y4cq5x</bpmn:incoming>
-      <bpmn:outgoing>Flow_0w29skj</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:sendTask id="Activity_RequestFWAInfo" name="Request Additional Info for FWA" camunda:modelerTemplate="com.dronapay.generic.email" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailTask">
       <bpmn:extensionElements>
@@ -836,8 +761,117 @@
     <bpmn:serviceTask id="Activity_04nhqma" name="FWA Decisioning" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FWADecisioning">
       <bpmn:incoming>Flow_0xp9ktd</bpmn:incoming>
       <bpmn:incoming>Flow_171ffw7</bpmn:incoming>
-      <bpmn:incoming>Flow_0450puq</bpmn:incoming>
       <bpmn:outgoing>Flow_0vxvqkn</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Submission_Validator" name="Submission Validator" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+      <bpmn:extensionElements>
+        <camunda:field name="agentId">
+          <camunda:string>Submission_Validator</camunda:string>
+        </camunda:field>
+        <camunda:field name="baseUrl">
+          <camunda:string>dia</camunda:string>
+        </camunda:field>
+        <camunda:field name="route">
+          <camunda:string>agent</camunda:string>
+        </camunda:field>
+        <camunda:field name="authType">
+          <camunda:string>basicAuth</camunda:string>
+        </camunda:field>
+        <camunda:field name="method">
+          <camunda:string>POST</camunda:string>
+        </camunda:field>
+        <camunda:field name="inputParams">
+          <camunda:string>[
+  {
+    "key": "doc_fhir",
+    "type": "minioJson",
+    "value": "${fhirConsolidatorMinioPath}",
+    "sourceJsonPath": "$.doc_fhir"
+  }
+]</camunda:string>
+        </camunda:field>
+        <camunda:field name="outputMapping">
+          <camunda:string>{
+  "missingDocuments": "$.answer.missing_documents"
+}</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0oa3vkg</bpmn:incoming>
+      <bpmn:outgoing>Flow_0e8mxy3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Submission_Consistency_Analyzer" name="Submission Consistency Analyzer" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+      <bpmn:extensionElements>
+        <camunda:field name="agentId">
+          <camunda:string>FHIR_Analyser</camunda:string>
+        </camunda:field>
+        <camunda:field name="baseUrl">
+          <camunda:string>dia</camunda:string>
+        </camunda:field>
+        <camunda:field name="route">
+          <camunda:string>agent</camunda:string>
+        </camunda:field>
+        <camunda:field name="authType">
+          <camunda:string>basicAuth</camunda:string>
+        </camunda:field>
+        <camunda:field name="method">
+          <camunda:string>POST</camunda:string>
+        </camunda:field>
+        <camunda:field name="inputParams">
+          <camunda:string>[
+  {
+    "key": "doc_fhir",
+    "type": "minioJson",
+    "value": "${fhirConsolidatorMinioPath}",
+    "sourceJsonPath": "$.doc_fhir"
+  }
+]</camunda:string>
+        </camunda:field>
+        <camunda:field name="outputMapping">
+          <camunda:string>{
+  "claimStatus": "$.claim_status",
+  "claimSummary": "$.claim_summary",
+  "validationChecks": "$.validation_checks",
+  "finalRecommendation": "$.final_recommendation",
+  "sequencedGroups": "$.sequenced_groups"
+}</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0e8mxy3</bpmn:incoming>
+      <bpmn:outgoing>Flow_1y4cq5x</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="UI_Displayer_Agent" name="Activity_UIDisplayer" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+      <bpmn:extensionElements>
+        <camunda:field name="agentId">
+          <camunda:string>UI_Displayer</camunda:string>
+        </camunda:field>
+        <camunda:field name="baseUrl">
+          <camunda:string>dia</camunda:string>
+        </camunda:field>
+        <camunda:field name="route">
+          <camunda:string>agent</camunda:string>
+        </camunda:field>
+        <camunda:field name="authType">
+          <camunda:string>basicAuth</camunda:string>
+        </camunda:field>
+        <camunda:field name="method">
+          <camunda:string>POST</camunda:string>
+        </camunda:field>
+        <camunda:field name="inputParams">
+          <camunda:string>[
+  {
+    "key": "doc_fhir",
+    "type": "minioJson",
+    "value": "${fhirConsolidatorMinioPath}",
+    "sourceJsonPath": "$.doc_fhir"
+  }
+]</camunda:string>
+        </camunda:field>
+        <camunda:field name="outputMapping">
+          <camunda:string>{}</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_1y4cq5x</bpmn:incoming>
+      <bpmn:outgoing>Flow_0w29skj</bpmn:outgoing>
     </bpmn:serviceTask>
   </bpmn:process>
   <bpmn:error id="Error_1brcit7" name="forgeddoc" />
@@ -940,6 +974,15 @@
         <dc:Bounds x="4850" y="500" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1yqs7d6_di" bpmnElement="Submission_Validator" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+        <dc:Bounds x="2940" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_055b7hd_di" bpmnElement="Submission_Consistency_Analyzer" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+        <dc:Bounds x="3110" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0iaprh1_di" bpmnElement="UI_Displayer_Agent" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+        <dc:Bounds x="3280" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_17h17ae_di" bpmnElement="Activity_17h17ae" isExpanded="true">
         <dc:Bounds x="670" y="740" width="330" height="200" />
       </bpmndi:BPMNShape>
@@ -949,7 +992,7 @@
       <bpmndi:BPMNShape id="Event_0oqarvk_di" bpmnElement="Event_0oqarvk">
         <dc:Bounds x="932" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1y069io_di" bpmnElement="Identify_Forged_Documents">
+      <bpmndi:BPMNShape id="Activity_0xgwqm9_di" bpmnElement="Identify_Forged_Documents" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="780" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_1c5c7cj_di" bpmnElement="Flow_1c5c7cj">
@@ -966,12 +1009,11 @@
       <bpmndi:BPMNShape id="Event_0xxno63_di" bpmnElement="Event_0xxno63">
         <dc:Bounds x="1940" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1yzgvj0_di" bpmnElement="Raw_OCR" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
-        <dc:Bounds x="2030" y="800" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_1i3asb1_di" bpmnElement="Event_1i3asb1">
         <dc:Bounds x="2192" y="822" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_02wtrqj_di" bpmnElement="Raw_OCR" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+        <dc:Bounds x="2030" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_0we714j_di" bpmnElement="Flow_0we714j">
         <di:waypoint x="1976" y="840" />
@@ -990,7 +1032,7 @@
       <bpmndi:BPMNShape id="Event_0k3yxqs_di" bpmnElement="Event_0k3yxqs">
         <dc:Bounds x="1372" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0p36ok7_di" bpmnElement="Document_Classifier" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+      <bpmndi:BPMNShape id="Activity_1cnvvsu_di" bpmnElement="Document_Classifier" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="1210" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_1p7jmc8_di" bpmnElement="Flow_1p7jmc8">
@@ -1014,7 +1056,7 @@
       <bpmndi:BPMNShape id="Event_1pojsp1_di" bpmnElement="Event_1pojsp1">
         <dc:Bounds x="2642" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0ilyu2a_di" bpmnElement="Raw_To_Structured_OCR" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+      <bpmndi:BPMNShape id="Activity_0de1vds_di" bpmnElement="Raw_To_Structured_OCR" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="2480" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_084cttl_di" bpmnElement="Flow_084cttl">
@@ -1025,16 +1067,9 @@
         <di:waypoint x="2580" y="840" />
         <di:waypoint x="2642" y="840" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="Activity_1gr5j3s_di" bpmnElement="Submission_Consistency_Analyzer" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
-        <dc:Bounds x="3110" y="800" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_1pe8iyi_di" bpmnElement="Document_Consolidator">
         <dc:Bounds x="2780" y="800" width="100" height="80" />
         <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1e353uy_di" bpmnElement="Submission_Validator" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
-        <dc:Bounds x="2940" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_0p3hr0z_di" bpmnElement="Activity_LoadUIFields">
         <dc:Bounds x="3450" y="800" width="100" height="80" />
@@ -1058,10 +1093,6 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_19n0d2o_di" bpmnElement="Verify_Master_Data">
         <dc:Bounds x="470" y="800" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1349e5d_di" bpmnElement="UI_Displayer_Agent" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
-        <dc:Bounds x="3280" y="800" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_1p2ko92_di" bpmnElement="Activity_RequestFWAInfo">
@@ -1309,7 +1340,7 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0450puq_di" bpmnElement="Flow_0450puq">
         <di:waypoint x="1000" y="840" />
-        <di:waypoint x="4650" y="840" />
+        <di:waypoint x="1080" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0ys2arf_di" bpmnElement="Flow_0ys2arf">
         <di:waypoint x="1430" y="840" />

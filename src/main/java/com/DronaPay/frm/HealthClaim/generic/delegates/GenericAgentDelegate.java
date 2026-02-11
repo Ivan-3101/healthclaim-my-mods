@@ -1,10 +1,3 @@
-// GenericAgentDelegate.java - MODIFIED VERSION
-// CHANGES FROM ORIGINAL:
-// 1. REMOVED: private Expression url;
-// 2. ADDED: private Expression baseUrl, route, authType
-// 3. MODIFIED: execute() method to build URL from components
-// 4. ADDED: buildUrl() and getAuthCredentials() helper methods
-
 package com.DronaPay.frm.HealthClaim.generic.delegates;
 
 import com.DronaPay.frm.HealthClaim.TenantPropertiesUtil;
@@ -42,26 +35,32 @@ import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * A Generic Agent Delegate that executes external API calls based on a BPMN Element Template.
+ * It handles:
+ * 1. Dynamic URL construction (Base URL + Route)
+ * 2. Authentication (Basic Auth)
+ * 3. Input payload construction (including file downloads from MinIO)
+ * 4. Storing results back to MinIO and mapping outputs to process variables.
+ */
 @Slf4j
 public class GenericAgentDelegate implements JavaDelegate {
 
-    // ============ MODIFIED FIELDS ============
-    // REMOVED: private Expression url;
-    // ADDED: baseUrl, route, authType
-    private Expression baseUrl;      // NEW: "dia", "springapi", etc.
-    private Expression route;        // NEW: "agent", "policy", etc.
-    private Expression authType;     // NEW: "basicAuth", "apiKey", etc.
+    // Fields injected from the BPMN Element Template (v2)
+    private Expression baseUrl;      // Key for the base URL (e.g., "dia" -> "agent.api.url")
+    private Expression route;        // Specific API route (e.g., "agent")
+    private Expression authType;     // Authentication method (e.g., "basicAuth")
 
-    // UNCHANGED FIELDS
-    private Expression method;
-    private Expression agentId;
-    private Expression inputParams;
-    private Expression outputMapping;
+    // Standard configuration fields
+    private Expression method;       // HTTP Method (POST/GET)
+    private Expression agentId;      // Unique Identifier for this agent task
+    private Expression inputParams;  // JSON Array defining input data structure
+    private Expression outputMapping;// JSON Object defining response mapping
 
     @Override
     public void execute(DelegateExecution execution) throws Exception {
 
-        // STEP 1: SETUP
+        // 1. Initialize Context
         String tenantId = execution.getTenantId();
         String rawAgentId = (agentId != null) ? (String) agentId.getValue(execution) : "unknown_agent";
         String currentAgentId = resolvePlaceholders(rawAgentId, execution, null);
@@ -70,35 +69,64 @@ public class GenericAgentDelegate implements JavaDelegate {
         Object ticketIdObj = execution.getVariable("TicketID");
         String ticketId = (ticketIdObj != null) ? String.valueOf(ticketIdObj) : "UNKNOWN";
 
-        log.info("=== Generic Agent Delegate v2 Started: {} (Stage: {}) TicketID: {} ===", currentAgentId, stageName, ticketId);
+        log.info("=== Generic Agent Delegate Started: {} (Stage: {}) TicketID: {} ===", currentAgentId, stageName, ticketId);
 
-        // Load properties
         Properties props = TenantPropertiesUtil.getTenantProps(tenantId);
 
-        // ============ MODIFIED URL AND AUTH CONSTRUCTION ============
-        // OLD CODE:
-        // String rawUrl = (url != null) ? (String) url.getValue(execution) : "${appproperties.agent.api.url}";
-        // String finalUrl = resolvePlaceholders(rawUrl, execution, props);
-        // String apiUser = props.getProperty("agent.api.username");
-        // String apiPass = props.getProperty("agent.api.password");
+        // 2. Validate Required Configuration
+        if (baseUrl == null || route == null) {
+            throw new BpmnError("CONFIG_ERROR", "Missing required fields: 'baseUrl' and 'route'. Ensure the BPMN task uses the correct template.");
+        }
 
-        // NEW CODE:
-        String baseUrlKey = (baseUrl != null) ? (String) baseUrl.getValue(execution) : "dia";
-        String routeKey = (route != null) ? (String) route.getValue(execution) : "agent";
-        String authTypeKey = (authType != null) ? (String) authType.getValue(execution) : "basicAuth";
+        String baseUrlKey = (String) baseUrl.getValue(execution);
+        String routePath = (String) route.getValue(execution);
+        String authMethod = (authType != null) ? (String) authType.getValue(execution) : "none";
 
-        // Build URL from components
-        String finalUrl = buildUrl(baseUrlKey, routeKey, props);
+        // 3. Determine Property Prefix
+        // Maps the template's dropdown value (e.g., "dia") to the actual property key in application.properties.
+        // Special case: "dia" maps to "agent.api" based on current environment config.
+        String propPrefix = baseUrlKey;
+        if ("dia".equalsIgnoreCase(baseUrlKey)) {
+            propPrefix = "agent.api";
+        }
 
-        // Get auth credentials based on authType
-        Map<String, String> authCreds = getAuthCredentials(authTypeKey, props);
-        String apiUser = authCreds.get("username");
-        String apiPass = authCreds.get("password");
-        // ============ END MODIFIED SECTION ============
+        // 4. Construct Full API URL
+        String resolvedBaseUrl = props.getProperty(propPrefix + ".url");
+        if (resolvedBaseUrl == null) {
+            throw new BpmnError("CONFIG_ERROR", "Property not found: " + propPrefix + ".url");
+        }
+
+        // Normalize slashes to avoid double-slashes (e.g., ".../api//agent")
+        if (resolvedBaseUrl.endsWith("/")) {
+            resolvedBaseUrl = resolvedBaseUrl.substring(0, resolvedBaseUrl.length() - 1);
+        }
+        if (routePath.startsWith("/")) {
+            routePath = routePath.substring(1);
+        }
+
+        String finalUrl = resolvedBaseUrl + "/" + routePath;
+
+        // 5. Configure Authentication
+        String apiUser = null;
+        String apiPass = null;
+
+        if ("basicAuth".equalsIgnoreCase(authMethod)) {
+            apiUser = props.getProperty(propPrefix + ".username");
+            apiPass = props.getProperty(propPrefix + ".password");
+
+            // Fallback for backward compatibility with older "ai.agent" properties
+            if (apiUser == null) apiUser = props.getProperty("ai.agent.username");
+            if (apiPass == null) apiPass = props.getProperty("ai.agent.password");
+
+            if (apiUser == null || apiPass == null) {
+                log.warn("Auth enabled but credentials missing for prefix: {}", propPrefix);
+            }
+        }
 
         String reqMethod = (method != null) ? (String) method.getValue(execution) : "POST";
 
-        // STEP 2: BUILD REQUEST PAYLOAD (UNCHANGED)
+        // 6. Build Request Payload
+        // Resolves variables in the input JSON and handles file/JSON downloads from MinIO
         String inputJsonStr = (inputParams != null) ? (String) inputParams.getValue(execution) : "[]";
         String resolvedInputJson = resolvePlaceholders(inputJsonStr, execution, props);
         JSONObject dataObject = buildDataObject(resolvedInputJson, tenantId);
@@ -107,89 +135,39 @@ public class GenericAgentDelegate implements JavaDelegate {
         requestBody.put("agentid", currentAgentId);
         requestBody.put("data", dataObject);
 
-        // STEP 3: EXECUTE API CALL (UNCHANGED)
+        // 7. Execute External API Call
         log.info("Calling Agent API: {} [{}]", finalUrl, reqMethod);
         String responseBody = executeAgentCall(reqMethod, finalUrl, apiUser, apiPass, requestBody.toString());
 
-        // STEP 4: AUDIT TRAIL (UNCHANGED)
+        // 8. Store Results in MinIO
+        // The raw response is saved to MinIO to avoid bloating the Camunda runtime database
         Map<String, Object> resultMap = AgentResultStorageService.buildResultMap(
                 currentAgentId, 200, responseBody, new HashMap<>());
 
         Object attachmentObj = execution.getVariable("attachment");
-        String filename = null;
-        if (attachmentObj != null) {
-            filename = attachmentObj.toString();
-        }
-        String resultFileName = (filename != null) ? filename : currentAgentId + "_result";
+        String filename = (attachmentObj != null) ? attachmentObj.toString() : currentAgentId + "_result";
+
+        // Ensure unique filename if we are in a multi-instance loop
+        String resultFileName = (filename != null && !filename.isEmpty()) ? filename : currentAgentId + "_result_" + System.currentTimeMillis();
 
         String minioPath = AgentResultStorageService.storeAgentResult(
                 tenantId, ticketId, stageName, resultFileName, resultMap);
 
         execution.setVariable(currentAgentId + "_MinioPath", minioPath);
-        log.info("Agent Result saved to MinIO: {}", minioPath);
+        log.info("Agent Result stored: {}", minioPath);
 
-        // STEP 5: OUTPUT MAPPING (UNCHANGED)
+        // 9. Map Output Variables
+        // Extracts specific fields from the JSON response and sets them as Process Variables
         String outputMapStr = (outputMapping != null) ? (String) outputMapping.getValue(execution) : "{}";
         mapOutputs(responseBody, outputMapStr, execution);
 
         log.info("=== Generic Agent Delegate Completed ===");
     }
 
-    // ============ NEW HELPER METHOD ============
     /**
-     * Builds the full URL from base URL key and route key.
+     * Constructs the 'data' JSON object expected by the Agent API.
+     * Supports strict typing: 'minioFile' (Base64 encoded) and 'minioJson' (Embedded JSON).
      */
-    private String buildUrl(String baseUrlKey, String routeKey, Properties props) {
-        String base;
-
-        switch(baseUrlKey) {
-            case "dia":
-                // Use the hardcoded URL for now (can be moved to DB config later)
-                base = "https://main.dev.dronapay.net/dia/";
-                break;
-            // Future: Add more base URLs
-            // case "springapi":
-            //     base = "https://main.dev.dronapay.net/springapi/";
-            //     break;
-            default:
-                throw new IllegalArgumentException("Unknown baseUrl: " + baseUrlKey);
-        }
-
-        // routeKey is directly entered by user (e.g., "agent", "policy")
-        // Just append it to the base URL
-        String finalUrl = base + routeKey;
-        log.info("Constructed URL: {} + {} = {}", base, routeKey, finalUrl);
-
-        return finalUrl;
-    }
-
-    // ============ NEW HELPER METHOD ============
-    /**
-     * Gets authentication credentials based on auth type.
-     */
-    private Map<String, String> getAuthCredentials(String authType, Properties props) {
-        Map<String, String> creds = new HashMap<>();
-
-        switch(authType) {
-            case "basicAuth":
-                creds.put("username", props.getProperty("agent.api.username"));
-                creds.put("password", props.getProperty("agent.api.password"));
-                log.info("Using Basic Auth with username: {}", creds.get("username"));
-                break;
-            // Future: Add API Key auth
-            // case "apiKey":
-            //     creds.put("apiKey", props.getProperty("agent.api.key"));
-            //     break;
-            default:
-                throw new IllegalArgumentException("Unknown authType: " + authType);
-        }
-
-        return creds;
-    }
-
-    // ============ ALL REMAINING METHODS UNCHANGED ============
-    // (Keep all existing helper methods exactly as they are)
-
     private JSONObject buildDataObject(String inputJsonStr, String tenantId) throws Exception {
         JSONObject data = new JSONObject();
         JSONArray inputs = new JSONArray(inputJsonStr);
@@ -204,50 +182,60 @@ public class GenericAgentDelegate implements JavaDelegate {
             if (value.isEmpty()) continue;
 
             if ("minioFile".equalsIgnoreCase(type)) {
+                // Download file from MinIO, convert to Base64, and embed
                 try {
                     InputStream fileContent = storage.downloadDocument(value);
                     byte[] bytes = IOUtils.toByteArray(fileContent);
                     String base64 = Base64.getEncoder().encodeToString(bytes);
                     data.put(key, base64);
                 } catch (Exception e) {
-                    log.error("Failed to download/encode file at path: {}", value, e);
+                    log.error("Failed to download file from MinIO: {}", value, e);
                     throw new BpmnError("FILE_ERROR", "Could not process file: " + value);
                 }
-            } else if ("minioJson".equalsIgnoreCase(type)) {
+            }
+            else if ("minioJson".equalsIgnoreCase(type)) {
+                // Fetch previous agent result from MinIO and embed specific parts
                 try {
                     Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, value);
                     String apiResponse = (String) result.get("apiResponse");
 
-                    if (apiResponse == null || apiResponse.trim().isEmpty()) {
-                        throw new Exception("Empty apiResponse from: " + value);
-                    }
+                    if (apiResponse == null) throw new Exception("Empty apiResponse");
 
                     String sourcePath = input.optString("sourceJsonPath", "");
                     if (!sourcePath.isEmpty()) {
+                        // Extract partial JSON using JSONPath
                         Object extractedContent = JsonPath.read(apiResponse, sourcePath);
                         data.put(key, extractedContent);
                     } else {
+                        // Embed entire JSON
                         JSONObject jsonContent = new JSONObject(apiResponse);
                         data.put(key, jsonContent);
                     }
                 } catch (Exception e) {
-                    log.error("Failed to download/parse JSON at path: {}", value, e);
+                    log.error("Failed to process previous Agent Result: {}", value, e);
                     throw new BpmnError("FILE_ERROR", "Could not process JSON: " + value);
                 }
-            } else {
+            }
+            else {
+                // Default: Simple string/number value
                 data.put(key, value);
             }
         }
         return data;
     }
 
+    /**
+     * Executes the HTTP request using Apache HttpClient.
+     * Handles authentication and error status codes.
+     */
     private String executeAgentCall(String method, String url, String user, String pass, String body) throws Exception {
         CredentialsProvider provider = new BasicCredentialsProvider();
-        provider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials(user, pass));
+        if (user != null && pass != null) {
+            provider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials(user, pass));
+        }
 
         try (CloseableHttpClient client = HttpClients.custom().setDefaultCredentialsProvider(provider).build()) {
             HttpRequestBase request;
-
             if ("GET".equalsIgnoreCase(method)) {
                 request = new HttpGet(url);
             } else {
@@ -260,7 +248,6 @@ public class GenericAgentDelegate implements JavaDelegate {
             try (CloseableHttpResponse response = client.execute(request)) {
                 int status = response.getStatusLine().getStatusCode();
                 String respStr = EntityUtils.toString(response.getEntity());
-
                 if (status != 200) {
                     throw new BpmnError("AGENT_ERROR", "Agent returned " + status + ": " + respStr);
                 }
@@ -269,50 +256,72 @@ public class GenericAgentDelegate implements JavaDelegate {
         }
     }
 
-    private void mapOutputs(String responseBody, String outputMapStr, DelegateExecution execution) throws Exception {
-        if (outputMapStr == null || outputMapStr.trim().isEmpty() || outputMapStr.equals("{}")) {
-            return;
-        }
+    /**
+     * Maps fields from the API response to Process Variables using JSONPath.
+     */
+    private void mapOutputs(String responseBody, String mappingStr, DelegateExecution execution) {
+        if (mappingStr == null || mappingStr.equals("{}")) return;
+        JSONObject mapping = new JSONObject(mappingStr);
+        Object jsonDoc = com.jayway.jsonpath.Configuration.defaultConfiguration().jsonProvider().parse(responseBody);
 
-        JSONObject outputMap = new JSONObject(outputMapStr);
-        for (String varName : outputMap.keySet()) {
-            String jsonPath = outputMap.getString(varName);
+        for (String varName : mapping.keySet()) {
+            String path = mapping.getString(varName);
             try {
-                Object value = JsonPath.read(responseBody, jsonPath);
-                execution.setVariable(varName, value);
-                log.info("Mapped output: {} = {}", varName, value);
+                Object val = JsonPath.read(jsonDoc, path);
+                execution.setVariable(varName, val);
             } catch (Exception e) {
-                log.warn("Failed to map output variable '{}' using path '{}': {}", varName, jsonPath, e.getMessage());
+                log.warn("Could not extract path '{}' for variable '{}'. Field might be missing in response.", path, varName);
             }
         }
     }
 
+    /**
+     * Replaces variable placeholders (${var}) in strings with actual runtime values.
+     */
     private String resolvePlaceholders(String input, DelegateExecution execution, Properties props) {
         if (input == null) return null;
-
-        Pattern pattern = Pattern.compile("\\$\\{([^}]+)}");
+        Pattern pattern = Pattern.compile("\\$\\{([^}]+)\\}");
         Matcher matcher = pattern.matcher(input);
-        StringBuffer result = new StringBuffer();
+        StringBuffer sb = new StringBuffer();
 
         while (matcher.find()) {
-            String placeholder = matcher.group(1);
-            String replacement = null;
+            String token = matcher.group(1).trim();
+            String replacement = "";
 
-            if (execution.hasVariable(placeholder)) {
-                Object val = execution.getVariable(placeholder);
-                replacement = val != null ? val.toString() : "";
-            } else if (props != null && placeholder.startsWith("appproperties.")) {
-                String propKey = placeholder.substring("appproperties.".length());
-                replacement = props.getProperty(propKey, "");
+            if (token.startsWith("appproperties.") && props != null) {
+                String key = token.substring("appproperties.".length());
+                replacement = props.getProperty(key, "");
+            } else if (token.contains("[") && token.endsWith("]")) {
+                replacement = resolveMapValue(token, execution);
+            } else {
+                String varName = token.startsWith("processVariable.") ? token.substring("processVariable.".length()) : token;
+                Object val = execution.getVariable(varName);
+                replacement = (val != null) ? val.toString() : "${" + token + "}";
             }
-
-            if (replacement == null) {
-                replacement = "";
-            }
-
-            matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
+            matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
         }
-        matcher.appendTail(result);
-        return result.toString();
+        matcher.appendTail(sb);
+        return sb.toString();
+    }
+
+    // Helper to resolve Map lookups like ${myMap[key]}
+    private String resolveMapValue(String token, DelegateExecution execution) {
+        try {
+            int bracketIndex = token.indexOf("[");
+            String mapName = token.substring(0, bracketIndex);
+            String keyVarName = token.substring(bracketIndex + 1, token.length() - 1);
+            Object mapObj = execution.getVariable(mapName);
+            Object keyValObj = execution.getVariable(keyVarName);
+            String resolvedKey = (keyValObj != null) ? keyValObj.toString() : keyVarName;
+
+            if (mapObj instanceof Map) {
+                Map<?, ?> map = (Map<?, ?>) mapObj;
+                Object value = map.get(resolvedKey);
+                return value != null ? value.toString() : "";
+            }
+        } catch (Exception e) {
+            // Ignore resolution errors, keep token as is
+        }
+        return "${" + token + "}";
     }
 }
