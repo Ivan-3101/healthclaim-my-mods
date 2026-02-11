@@ -57,15 +57,30 @@ public class FHIRConsolidatorDelegate implements JavaDelegate {
                     continue;
                 }
 
-                JSONObject answer = responseJson.getJSONObject("answer");
+                // Check if answer is an array or object
+                Object answerObj = responseJson.get("answer");
 
-                if (answer.has("response")) {
-                    JSONArray responseArray = answer.getJSONArray("response");
-                    for (int i = 0; i < responseArray.length(); i++) {
-                        docFhirList.add(responseArray.get(i));
+                if (answerObj instanceof JSONArray) {
+                    // Direct array case (like identification.pdf)
+                    JSONArray answerArray = (JSONArray) answerObj;
+                    for (int i = 0; i < answerArray.length(); i++) {
+                        docFhirList.add(answerArray.get(i));
+                    }
+                } else if (answerObj instanceof JSONObject) {
+                    // Object case (like claim_form.pdf)
+                    JSONObject answer = (JSONObject) answerObj;
+                    if (answer.has("response")) {
+                        JSONArray responseArray = answer.getJSONArray("response");
+                        for (int i = 0; i < responseArray.length(); i++) {
+                            docFhirList.add(responseArray.get(i));
+                        }
+                    } else {
+                        docFhirList.add(answer);
                     }
                 } else {
-                    docFhirList.add(answer);
+                    log.warn("Unexpected answer type for: {}", filename);
+                    failCount++;
+                    continue;
                 }
 
                 successCount++;
