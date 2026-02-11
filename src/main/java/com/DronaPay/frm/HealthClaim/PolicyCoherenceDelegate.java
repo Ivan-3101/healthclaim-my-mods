@@ -41,6 +41,13 @@ public class PolicyCoherenceDelegate implements JavaDelegate {
         String agentUsername = tenantProps.getProperty("agent.api.username");
         String agentPassword = tenantProps.getProperty("agent.api.password");
 
+        // Append /agent path if not present
+        if (agentApiUrl != null && !agentApiUrl.endsWith("/agent")) {
+            agentApiUrl = agentApiUrl + "/agent";
+        }
+
+        log.info("Using Agent API URL: {}", agentApiUrl);
+
         String consolidatorMinioPath = (String) execution.getVariable("fhirConsolidatorMinioPath");
 
         if (consolidatorMinioPath == null || consolidatorMinioPath.trim().isEmpty()) {
@@ -104,6 +111,7 @@ public class PolicyCoherenceDelegate implements JavaDelegate {
                 String respStr = EntityUtils.toString(response.getEntity());
 
                 if (status != 200) {
+                    log.error("Policy Coherence API failed. Status: {}, Response: {}", status, respStr);
                     throw new BpmnError("policyCoherenceFailed", "Policy Coherence agent failed with status: " + status);
                 }
                 return respStr;
