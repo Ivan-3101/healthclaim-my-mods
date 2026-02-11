@@ -413,13 +413,19 @@
         <bpmn:incoming>Flow_0vzpcw3</bpmn:incoming>
       </bpmn:endEvent>
       <bpmn:sequenceFlow id="Flow_0vzpcw3" sourceRef="Identify_Forged_Documents" targetRef="Event_0oqarvk" />
-      <bpmn:serviceTask id="Identify_Forged_Documents" name="Identify forged documents" camunda:modelerTemplate="com.dronapay.generic.agent" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+      <bpmn:serviceTask id="Identify_Forged_Documents" name="Identify forged documents" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
         <bpmn:extensionElements>
           <camunda:field name="agentId">
             <camunda:string>forgeryagent</camunda:string>
           </camunda:field>
-          <camunda:field name="url">
-            <camunda:string>${appproperties.agent.api.url}</camunda:string>
+          <camunda:field name="baseUrl">
+            <camunda:string>dia</camunda:string>
+          </camunda:field>
+          <camunda:field name="route">
+            <camunda:string>agent</camunda:string>
+          </camunda:field>
+          <camunda:field name="authType">
+            <camunda:string>basicAuth</camunda:string>
           </camunda:field>
           <camunda:field name="method">
             <camunda:string>POST</camunda:string>
@@ -443,7 +449,7 @@
         <bpmn:outgoing>Flow_0vzpcw3</bpmn:outgoing>
       </bpmn:serviceTask>
     </bpmn:subProcess>
-    <bpmn:sequenceFlow id="Flow_0450puq" sourceRef="Activity_17h17ae" targetRef="Activity_DocClassifier" />
+    <bpmn:sequenceFlow id="Flow_0450puq" sourceRef="Activity_17h17ae" targetRef="Activity_04nhqma" />
     <bpmn:subProcess id="Activity_1kzv5fa">
       <bpmn:incoming>Flow_1edsz88</bpmn:incoming>
       <bpmn:outgoing>Flow_037ubon</bpmn:outgoing>
@@ -492,7 +498,6 @@
       <bpmn:sequenceFlow id="Flow_0llww76" sourceRef="Raw_OCR" targetRef="Event_1i3asb1" />
     </bpmn:subProcess>
     <bpmn:subProcess id="Activity_DocClassifier">
-      <bpmn:incoming>Flow_0450puq</bpmn:incoming>
       <bpmn:outgoing>Flow_0ys2arf</bpmn:outgoing>
       <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_1dyf5j7">
@@ -831,6 +836,7 @@
     <bpmn:serviceTask id="Activity_04nhqma" name="FWA Decisioning" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FWADecisioning">
       <bpmn:incoming>Flow_0xp9ktd</bpmn:incoming>
       <bpmn:incoming>Flow_171ffw7</bpmn:incoming>
+      <bpmn:incoming>Flow_0450puq</bpmn:incoming>
       <bpmn:outgoing>Flow_0vxvqkn</bpmn:outgoing>
     </bpmn:serviceTask>
   </bpmn:process>
@@ -943,7 +949,7 @@
       <bpmndi:BPMNShape id="Event_0oqarvk_di" bpmnElement="Event_0oqarvk">
         <dc:Bounds x="932" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1mnqc9m_di" bpmnElement="Identify_Forged_Documents" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+      <bpmndi:BPMNShape id="Activity_1y069io_di" bpmnElement="Identify_Forged_Documents">
         <dc:Bounds x="780" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_1c5c7cj_di" bpmnElement="Flow_1c5c7cj">
@@ -1303,7 +1309,7 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0450puq_di" bpmnElement="Flow_0450puq">
         <di:waypoint x="1000" y="840" />
-        <di:waypoint x="1080" y="840" />
+        <di:waypoint x="4650" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0ys2arf_di" bpmnElement="Flow_0ys2arf">
         <di:waypoint x="1430" y="840" />
