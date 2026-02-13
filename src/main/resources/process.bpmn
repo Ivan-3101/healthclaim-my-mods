@@ -24,11 +24,15 @@
     <bpmn:sequenceFlow id="Flow_1fbkfzh" name="High Risk Score" sourceRef="Gateway_1k0f36m" targetRef="Activity_06f4rl2">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${RiskScore&gt;=20}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:userTask id="Activity_User_Verification" name="User Verification" camunda:formKey="embedded:app:forms/claim-review.html">
+    <bpmn:userTask id="Activity_User_Verification" name="User Verification" camunda:assignee="" camunda:candidateGroups="healthclaim_l1">
       <bpmn:extensionElements>
-        <camunda:executionListener class="com.DronaPay.frm.HealthClaim.listeners.SaveEditedFormListener" event="end" />
+        <camunda:formData>
+          <camunda:formField id="verificationForm" label="verificationForm" type="string" />
+          <camunda:formField id="accountAttribs" label="accountAttribs" type="string" />
+          <camunda:formField id="vpaAttribs" label="vpaAttribs" type="string" />
+        </camunda:formData>
       </bpmn:extensionElements>
-      <bpmn:incoming>Flow_0o84pjf</bpmn:incoming>
+      <bpmn:incoming>Flow_0w29skj</bpmn:incoming>
       <bpmn:outgoing>Flow_1446qaa</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:exclusiveGateway id="Gateway_0aphohc">
@@ -556,7 +560,7 @@
       <bpmn:outgoing>Flow_1edsz88</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:sequenceFlow id="Flow_037ubon" sourceRef="Activity_1kzv5fa" targetRef="Activity_0c8yvg3" />
-    <bpmn:sequenceFlow id="Flow_0w29skj" sourceRef="UI_Displayer_Agent" targetRef="Activity_LoadUIFields" />
+    <bpmn:sequenceFlow id="Flow_0w29skj" sourceRef="UI_Displayer_Agent" targetRef="Activity_User_Verification" />
     <bpmn:subProcess id="Activity_0c8yvg3">
       <bpmn:incoming>Flow_037ubon</bpmn:incoming>
       <bpmn:outgoing>Flow_1rugnkq</bpmn:outgoing>
@@ -617,13 +621,8 @@
       <bpmn:outgoing>Flow_0oa3vkg</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:sequenceFlow id="Flow_0e8mxy3" sourceRef="Submission_Validator" targetRef="Submission_Consistency_Analyzer" />
-    <bpmn:sequenceFlow id="Flow_0o84pjf" sourceRef="Activity_LoadUIFields" targetRef="Activity_User_Verification" />
-    <bpmn:serviceTask id="Activity_LoadUIFields" name="Load UI Fields" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.LoadUIFieldsDelegate">
-      <bpmn:incoming>Flow_0w29skj</bpmn:incoming>
-      <bpmn:outgoing>Flow_0o84pjf</bpmn:outgoing>
-    </bpmn:serviceTask>
     <bpmn:sequenceFlow id="Flow_1f6ntx5" sourceRef="Policy_Coherence" targetRef="Medical_Coherence" />
-    <bpmn:sequenceFlow id="Flow_1hfmdqo" sourceRef="Medical_Coherence" targetRef="LoadFinalReviewFields" />
+    <bpmn:sequenceFlow id="Flow_1hfmdqo" sourceRef="Medical_Coherence" targetRef="FinalReviewTask" />
     <bpmn:serviceTask id="Medical_Coherence" name="Medical Coherence" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.MedicalCoherenceDelegate">
       <bpmn:incoming>Flow_1f6ntx5</bpmn:incoming>
       <bpmn:outgoing>Flow_1hfmdqo</bpmn:outgoing>
@@ -633,18 +632,19 @@
       <bpmn:outgoing>Flow_1f6ntx5</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:sequenceFlow id="Flow_0j2ifcv" sourceRef="FinalReviewTask" targetRef="Gateway_0aphohc" />
-    <bpmn:userTask id="FinalReviewTask" name="Final Review" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:formKey="embedded:app:forms/final-review-form.html">
+    <bpmn:userTask id="FinalReviewTask" name="Final Review" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:candidateUsers="" camunda:candidateGroups="healthclaim_l2">
       <bpmn:extensionElements>
-        <camunda:executionListener class="com.DronaPay.frm.HealthClaim.listeners.SaveFinalFormListener" event="end" />
+        <camunda:formData>
+          <camunda:formField id="medicalCoherenceForm" label="medicalCoherenceForm" type="string" />
+          <camunda:formField id="verificationForm" label="verificationForm" type="string" />
+          <camunda:formField id="vpaAttribs" label="vpaAttribs" type="string" />
+          <camunda:formField id="accountAttribs" label="accountAttribs" type="string" />
+          <camunda:formField id="policyCoherenceForm" label="policyCoherenceForm" type="string" />
+        </camunda:formData>
       </bpmn:extensionElements>
-      <bpmn:incoming>Flow_1rhou26</bpmn:incoming>
+      <bpmn:incoming>Flow_1hfmdqo</bpmn:incoming>
       <bpmn:outgoing>Flow_0j2ifcv</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:sequenceFlow id="Flow_1rhou26" sourceRef="LoadFinalReviewFields" targetRef="FinalReviewTask" />
-    <bpmn:serviceTask id="LoadFinalReviewFields" name="Load Final Review Fields" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.LoadFinalReviewFieldsDelegate">
-      <bpmn:incoming>Flow_1hfmdqo</bpmn:incoming>
-      <bpmn:outgoing>Flow_1rhou26</bpmn:outgoing>
-    </bpmn:serviceTask>
     <bpmn:serviceTask id="Generate_TicketID_and_Workflow_Name" name="Generate TicketID and Workflow Name" camunda:modelerTemplate="com.dronapay.generic.ticketgenerator" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericTicketIdGenerator">
       <bpmn:extensionElements>
         <camunda:field name="configKey">
@@ -792,7 +792,7 @@
         </camunda:field>
         <camunda:field name="outputMapping">
           <camunda:string>{
-  "missingDocuments": "$.answer.missing_documents"
+  "submissionValidatorForm": "$"
 }</camunda:string>
         </camunda:field>
       </bpmn:extensionElements>
@@ -828,11 +828,7 @@
         </camunda:field>
         <camunda:field name="outputMapping">
           <camunda:string>{
-  "claimStatus": "$.claim_status",
-  "claimSummary": "$.claim_summary",
-  "validationChecks": "$.validation_checks",
-  "finalRecommendation": "$.final_recommendation",
-  "sequencedGroups": "$.sequenced_groups"
+  "submissionConsistencyAnalyzerForm": "$"
 }</camunda:string>
         </camunda:field>
       </bpmn:extensionElements>
@@ -867,7 +863,9 @@
 ]</camunda:string>
         </camunda:field>
         <camunda:field name="outputMapping">
-          <camunda:string>{}</camunda:string>
+          <camunda:string>{
+"verificationForm": "$",
+}</camunda:string>
         </camunda:field>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_1y4cq5x</bpmn:incoming>
@@ -974,15 +972,6 @@
         <dc:Bounds x="4850" y="500" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1yqs7d6_di" bpmnElement="Submission_Validator" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
-        <dc:Bounds x="2940" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_055b7hd_di" bpmnElement="Submission_Consistency_Analyzer" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
-        <dc:Bounds x="3110" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0iaprh1_di" bpmnElement="UI_Displayer_Agent" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
-        <dc:Bounds x="3280" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_17h17ae_di" bpmnElement="Activity_17h17ae" isExpanded="true">
         <dc:Bounds x="670" y="740" width="330" height="200" />
       </bpmndi:BPMNShape>
@@ -1071,9 +1060,6 @@
         <dc:Bounds x="2780" y="800" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0p3hr0z_di" bpmnElement="Activity_LoadUIFields">
-        <dc:Bounds x="3450" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_0wm5iil_di" bpmnElement="Medical_Coherence" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="3960" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
@@ -1082,10 +1068,6 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_0m5cnkt_di" bpmnElement="FinalReviewTask">
         <dc:Bounds x="4340" y="800" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0fn18y3_di" bpmnElement="LoadFinalReviewFields">
-        <dc:Bounds x="4140" y="800" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_1s3pyve_di" bpmnElement="Generate_TicketID_and_Workflow_Name">
@@ -1106,6 +1088,15 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_0txw8dc_di" bpmnElement="Activity_04nhqma">
         <dc:Bounds x="4650" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1yqs7d6_di" bpmnElement="Submission_Validator" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+        <dc:Bounds x="2940" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_055b7hd_di" bpmnElement="Submission_Consistency_Analyzer" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+        <dc:Bounds x="3110" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0iaprh1_di" bpmnElement="UI_Displayer_Agent" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+        <dc:Bounds x="3350" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_1me4x9n" bpmnElement="Event_100gl67">
         <dc:Bounds x="4832" y="522" width="36" height="36" />
@@ -1355,8 +1346,8 @@
         <di:waypoint x="2350" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0w29skj_di" bpmnElement="Flow_0w29skj">
-        <di:waypoint x="3380" y="840" />
         <di:waypoint x="3450" y="840" />
+        <di:waypoint x="3620" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_1rugnkq_di" bpmnElement="Flow_1rugnkq">
         <di:waypoint x="2700" y="840" />
@@ -1368,15 +1359,11 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_1y4cq5x_di" bpmnElement="Flow_1y4cq5x">
         <di:waypoint x="3210" y="840" />
-        <di:waypoint x="3280" y="840" />
+        <di:waypoint x="3350" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0e8mxy3_di" bpmnElement="Flow_0e8mxy3">
         <di:waypoint x="3040" y="840" />
         <di:waypoint x="3110" y="840" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_0o84pjf_di" bpmnElement="Flow_0o84pjf">
-        <di:waypoint x="3550" y="840" />
-        <di:waypoint x="3620" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_1f6ntx5_di" bpmnElement="Flow_1f6ntx5">
         <di:waypoint x="3900" y="840" />
@@ -1384,15 +1371,11 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_1hfmdqo_di" bpmnElement="Flow_1hfmdqo">
         <di:waypoint x="4060" y="840" />
-        <di:waypoint x="4140" y="840" />
+        <di:waypoint x="4340" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0j2ifcv_di" bpmnElement="Flow_0j2ifcv">
         <di:waypoint x="4440" y="840" />
         <di:waypoint x="4495" y="840" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_1rhou26_di" bpmnElement="Flow_1rhou26">
-        <di:waypoint x="4240" y="840" />
-        <di:waypoint x="4340" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_024y7gm_di" bpmnElement="Flow_024y7gm">
         <di:waypoint x="570" y="840" />

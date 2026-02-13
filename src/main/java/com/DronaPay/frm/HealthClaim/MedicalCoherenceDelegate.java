@@ -15,6 +15,7 @@ import org.apache.http.util.EntityUtils;
 import org.cibseven.bpm.engine.delegate.BpmnError;
 import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
+import org.cibseven.bpm.engine.variable.Variables; // Import Required
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -41,7 +42,6 @@ public class MedicalCoherenceDelegate implements JavaDelegate {
         String agentUsername = tenantProps.getProperty("agent.api.username");
         String agentPassword = tenantProps.getProperty("agent.api.password");
 
-        // Append /agent path if not present
         if (agentApiUrl != null && !agentApiUrl.endsWith("/agent")) {
             agentApiUrl = agentApiUrl + "/agent";
         }
@@ -78,11 +78,13 @@ public class MedicalCoherenceDelegate implements JavaDelegate {
 
         log.info("Built Medical Coherence request ({} bytes)", medicalCoherenceRequest.length());
 
+        // Call the API
         String resp = callAgentAPI(agentApiUrl, agentUsername, agentPassword, medicalCoherenceRequest);
 
         log.info("Medical Coherence API call successful");
         log.debug("Medical Coherence API response: {}", resp);
 
+        // Store result in MinIO
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "medical_comp", 200, resp, new HashMap<>());
 
@@ -91,8 +93,19 @@ public class MedicalCoherenceDelegate implements JavaDelegate {
 
         log.info("Stored Medical Coherence result at: {}", medicalCoherenceMinioPath);
 
+        // Set Process Variables
         execution.setVariable("medicalCoherenceMinioPath", medicalCoherenceMinioPath);
         execution.setVariable("medicalCoherenceSuccess", true);
+
+        // --- FIXED: Use serializedObjectValue to handle large JSON strings ---
+        execution.setVariable("medicalCoherenceForm",
+                Variables.serializedObjectValue(resp)
+                        .serializationDataFormat("application/json")
+                        .objectTypeName("java.util.HashMap") // Ensures it deserializes to a Map
+                        .create());
+
+        log.info("Stored raw response in process variable 'medicalCoherenceForm' as JSON object");
+        // ---------------------------------------------------------------------
 
         log.info("=== Medical Coherence Completed ===");
     }

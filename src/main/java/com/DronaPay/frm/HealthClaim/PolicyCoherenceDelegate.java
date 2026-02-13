@@ -15,6 +15,7 @@ import org.apache.http.util.EntityUtils;
 import org.cibseven.bpm.engine.delegate.BpmnError;
 import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
+import org.cibseven.bpm.engine.variable.Variables; // Import Required
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -41,7 +42,6 @@ public class PolicyCoherenceDelegate implements JavaDelegate {
         String agentUsername = tenantProps.getProperty("agent.api.username");
         String agentPassword = tenantProps.getProperty("agent.api.password");
 
-        // Append /agent path if not present
         if (agentApiUrl != null && !agentApiUrl.endsWith("/agent")) {
             agentApiUrl = agentApiUrl + "/agent";
         }
@@ -78,11 +78,13 @@ public class PolicyCoherenceDelegate implements JavaDelegate {
 
         log.info("Built Policy Coherence request ({} bytes)", policyCoherenceRequest.length());
 
+        // Call the API
         String resp = callAgentAPI(agentApiUrl, agentUsername, agentPassword, policyCoherenceRequest);
 
         log.info("Policy Coherence API call successful");
         log.debug("Policy Coherence API response: {}", resp);
 
+        // Store result in MinIO
         Map<String, Object> fullResult = AgentResultStorageService.buildResultMap(
                 "policy_comp1", 200, resp, new HashMap<>());
 
@@ -91,8 +93,19 @@ public class PolicyCoherenceDelegate implements JavaDelegate {
 
         log.info("Stored Policy Coherence result at: {}", policyCoherenceMinioPath);
 
+        // Set Process Variables
         execution.setVariable("policyCoherenceMinioPath", policyCoherenceMinioPath);
         execution.setVariable("policyCoherenceSuccess", true);
+
+        // --- FIXED: Use serializedObjectValue to handle large JSON strings ---
+        execution.setVariable("policyCoherenceForm",
+                Variables.serializedObjectValue(resp)
+                        .serializationDataFormat("application/json")
+                        .objectTypeName("java.util.HashMap") // Ensures it deserializes to a Map
+                        .create());
+
+        log.info("Stored raw response in process variable 'policyCoherenceForm' as JSON object");
+        // ---------------------------------------------------------------------
 
         log.info("=== Policy Coherence Completed ===");
     }

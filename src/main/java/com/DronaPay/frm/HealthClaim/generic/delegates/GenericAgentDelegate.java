@@ -23,6 +23,10 @@ import org.cibseven.bpm.engine.delegate.BpmnError;
 import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.Expression;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
+// Imports for the Fix
+import org.cibseven.bpm.engine.variable.Variables;
+import org.cibseven.bpm.engine.variable.value.ObjectValue;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -37,11 +41,6 @@ import java.util.regex.Pattern;
 
 /**
  * A Generic Agent Delegate that executes external API calls based on a BPMN Element Template.
- * It handles:
- * 1. Dynamic URL construction (Base URL + Route)
- * 2. Authentication (Basic Auth)
- * 3. Input payload construction (including file downloads from MinIO)
- * 4. Storing results back to MinIO and mapping outputs to process variables.
  */
 @Slf4j
 public class GenericAgentDelegate implements JavaDelegate {
@@ -83,8 +82,6 @@ public class GenericAgentDelegate implements JavaDelegate {
         String authMethod = (authType != null) ? (String) authType.getValue(execution) : "none";
 
         // 3. Determine Property Prefix
-        // Maps the template's dropdown value (e.g., "dia") to the actual property key in application.properties.
-        // Special case: "dia" maps to "agent.api" based on current environment config.
         String propPrefix = baseUrlKey;
         if ("dia".equalsIgnoreCase(baseUrlKey)) {
             propPrefix = "agent.api";
@@ -96,7 +93,6 @@ public class GenericAgentDelegate implements JavaDelegate {
             throw new BpmnError("CONFIG_ERROR", "Property not found: " + propPrefix + ".url");
         }
 
-        // Normalize slashes to avoid double-slashes (e.g., ".../api//agent")
         if (resolvedBaseUrl.endsWith("/")) {
             resolvedBaseUrl = resolvedBaseUrl.substring(0, resolvedBaseUrl.length() - 1);
         }
@@ -114,7 +110,6 @@ public class GenericAgentDelegate implements JavaDelegate {
             apiUser = props.getProperty(propPrefix + ".username");
             apiPass = props.getProperty(propPrefix + ".password");
 
-            // Fallback for backward compatibility with older "ai.agent" properties
             if (apiUser == null) apiUser = props.getProperty("ai.agent.username");
             if (apiPass == null) apiPass = props.getProperty("ai.agent.password");
 
@@ -126,7 +121,6 @@ public class GenericAgentDelegate implements JavaDelegate {
         String reqMethod = (method != null) ? (String) method.getValue(execution) : "POST";
 
         // 6. Build Request Payload
-        // Resolves variables in the input JSON and handles file/JSON downloads from MinIO
         String inputJsonStr = (inputParams != null) ? (String) inputParams.getValue(execution) : "[]";
         String resolvedInputJson = resolvePlaceholders(inputJsonStr, execution, props);
         JSONObject dataObject = buildDataObject(resolvedInputJson, tenantId);
@@ -140,14 +134,11 @@ public class GenericAgentDelegate implements JavaDelegate {
         String responseBody = executeAgentCall(reqMethod, finalUrl, apiUser, apiPass, requestBody.toString());
 
         // 8. Store Results in MinIO
-        // The raw response is saved to MinIO to avoid bloating the Camunda runtime database
         Map<String, Object> resultMap = AgentResultStorageService.buildResultMap(
                 currentAgentId, 200, responseBody, new HashMap<>());
 
         Object attachmentObj = execution.getVariable("attachment");
         String filename = (attachmentObj != null) ? attachmentObj.toString() : currentAgentId + "_result";
-
-        // Ensure unique filename if we are in a multi-instance loop
         String resultFileName = (filename != null && !filename.isEmpty()) ? filename : currentAgentId + "_result_" + System.currentTimeMillis();
 
         String minioPath = AgentResultStorageService.storeAgentResult(
@@ -156,18 +147,13 @@ public class GenericAgentDelegate implements JavaDelegate {
         execution.setVariable(currentAgentId + "_MinioPath", minioPath);
         log.info("Agent Result stored: {}", minioPath);
 
-        // 9. Map Output Variables
-        // Extracts specific fields from the JSON response and sets them as Process Variables
+        // 9. Map Output Variables (Updated with FIX)
         String outputMapStr = (outputMapping != null) ? (String) outputMapping.getValue(execution) : "{}";
         mapOutputs(responseBody, outputMapStr, execution);
 
         log.info("=== Generic Agent Delegate Completed ===");
     }
 
-    /**
-     * Constructs the 'data' JSON object expected by the Agent API.
-     * Supports strict typing: 'minioFile' (Base64 encoded) and 'minioJson' (Embedded JSON).
-     */
     private JSONObject buildDataObject(String inputJsonStr, String tenantId) throws Exception {
         JSONObject data = new JSONObject();
         JSONArray inputs = new JSONArray(inputJsonStr);
@@ -182,7 +168,6 @@ public class GenericAgentDelegate implements JavaDelegate {
             if (value.isEmpty()) continue;
 
             if ("minioFile".equalsIgnoreCase(type)) {
-                // Download file from MinIO, convert to Base64, and embed
                 try {
                     InputStream fileContent = storage.downloadDocument(value);
                     byte[] bytes = IOUtils.toByteArray(fileContent);
@@ -194,7 +179,6 @@ public class GenericAgentDelegate implements JavaDelegate {
                 }
             }
             else if ("minioJson".equalsIgnoreCase(type)) {
-                // Fetch previous agent result from MinIO and embed specific parts
                 try {
                     Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, value);
                     String apiResponse = (String) result.get("apiResponse");
@@ -203,11 +187,9 @@ public class GenericAgentDelegate implements JavaDelegate {
 
                     String sourcePath = input.optString("sourceJsonPath", "");
                     if (!sourcePath.isEmpty()) {
-                        // Extract partial JSON using JSONPath
                         Object extractedContent = JsonPath.read(apiResponse, sourcePath);
                         data.put(key, extractedContent);
                     } else {
-                        // Embed entire JSON
                         JSONObject jsonContent = new JSONObject(apiResponse);
                         data.put(key, jsonContent);
                     }
@@ -217,17 +199,12 @@ public class GenericAgentDelegate implements JavaDelegate {
                 }
             }
             else {
-                // Default: Simple string/number value
                 data.put(key, value);
             }
         }
         return data;
     }
 
-    /**
-     * Executes the HTTP request using Apache HttpClient.
-     * Handles authentication and error status codes.
-     */
     private String executeAgentCall(String method, String url, String user, String pass, String body) throws Exception {
         CredentialsProvider provider = new BasicCredentialsProvider();
         if (user != null && pass != null) {
@@ -257,7 +234,9 @@ public class GenericAgentDelegate implements JavaDelegate {
     }
 
     /**
-     * Maps fields from the API response to Process Variables using JSONPath.
+     * Maps fields from the API response to Process Variables.
+     * UPDATED: Uses Variables.objectValue(...).serializationDataFormat("application/json")
+     * to prevent "Cannot load class" errors in Cockpit.
      */
     private void mapOutputs(String responseBody, String mappingStr, DelegateExecution execution) {
         if (mappingStr == null || mappingStr.equals("{}")) return;
@@ -268,16 +247,24 @@ public class GenericAgentDelegate implements JavaDelegate {
             String path = mapping.getString(varName);
             try {
                 Object val = JsonPath.read(jsonDoc, path);
-                execution.setVariable(varName, val);
+
+                // --- FIX START: Force serialization as JSON ---
+                if (val != null) {
+                    ObjectValue typedValue = Variables.objectValue(val)
+                            .serializationDataFormat("application/json")
+                            .create();
+                    execution.setVariable(varName, typedValue);
+                } else {
+                    execution.setVariable(varName, null);
+                }
+                // --- FIX END ---
+
             } catch (Exception e) {
                 log.warn("Could not extract path '{}' for variable '{}'. Field might be missing in response.", path, varName);
             }
         }
     }
 
-    /**
-     * Replaces variable placeholders (${var}) in strings with actual runtime values.
-     */
     private String resolvePlaceholders(String input, DelegateExecution execution, Properties props) {
         if (input == null) return null;
         Pattern pattern = Pattern.compile("\\$\\{([^}]+)\\}");
@@ -304,7 +291,6 @@ public class GenericAgentDelegate implements JavaDelegate {
         return sb.toString();
     }
 
-    // Helper to resolve Map lookups like ${myMap[key]}
     private String resolveMapValue(String token, DelegateExecution execution) {
         try {
             int bracketIndex = token.indexOf("[");
@@ -319,9 +305,7 @@ public class GenericAgentDelegate implements JavaDelegate {
                 Object value = map.get(resolvedKey);
                 return value != null ? value.toString() : "";
             }
-        } catch (Exception e) {
-            // Ignore resolution errors, keep token as is
-        }
+        } catch (Exception e) { }
         return "${" + token + "}";
     }
 }
