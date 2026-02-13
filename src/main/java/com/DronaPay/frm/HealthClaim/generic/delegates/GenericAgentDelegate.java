@@ -23,7 +23,6 @@ import org.cibseven.bpm.engine.delegate.BpmnError;
 import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.Expression;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
-// Imports for the Fix
 import org.cibseven.bpm.engine.variable.Variables;
 import org.cibseven.bpm.engine.variable.value.ObjectValue;
 
@@ -41,6 +40,11 @@ import java.util.regex.Pattern;
 
 /**
  * A Generic Agent Delegate that executes external API calls based on a BPMN Element Template.
+ * It handles:
+ * 1. Dynamic URL construction (Base URL + Route)
+ * 2. Authentication (Basic Auth)
+ * 3. Input payload construction (including file downloads from MinIO)
+ * 4. Storing results back to MinIO and mapping outputs to process variables.
  */
 @Slf4j
 public class GenericAgentDelegate implements JavaDelegate {
@@ -110,6 +114,7 @@ public class GenericAgentDelegate implements JavaDelegate {
             apiUser = props.getProperty(propPrefix + ".username");
             apiPass = props.getProperty(propPrefix + ".password");
 
+            // Fallback
             if (apiUser == null) apiUser = props.getProperty("ai.agent.username");
             if (apiPass == null) apiPass = props.getProperty("ai.agent.password");
 
@@ -154,6 +159,9 @@ public class GenericAgentDelegate implements JavaDelegate {
         log.info("=== Generic Agent Delegate Completed ===");
     }
 
+    /**
+     * Constructs the 'data' JSON object expected by the Agent API.
+     */
     private JSONObject buildDataObject(String inputJsonStr, String tenantId) throws Exception {
         JSONObject data = new JSONObject();
         JSONArray inputs = new JSONArray(inputJsonStr);
@@ -205,6 +213,9 @@ public class GenericAgentDelegate implements JavaDelegate {
         return data;
     }
 
+    /**
+     * Executes the HTTP request.
+     */
     private String executeAgentCall(String method, String url, String user, String pass, String body) throws Exception {
         CredentialsProvider provider = new BasicCredentialsProvider();
         if (user != null && pass != null) {

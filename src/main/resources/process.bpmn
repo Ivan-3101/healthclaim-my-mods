@@ -30,6 +30,9 @@
           <camunda:formField id="verificationForm" label="verificationForm" type="string" />
           <camunda:formField id="accountAttribs" label="accountAttribs" type="string" />
           <camunda:formField id="vpaAttribs" label="vpaAttribs" type="string" />
+          <camunda:formField id="isForged" label="isForged" type="string" />
+          <camunda:formField id="submissionConsistencyAnalyzerForm" label="submissionConsistencyAnalyzerForm" type="string" />
+          <camunda:formField id="submissionValidatorForm" label="submissionValidatorForm" type="string" />
         </camunda:formData>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_0w29skj</bpmn:incoming>
@@ -444,7 +447,7 @@
 ]</camunda:string>
           </camunda:field>
           <camunda:field name="outputMapping">
-            <camunda:string>{"isForged":"$.answer"}</camunda:string>
+            <camunda:string>{"isForged":"$"}</camunda:string>
           </camunda:field>
         </bpmn:extensionElements>
         <bpmn:incoming>Flow_1c5c7cj</bpmn:incoming>
