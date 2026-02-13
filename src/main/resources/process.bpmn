@@ -643,6 +643,10 @@
           <camunda:formField id="vpaAttribs" label="vpaAttribs" type="string" />
           <camunda:formField id="accountAttribs" label="accountAttribs" type="string" />
           <camunda:formField id="policyCoherenceForm" label="policyCoherenceForm" type="string" />
+          <camunda:formField id="Action" label="Final Decision" type="enum" defaultValue="">
+            <camunda:value id="approve" name="Approve" />
+            <camunda:value id="reject" name="Reject" />
+          </camunda:formField>
         </camunda:formData>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_1hfmdqo</bpmn:incoming>
