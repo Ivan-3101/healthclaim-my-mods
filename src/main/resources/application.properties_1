@@ -67,3 +67,8 @@ email.requestFWAInfo.templateId=16
 email.fwaReminder.templateId=17
 email.fwaMissingInfo.templateId=18
 email.fwaRejection.templateId=19
+
+
+
+camunda.bpm.job-execution.core-pool-size=1
+camunda.bpm.job-execution.max-pool-size=1

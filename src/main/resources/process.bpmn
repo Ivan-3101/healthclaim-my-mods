@@ -411,7 +411,7 @@
     <bpmn:subProcess id="Activity_17h17ae">
       <bpmn:incoming>Flow_024y7gm</bpmn:incoming>
       <bpmn:outgoing>Flow_0450puq</bpmn:outgoing>
-      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_11ox0g4">
         <bpmn:outgoing>Flow_1c5c7cj</bpmn:outgoing>
       </bpmn:startEvent>
@@ -458,7 +458,7 @@
     <bpmn:subProcess id="Activity_1kzv5fa">
       <bpmn:incoming>Flow_1edsz88</bpmn:incoming>
       <bpmn:outgoing>Flow_037ubon</bpmn:outgoing>
-      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${splitDocumentVars}" camunda:elementVariable="attachment" />
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:collection="${splitDocumentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_0xxno63">
         <bpmn:outgoing>Flow_0we714j</bpmn:outgoing>
       </bpmn:startEvent>
@@ -511,7 +511,7 @@
     <bpmn:subProcess id="Activity_DocClassifier">
       <bpmn:incoming>Flow_0450puq</bpmn:incoming>
       <bpmn:outgoing>Flow_0ys2arf</bpmn:outgoing>
-      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_1dyf5j7">
         <bpmn:outgoing>Flow_1p7jmc8</bpmn:outgoing>
       </bpmn:startEvent>
@@ -567,7 +567,7 @@
     <bpmn:subProcess id="Activity_0c8yvg3">
       <bpmn:incoming>Flow_037ubon</bpmn:incoming>
       <bpmn:outgoing>Flow_1rugnkq</bpmn:outgoing>
-      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="${splitDocumentVars}" camunda:elementVariable="attachment" />
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:collection="${splitDocumentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_1x0b3zu">
         <bpmn:outgoing>Flow_084cttl</bpmn:outgoing>
       </bpmn:startEvent>
