@@ -4,7 +4,10 @@ import com.DronaPay.frm.HealthClaim.TenantPropertiesUtil;
 import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
 import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
 import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
+import com.jayway.jsonpath.Configuration; // Import Added
 import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.spi.json.JacksonJsonProvider; // Import Added
+import com.jayway.jsonpath.spi.mapper.JacksonMappingProvider; // Import Added
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.apache.http.auth.AuthScope;
@@ -23,9 +26,6 @@ import org.cibseven.bpm.engine.delegate.BpmnError;
 import org.cibseven.bpm.engine.delegate.DelegateExecution;
 import org.cibseven.bpm.engine.delegate.Expression;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
-import org.cibseven.bpm.engine.variable.Variables;
-import org.cibseven.bpm.engine.variable.value.ObjectValue;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -152,7 +152,7 @@ public class GenericAgentDelegate implements JavaDelegate {
         execution.setVariable(currentAgentId + "_MinioPath", minioPath);
         log.info("Agent Result stored: {}", minioPath);
 
-        // 9. Map Output Variables (Updated with FIX)
+        // 9. Map Output Variables
         String outputMapStr = (outputMapping != null) ? (String) outputMapping.getValue(execution) : "{}";
         mapOutputs(responseBody, outputMapStr, execution);
 
@@ -245,31 +245,31 @@ public class GenericAgentDelegate implements JavaDelegate {
     }
 
     /**
-     * Maps fields from the API response to Process Variables.
-     * UPDATED: Uses Variables.objectValue(...).serializationDataFormat("application/json")
-     * to prevent "Cannot load class" errors in Cockpit.
+     * Maps fields from the API response to Process Variables using JsonPath.
+     * UPDATED: Now uses Jackson to return standard Java Map/List instead of net.minidev types.
      */
     private void mapOutputs(String responseBody, String mappingStr, DelegateExecution execution) {
         if (mappingStr == null || mappingStr.equals("{}")) return;
+
+        // 1. Configure JsonPath to use Jackson.
+        // This ensures results are java.util.ArrayList or java.util.LinkedHashMap,
+        // which are JDK standard types and deserializable by Camunda Cockpit.
+        Configuration jacksonConfig = Configuration.builder()
+                .jsonProvider(new JacksonJsonProvider())
+                .mappingProvider(new JacksonMappingProvider())
+                .build();
+
         JSONObject mapping = new JSONObject(mappingStr);
-        Object jsonDoc = com.jayway.jsonpath.Configuration.defaultConfiguration().jsonProvider().parse(responseBody);
+
+        // 2. Parse the response using the Jackson configuration
+        var documentContext = JsonPath.using(jacksonConfig).parse(responseBody);
 
         for (String varName : mapping.keySet()) {
             String path = mapping.getString(varName);
             try {
-                Object val = JsonPath.read(jsonDoc, path);
-
-                // --- FIX START: Force serialization as JSON ---
-                if (val != null) {
-                    ObjectValue typedValue = Variables.objectValue(val)
-                            .serializationDataFormat("application/json")
-                            .create();
-                    execution.setVariable(varName, typedValue);
-                } else {
-                    execution.setVariable(varName, null);
-                }
-                // --- FIX END ---
-
+                // 3. Read the value. It will now be a Map or List (standard Java objects).
+                Object val = documentContext.read(path);
+                execution.setVariable(varName, val);
             } catch (Exception e) {
                 log.warn("Could not extract path '{}' for variable '{}'. Field might be missing in response.", path, varName);
             }
