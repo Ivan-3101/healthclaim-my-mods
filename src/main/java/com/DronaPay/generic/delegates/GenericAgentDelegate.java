@@ -4,10 +4,10 @@ import com.DronaPay.generic.utils.TenantPropertiesUtil;
 import com.DronaPay.generic.services.AgentResultStorageService;
 import com.DronaPay.generic.services.ObjectStorageService;
 import com.DronaPay.generic.storage.StorageProvider;
-import com.jayway.jsonpath.Configuration; // Import Added
+import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
-import com.jayway.jsonpath.spi.json.JacksonJsonProvider; // Import Added
-import com.jayway.jsonpath.spi.mapper.JacksonMappingProvider; // Import Added
+import com.jayway.jsonpath.spi.json.JacksonJsonProvider;
+import com.jayway.jsonpath.spi.mapper.JacksonMappingProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.apache.http.auth.AuthScope;
@@ -45,20 +45,29 @@ import java.util.regex.Pattern;
  * 2. Authentication (Basic Auth)
  * 3. Input payload construction (including file downloads from MinIO)
  * 4. Storing results back to MinIO and mapping outputs to process variables.
+ *
+ * FIX (3b): outputMapping now runs JsonPath against the FULL MinIO result JSON,
+ * not just the raw API response. This means you can path into any key:
+ *   - $.rawResponse.someKey  → value from the actual agent response
+ *   - $.agentId              → the agent id
+ *   - $.success              → boolean success flag
+ *   - $.statusCode           → HTTP status code
+ *   - $.timestamp            → timestamp
+ *   - $.extractedData.xyz    → anything in extractedData
  */
 @Slf4j
 public class GenericAgentDelegate implements JavaDelegate {
 
     // Fields injected from the BPMN Element Template (v2)
-    private Expression baseUrl;      // Key for the base URL (e.g., "dia" -> "agent.api.url")
-    private Expression route;        // Specific API route (e.g., "agent")
-    private Expression authType;     // Authentication method (e.g., "basicAuth")
+    private Expression baseUrl;       // Key for the base URL (e.g., "dia" -> "agent.api.url")
+    private Expression route;         // Specific API route (e.g., "agent")
+    private Expression authType;      // Authentication method (e.g., "basicAuth")
 
     // Standard configuration fields
-    private Expression method;       // HTTP Method (POST/GET)
-    private Expression agentId;      // Unique Identifier for this agent task
-    private Expression inputParams;  // JSON Array defining input data structure
-    private Expression outputMapping;// JSON Object defining response mapping
+    private Expression method;        // HTTP Method (POST/GET)
+    private Expression agentId;       // Unique Identifier for this agent task
+    private Expression inputParams;   // JSON Array defining input data structure
+    private Expression outputMapping; // JSON Object defining response mapping - paths run against full MinIO JSON
 
     @Override
     public void execute(DelegateExecution execution) throws Exception {
@@ -153,8 +162,24 @@ public class GenericAgentDelegate implements JavaDelegate {
         log.info("Agent Result stored: {}", minioPath);
 
         // 9. Map Output Variables
+        // FIX (3b): Build the full MinIO result JSON and run outputMapping against it.
+        // This allows users to path into ANY key in the stored file:
+        //   $.rawResponse.someKey, $.agentId, $.success, $.statusCode, $.timestamp, $.extractedData.xyz
+        //
+        // FIX (3b-2): rawResponse is stored as an escaped JSON string (not a nested object).
+        // Parse it into a real JSONObject so that paths like $.rawResponse.answer work correctly.
         String outputMapStr = (outputMapping != null) ? (String) outputMapping.getValue(execution) : "{}";
-        mapOutputs(responseBody, outputMapStr, execution);
+        JSONObject resultJson = new JSONObject(resultMap);
+        if (resultJson.has("rawResponse")) {
+            try {
+                String raw = resultJson.getString("rawResponse");
+                resultJson.put("rawResponse", new JSONObject(raw));
+            } catch (Exception e) {
+                log.warn("rawResponse is not valid JSON for agent '{}', keeping as string", currentAgentId);
+            }
+        }
+        String fullResultJson = resultJson.toString();
+        mapOutputs(fullResultJson, outputMapStr, execution);
 
         log.info("=== Generic Agent Delegate Completed ===");
     }
@@ -185,8 +210,7 @@ public class GenericAgentDelegate implements JavaDelegate {
                     log.error("Failed to download file from MinIO: {}", value, e);
                     throw new BpmnError("FILE_ERROR", "Could not process file: " + value);
                 }
-            }
-            else if ("minioJson".equalsIgnoreCase(type)) {
+            } else if ("minioJson".equalsIgnoreCase(type)) {
                 try {
                     Map<String, Object> result = AgentResultStorageService.retrieveAgentResult(tenantId, value);
                     String apiResponse = (String) result.get("apiResponse");
@@ -205,8 +229,7 @@ public class GenericAgentDelegate implements JavaDelegate {
                     log.error("Failed to process previous Agent Result: {}", value, e);
                     throw new BpmnError("FILE_ERROR", "Could not process JSON: " + value);
                 }
-            }
-            else {
+            } else {
                 data.put(key, value);
             }
         }
@@ -245,31 +268,35 @@ public class GenericAgentDelegate implements JavaDelegate {
     }
 
     /**
-     * Maps fields from the API response to Process Variables using JsonPath.
-     * UPDATED: Now uses Jackson to return standard Java Map/List instead of net.minidev types.
+     * Maps fields from the full MinIO result JSON to Process Variables using JsonPath.
+     *
+     * FIX (3b): This method now receives fullResultJson (the complete stored MinIO file contents),
+     * NOT just the raw API response. Paths must be updated in BPMN accordingly:
+     *   OLD: {"isForged": "$.answer"}
+     *   NEW: {"isForged": "$.rawResponse.answer"}
+     *
+     * Available root keys: agentId, statusCode, success, rawResponse, extractedData, timestamp
+     *
+     * Uses Jackson provider to return standard Java Map/List types (not net.minidev),
+     * which are safe to store as Camunda process variables.
      */
-    private void mapOutputs(String responseBody, String mappingStr, DelegateExecution execution) {
+    private void mapOutputs(String fullResultJson, String mappingStr, DelegateExecution execution) {
         if (mappingStr == null || mappingStr.equals("{}")) return;
 
-        // 1. Configure JsonPath to use Jackson.
-        // This ensures results are java.util.ArrayList or java.util.LinkedHashMap,
-        // which are JDK standard types and deserializable by Camunda Cockpit.
         Configuration jacksonConfig = Configuration.builder()
                 .jsonProvider(new JacksonJsonProvider())
                 .mappingProvider(new JacksonMappingProvider())
                 .build();
 
         JSONObject mapping = new JSONObject(mappingStr);
-
-        // 2. Parse the response using the Jackson configuration
-        var documentContext = JsonPath.using(jacksonConfig).parse(responseBody);
+        var documentContext = JsonPath.using(jacksonConfig).parse(fullResultJson);
 
         for (String varName : mapping.keySet()) {
             String path = mapping.getString(varName);
             try {
-                // 3. Read the value. It will now be a Map or List (standard Java objects).
                 Object val = documentContext.read(path);
                 execution.setVariable(varName, val);
+                log.debug("Set process variable '{}' from path '{}'", varName, path);
             } catch (Exception e) {
                 log.warn("Could not extract path '{}' for variable '{}'. Field might be missing in response.", path, varName);
             }
@@ -316,7 +343,9 @@ public class GenericAgentDelegate implements JavaDelegate {
                 Object value = map.get(resolvedKey);
                 return value != null ? value.toString() : "";
             }
-        } catch (Exception e) { }
+        } catch (Exception e) {
+            // ignore
+        }
         return "${" + token + "}";
     }
 }
