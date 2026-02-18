@@ -16,15 +16,41 @@
       }
     },
     {
-      "label": "URL",
-      "description": "Example: ${appproperties.springapi.url}/accounts/${processVariable.policyId}",
+      "label": "Base URL",
+      "description": "Select the API base URL",
+      "type": "Dropdown",
+      "choices": [
+        { "name": "Spring API", "value": "springapi" }
+      ],
+      "value": "springapi",
+      "binding": {
+        "type": "camunda:field",
+        "name": "baseUrl"
+      }
+    },
+    {
+      "label": "Route",
+      "description": "API route. Supports process variables. e.g. /accounts/${processVariable.policy_id}",
       "type": "String",
       "binding": {
         "type": "camunda:field",
-        "name": "url"
+        "name": "route"
       },
       "constraints": {
         "notEmpty": true
+      }
+    },
+    {
+      "label": "Authentication",
+      "description": "Select authentication method",
+      "type": "Dropdown",
+      "choices": [
+        { "name": "X-API-Key", "value": "xApiKey" }
+      ],
+      "value": "xApiKey",
+      "binding": {
+        "type": "camunda:field",
+        "name": "authType"
       }
     },
     {
@@ -43,19 +69,10 @@
       }
     },
     {
-      "label": "Headers (JSON)",
-      "description": "Example: [{\"key\":\"X-API-KEY\", \"value\":\"${appproperties.springapi.api.key}\"}]",
-      "type": "String",
-      "value": "[]",
-      "binding": {
-        "type": "camunda:field",
-        "name": "headers"
-      }
-    },
-    {
       "label": "Request Body",
-      "description": "JSON body for POST/PUT",
+      "description": "JSON body for POST/PUT. Enter NA for GET requests.",
       "type": "Text",
+      "value": "NA",
       "binding": {
         "type": "camunda:field",
         "name": "body"
@@ -63,7 +80,7 @@
     },
     {
       "label": "Output Variable Name",
-      "description": "Name of the variable to store the JSON response",
+      "description": "Name of the process variable to store the JSON response",
       "type": "String",
       "value": "apiResponse",
       "binding": {

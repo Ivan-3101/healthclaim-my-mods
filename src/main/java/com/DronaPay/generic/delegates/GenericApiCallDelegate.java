@@ -13,7 +13,6 @@ import org.cibseven.bpm.engine.delegate.Expression;
 import org.cibseven.bpm.engine.delegate.JavaDelegate;
 import org.cibseven.bpm.engine.variable.Variables;
 import org.cibseven.bpm.engine.variable.value.ObjectValue;
-import org.json.JSONObject;
 
 import java.util.Properties;
 import java.util.regex.Matcher;
@@ -23,11 +22,12 @@ import java.util.regex.Pattern;
 public class GenericApiCallDelegate implements JavaDelegate {
 
     // 1. INPUTS (Injected from the Camunda Element Template)
-    private Expression url;          // e.g., "${appproperties.url}/accounts/${processVariable.id}"
-    private Expression method;       // e.g., "GET", "POST"
-    private Expression headers;      // e.g., [{"key":"Authorization", "value":"..."}]
-    private Expression body;         // JSON Payload for POST/PUT
-    private Expression outputVar;    // Variable name to store the result (e.g., "verifyResponse")
+    private Expression baseUrl;    // Dropdown key that maps to a property prefix (e.g., "springapi" -> "springapi.url")
+    private Expression route;      // Specific API route, supports process variables (e.g., "/accounts/${processVariable.policy_id}")
+    private Expression authType;   // Authentication method (e.g., "xApiKey" -> reads "springapi.api.key" from properties)
+    private Expression method;     // HTTP Method (e.g., "GET", "POST")
+    private Expression body;       // JSON Payload for POST/PUT requests. Use "NA" as placeholder when no body is needed.
+    private Expression outputVar;  // Variable name to store the result (e.g., "verifyResponse")
 
     @Override
     public void execute(DelegateExecution execution) throws Exception {
@@ -37,47 +37,68 @@ public class GenericApiCallDelegate implements JavaDelegate {
         // We check which tenant (e.g., "1") is running this workflow so we can load
         // the correct "application.properties_1" file.
         String tenantId = execution.getTenantId();
-        Properties tenantProps = null;
-
-        if (tenantId != null && !tenantId.isEmpty()) {
-            try {
-                // This helper utility loads "application.properties_{tenantId}"
-                tenantProps = TenantPropertiesUtil.getTenantProps(tenantId);
-            } catch (Exception e) {
-                log.error("Failed to load properties for tenant: " + tenantId, e);
-            }
+        if (tenantId == null || tenantId.isEmpty()) {
+            throw new BpmnError("CONFIG_ERROR", "Tenant ID is missing from execution context.");
         }
 
-        // 3. READ INPUTS: Get values from the BPMN Process I.E. THE VALUES ENTERED INSIDE THE TEMPLATE
-        String rawUrl = (String) url.getValue(execution);
-        String reqMethod = (String) method.getValue(execution);
-        String reqHeaders = headers != null ? (String) headers.getValue(execution) : "[]";
-        String reqBody = body != null ? (String) body.getValue(execution) : "";
-        String targetVar = outputVar != null ? (String) outputVar.getValue(execution) : "apiResponse";
+        // This helper utility loads "application.properties_{tenantId}"
+        Properties props = TenantPropertiesUtil.getTenantProps(tenantId);
 
-        // 4. RESOLVING PLACEHOLDERS
-        // We take strings like "${appproperties.api.key}" and replace them with real values
-        // from the properties file or process variables.
-        String finalUrl = resolvePlaceholders(rawUrl, execution, tenantProps);
-        String finalHeaders = resolvePlaceholders(reqHeaders, execution, tenantProps);
-        String finalBody = resolvePlaceholders(reqBody, execution, tenantProps);
+        // 3. READ INPUTS: Get values from the BPMN Process I.E. THE VALUES ENTERED INSIDE THE TEMPLATE
+        if (baseUrl == null || route == null) {
+            throw new BpmnError("CONFIG_ERROR", "Missing required fields: 'baseUrl' and 'route'. Ensure the BPMN task uses the correct template.");
+        }
+
+        String baseUrlKey = (String) baseUrl.getValue(execution);  // e.g., "springapi"
+        String routePath  = (String) route.getValue(execution);    // e.g., "/accounts/${processVariable.policy_id}"
+        String authMethod = authType != null ? (String) authType.getValue(execution) : "none";
+        String reqMethod  = method != null ? (String) method.getValue(execution) : "GET";
+        String targetVar  = outputVar != null ? (String) outputVar.getValue(execution) : "apiResponse";
+
+        // Read body from template. "NA" is the placeholder used when no body is needed (e.g., GET requests).
+        // Treat "NA" the same as empty so no entity is attached to the request.
+        String reqBody = body != null ? (String) body.getValue(execution) : "NA";
+        if ("NA".equalsIgnoreCase(reqBody)) reqBody = "";
+
+        // 4. CONSTRUCT URL
+        // The baseUrlKey (e.g., "springapi") is used as a prefix to look up the base URL
+        // from the tenant properties file. e.g., "springapi.url" = "https://main.dev.dronapay.net/springapi"
+        String resolvedBase = props.getProperty(baseUrlKey + ".url");
+        if (resolvedBase == null) {
+            throw new BpmnError("CONFIG_ERROR", "Property not found: " + baseUrlKey + ".url");
+        }
+
+        // Normalize slashes so we don't end up with double slashes in the final URL
+        if (resolvedBase.endsWith("/")) resolvedBase = resolvedBase.substring(0, resolvedBase.length() - 1);
+
+        // Resolve any ${processVariable.x} placeholders inside the route
+        // e.g., "/accounts/${processVariable.policy_id}" -> "/accounts/POL-12345"
+        String resolvedRoute = resolvePlaceholders(routePath, execution, props);
+        if (!resolvedRoute.startsWith("/")) resolvedRoute = "/" + resolvedRoute;
+
+        String finalUrl  = resolvedBase + resolvedRoute;
+        String finalBody = resolvePlaceholders(reqBody, execution, props);
 
         log.info("Making {} request to: {}", reqMethod, finalUrl);
 
-
         // 5. EXECUTE: Send the HTTP Request
         try (CloseableHttpClient client = HttpClients.createDefault()) {
-            // Build the GET/POST request object
+            // Build the GET/POST/PUT/DELETE request object
             HttpRequestBase request = createRequest(reqMethod, finalUrl, finalBody);
 
-            // Add Headers (parsing the JSON string into actual HTTP headers)
-            if (finalHeaders != null && !finalHeaders.isEmpty() && !finalHeaders.equals("[]")) {
-                org.json.JSONArray headerArray = new org.json.JSONArray(finalHeaders);
-                for (int i = 0; i < headerArray.length(); i++) {
-                    JSONObject h = headerArray.getJSONObject(i);
-                    request.addHeader(h.getString("key"), h.getString("value"));
+            // 6. AUTHENTICATION
+            // Instead of a freeform headers JSON like the old template, auth is now handled
+            // by the authType dropdown. "xApiKey" reads the key from properties automatically.
+            // e.g., "springapi.api.key" = "4643a381-16e2-41c6-87ea-fac8df253dee"
+            if ("xApiKey".equalsIgnoreCase(authMethod)) {
+                String apiKey = props.getProperty(baseUrlKey + ".api.key");
+                if (apiKey == null) {
+                    throw new BpmnError("CONFIG_ERROR", "Property not found: " + baseUrlKey + ".api.key");
                 }
+                request.addHeader("x-api-key", apiKey);
             }
+
+            request.addHeader("Content-Type", "application/json");
 
             // Fire the request and wait for response
             try (CloseableHttpResponse response = client.execute(request)) {
@@ -86,18 +107,16 @@ public class GenericApiCallDelegate implements JavaDelegate {
 
                 log.info("API Response Status: {}", statusCode);
 
-                // 6. API FAIL LOGIC
+                // 7. API FAIL LOGIC
                 // If the API returns anything other than 200 OK (like 404 Not Found),
                 // we immediately CRASH the workflow step using BpmnError.
+                // It will create an incident in the Cockpit and stop execution.
                 if (statusCode != 200) {
-                    log.error("API Call Failed. Stopping Workflow. Status: {}", statusCode);
-
-                    // Throwing an exception
-                    // It will create an incident in the Cockpit and end execution.
+                    log.error("API Call Failed. Stopping Workflow. Status: {}, Body: {}", statusCode, responseBody);
                     throw new BpmnError("API_ERROR", "API Call failed with status code: " + statusCode);
                 }
 
-                // 7. API SUCCESS LOGIC: Store the Result
+                // 8. API SUCCESS LOGIC: Store the Result
                 // Reached here, since the status was 200.
                 // Save Status Code
                 execution.setVariable(targetVar + "_statusCode", statusCode);
@@ -112,11 +131,13 @@ public class GenericApiCallDelegate implements JavaDelegate {
                 }
             }
         }
+
         log.info("=== Generic API Call Completed ===");
     }
 
     // --- Helper Methods
-    private String resolvePlaceholders(String input, DelegateExecution execution, Properties tenantProps) {
+
+    private String resolvePlaceholders(String input, DelegateExecution execution, Properties props) {
         if (input == null || input.isEmpty()) return input;
 
         // Regex pattern to find ${...}
@@ -131,15 +152,15 @@ public class GenericApiCallDelegate implements JavaDelegate {
             // Check if it's a Property (from file) or Variable (from process)
             if (token.startsWith("appproperties.")) {
                 String key = token.substring("appproperties.".length());
-                if (tenantProps != null) {
-                    replacement = tenantProps.getProperty(key, "");
-                }
+                replacement = props != null ? props.getProperty(key, "") : "";
             } else if (token.startsWith("processVariable.")) {
                 String key = token.substring("processVariable.".length());
                 Object val = execution.getVariable(key);
                 replacement = val != null ? val.toString() : "";
             } else {
-                replacement = "${" + token + "}"; // Keep unknown tokens
+                // Fallback: try to resolve as a direct process variable name
+                Object val = execution.getVariable(token);
+                replacement = val != null ? val.toString() : "${" + token + "}";
             }
 
             matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
@@ -152,11 +173,11 @@ public class GenericApiCallDelegate implements JavaDelegate {
         switch (method.toUpperCase()) {
             case "POST":
                 HttpPost post = new HttpPost(url);
-                if (!body.isEmpty()) post.setEntity(new StringEntity(body));
+                if (body != null && !body.isEmpty()) post.setEntity(new StringEntity(body));
                 return post;
             case "PUT":
                 HttpPut put = new HttpPut(url);
-                if (!body.isEmpty()) put.setEntity(new StringEntity(body));
+                if (body != null && !body.isEmpty()) put.setEntity(new StringEntity(body));
                 return put;
             case "DELETE":
                 return new HttpDelete(url);
