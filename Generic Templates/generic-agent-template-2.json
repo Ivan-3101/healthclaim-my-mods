@@ -89,7 +89,7 @@
     },
     {
       "label": "Input Parameters (JSON)",
-      "description": "JSON Array of inputs. Types: 'value', 'minioFile', 'minioJson'.",
+      "description": "JSON Array of inputs. Types: 'value', 'minioFile', 'minioJson'. Example: [{\"key\": \"base64_img\", \"type\": \"minioFile\", \"value\": \"${documentPaths[attachment]}\"}]",
       "type": "Text",
       "value": "[]",
       "binding": {
@@ -99,12 +99,22 @@
     },
     {
       "label": "Output Mapping (JSON)",
-      "description": "Map JSON response paths to variables. Ex: {\"isForged\": \"$.answer\"}",
+      "description": "Map JsonPath values from the full result JSON to process variables. Available root keys: agentId, statusCode, success, rawResponse, extractedData, timestamp. Example: {\"isForged\": \"$.rawResponse.answer\", \"agentSuccess\": \"$.success\"}",
       "type": "Text",
       "value": "{}",
       "binding": {
         "type": "camunda:field",
         "name": "outputMapping"
+      }
+    },
+    {
+      "label": "Output MinIO Extract (JSON)",
+      "description": "Extract JsonPath values from the full result JSON and save each as a new MinIO file. Example: [{\"sourceJsonPath\": \"$.rawResponse.answer\", \"targetPath\": \"${TicketID}/forgery/answer.json\", \"targetVarName\": \"forgeryAnswerMinioPath\"}]. Leave as [] to skip.",
+      "type": "Text",
+      "value": "[]",
+      "binding": {
+        "type": "camunda:field",
+        "name": "outputMinioExtract"
       }
     }
   ]

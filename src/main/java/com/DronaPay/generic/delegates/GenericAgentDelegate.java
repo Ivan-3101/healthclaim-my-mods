@@ -33,6 +33,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.regex.Matcher;
@@ -46,28 +47,23 @@ import java.util.regex.Pattern;
  * 3. Input payload construction (including file downloads from MinIO)
  * 4. Storing results back to MinIO and mapping outputs to process variables.
  *
- * FIX (3b): outputMapping now runs JsonPath against the FULL MinIO result JSON,
- * not just the raw API response. This means you can path into any key:
- *   - $.rawResponse.someKey  → value from the actual agent response
- *   - $.agentId              → the agent id
- *   - $.success              → boolean success flag
- *   - $.statusCode           → HTTP status code
- *   - $.timestamp            → timestamp
- *   - $.extractedData.xyz    → anything in extractedData
+ * Output options (all optional, can be combined):
+ *   3a. Always stores full result as MinIO JSON (default, always happens)
+ *   3b. outputMapping      - extract JsonPath values from full result JSON → process variables
+ *   3c. outputMinioExtract - extract JsonPath values from full result JSON → new MinIO files
  */
 @Slf4j
 public class GenericAgentDelegate implements JavaDelegate {
 
-    // Fields injected from the BPMN Element Template (v2)
-    private Expression baseUrl;       // Key for the base URL (e.g., "dia" -> "agent.api.url")
-    private Expression route;         // Specific API route (e.g., "agent")
-    private Expression authType;      // Authentication method (e.g., "basicAuth")
-
-    // Standard configuration fields
-    private Expression method;        // HTTP Method (POST/GET)
-    private Expression agentId;       // Unique Identifier for this agent task
-    private Expression inputParams;   // JSON Array defining input data structure
-    private Expression outputMapping; // JSON Object defining response mapping - paths run against full MinIO JSON
+    // Fields injected from the BPMN Element Template
+    private Expression baseUrl;            // Key for the base URL (e.g., "dia" -> "agent.api.url")
+    private Expression route;              // Specific API route (e.g., "agent")
+    private Expression authType;           // Authentication method (e.g., "basicAuth")
+    private Expression method;             // HTTP Method (POST/GET)
+    private Expression agentId;            // Unique Identifier for this agent task
+    private Expression inputParams;        // JSON Array defining input data structure
+    private Expression outputMapping;      // JSON Object: JsonPath → process variable name (3b)
+    private Expression outputMinioExtract; // JSON Array: extract JsonPath → save as new MinIO file (3c)
 
     @Override
     public void execute(DelegateExecution execution) throws Exception {
@@ -123,7 +119,6 @@ public class GenericAgentDelegate implements JavaDelegate {
             apiUser = props.getProperty(propPrefix + ".username");
             apiPass = props.getProperty(propPrefix + ".password");
 
-            // Fallback
             if (apiUser == null) apiUser = props.getProperty("ai.agent.username");
             if (apiPass == null) apiPass = props.getProperty("ai.agent.password");
 
@@ -147,7 +142,7 @@ public class GenericAgentDelegate implements JavaDelegate {
         log.info("Calling Agent API: {} [{}]", finalUrl, reqMethod);
         String responseBody = executeAgentCall(reqMethod, finalUrl, apiUser, apiPass, requestBody.toString());
 
-        // 8. Store Results in MinIO
+        // 8. Store Full Result in MinIO (3a - always happens)
         Map<String, Object> resultMap = AgentResultStorageService.buildResultMap(
                 currentAgentId, 200, responseBody, new HashMap<>());
 
@@ -161,14 +156,9 @@ public class GenericAgentDelegate implements JavaDelegate {
         execution.setVariable(currentAgentId + "_MinioPath", minioPath);
         log.info("Agent Result stored: {}", minioPath);
 
-        // 9. Map Output Variables
-        // FIX (3b): Build the full MinIO result JSON and run outputMapping against it.
-        // This allows users to path into ANY key in the stored file:
-        //   $.rawResponse.someKey, $.agentId, $.success, $.statusCode, $.timestamp, $.extractedData.xyz
-        //
-        // FIX (3b-2): rawResponse is stored as an escaped JSON string (not a nested object).
-        // Parse it into a real JSONObject so that paths like $.rawResponse.answer work correctly.
-        String outputMapStr = (outputMapping != null) ? (String) outputMapping.getValue(execution) : "{}";
+        // Build parsed full result JSON — used by both 3b and 3c.
+        // rawResponse is stored as an escaped JSON string — parse it into a real JSONObject
+        // so that paths like $.rawResponse.answer can be traversed correctly.
         JSONObject resultJson = new JSONObject(resultMap);
         if (resultJson.has("rawResponse")) {
             try {
@@ -179,7 +169,19 @@ public class GenericAgentDelegate implements JavaDelegate {
             }
         }
         String fullResultJson = resultJson.toString();
+
+        // 9. Map Output Variables (3b)
+        // Runs JsonPath against the full MinIO result JSON.
+        // Available root keys: agentId, statusCode, success, rawResponse (parsed), extractedData, timestamp
+        // Example: {"isForged": "$.rawResponse.answer", "agentSuccess": "$.success"}
+        String outputMapStr = (outputMapping != null) ? (String) outputMapping.getValue(execution) : "{}";
         mapOutputs(fullResultJson, outputMapStr, execution);
+
+        // 10. Extract to new MinIO Files (3c)
+        // Each entry extracts a JsonPath from the full result JSON and saves it as a brand new MinIO file.
+        // Example: [{"sourceJsonPath": "$.rawResponse.answer", "targetPath": "${TicketID}/forgery/answer.json", "targetVarName": "forgeryAnswerMinioPath"}]
+        String outputMinioExtractStr = (outputMinioExtract != null) ? (String) outputMinioExtract.getValue(execution) : "[]";
+        extractToMinioFiles(fullResultJson, outputMinioExtractStr, tenantId, execution, props);
 
         log.info("=== Generic Agent Delegate Completed ===");
     }
@@ -268,17 +270,16 @@ public class GenericAgentDelegate implements JavaDelegate {
     }
 
     /**
-     * Maps fields from the full MinIO result JSON to Process Variables using JsonPath.
+     * 3b: Maps JsonPath values from the full MinIO result JSON to process variables.
      *
-     * FIX (3b): This method now receives fullResultJson (the complete stored MinIO file contents),
-     * NOT just the raw API response. Paths must be updated in BPMN accordingly:
-     *   OLD: {"isForged": "$.answer"}
-     *   NEW: {"isForged": "$.rawResponse.answer"}
+     * Input format (outputMapping field):
+     *   {"processVarName": "$.jsonPath", ...}
      *
-     * Available root keys: agentId, statusCode, success, rawResponse, extractedData, timestamp
+     * Example:
+     *   {"isForged": "$.rawResponse.answer", "agentSuccess": "$.success"}
      *
-     * Uses Jackson provider to return standard Java Map/List types (not net.minidev),
-     * which are safe to store as Camunda process variables.
+     * Available root keys in fullResultJson:
+     *   agentId, statusCode, success, rawResponse (parsed object), extractedData, timestamp
      */
     private void mapOutputs(String fullResultJson, String mappingStr, DelegateExecution execution) {
         if (mappingStr == null || mappingStr.equals("{}")) return;
@@ -299,6 +300,99 @@ public class GenericAgentDelegate implements JavaDelegate {
                 log.debug("Set process variable '{}' from path '{}'", varName, path);
             } catch (Exception e) {
                 log.warn("Could not extract path '{}' for variable '{}'. Field might be missing in response.", path, varName);
+            }
+        }
+    }
+
+    /**
+     * 3c: Extracts JsonPath values from the full MinIO result JSON and saves each as a new MinIO file.
+     *
+     * Input format (outputMinioExtract field) - JSON Array:
+     * [
+     *   {
+     *     "sourceJsonPath": "$.rawResponse.answer",        // JsonPath into the full result JSON
+     *     "targetPath":     "${TicketID}/forgery/answer.json", // MinIO path, supports ${var} placeholders
+     *     "targetVarName":  "forgeryAnswerMinioPath"       // process variable to store the resulting MinIO path
+     *   }
+     * ]
+     *
+     * - Map/List extracted values are serialized as JSON directly.
+     * - Primitives (String, Number, Boolean) are wrapped: {"value": <extracted>}
+     * - If sourceJsonPath cannot be resolved, a WARN is logged and that entry is skipped (no fail-fast).
+     */
+    private void extractToMinioFiles(String fullResultJson, String extractStr,
+                                     String tenantId, DelegateExecution execution, Properties props) {
+        if (extractStr == null || extractStr.trim().equals("[]")) return;
+
+        JSONArray extractions;
+        try {
+            extractions = new JSONArray(extractStr);
+        } catch (Exception e) {
+            log.warn("outputMinioExtract is not a valid JSON array, skipping 3c. Value: {}", extractStr);
+            return;
+        }
+
+        if (extractions.length() == 0) return;
+
+        Configuration jacksonConfig = Configuration.builder()
+                .jsonProvider(new JacksonJsonProvider())
+                .mappingProvider(new JacksonMappingProvider())
+                .build();
+
+        var documentContext = JsonPath.using(jacksonConfig).parse(fullResultJson);
+
+        StorageProvider storage;
+        try {
+            storage = ObjectStorageService.getStorageProvider(tenantId);
+        } catch (Exception e) {
+            log.error("Could not get storage provider for 3c extraction", e);
+            throw new BpmnError("STORAGE_ERROR", "Could not get storage provider: " + e.getMessage());
+        }
+
+        for (int i = 0; i < extractions.length(); i++) {
+            JSONObject entry = extractions.getJSONObject(i);
+            String sourceJsonPath = entry.optString("sourceJsonPath", "");
+            String targetPath     = entry.optString("targetPath", "");
+            String targetVarName  = entry.optString("targetVarName", "");
+
+            if (sourceJsonPath.isEmpty() || targetPath.isEmpty() || targetVarName.isEmpty()) {
+                log.warn("outputMinioExtract entry {} is missing sourceJsonPath, targetPath or targetVarName — skipping", i);
+                continue;
+            }
+
+            // Extract value from the full result JSON
+            Object extracted;
+            try {
+                extracted = documentContext.read(sourceJsonPath);
+            } catch (Exception e) {
+                log.warn("Could not extract path '{}' for MinIO extraction entry {} — skipping", sourceJsonPath, i);
+                continue;
+            }
+
+            // Serialize extracted value to JSON string
+            String serialized;
+            if (extracted instanceof Map) {
+                serialized = new JSONObject((Map<?, ?>) extracted).toString(2);
+            } else if (extracted instanceof List) {
+                serialized = new JSONArray((List<?>) extracted).toString(2);
+            } else {
+                // Primitive — wrap it
+                serialized = new JSONObject().put("value", extracted).toString(2);
+            }
+
+            byte[] bytes = serialized.getBytes(StandardCharsets.UTF_8);
+
+            // Resolve ${processVariable} placeholders in targetPath
+            String resolvedTargetPath = resolvePlaceholders(targetPath, execution, props);
+
+            // Upload to MinIO and set process variable
+            try {
+                storage.uploadDocument(resolvedTargetPath, bytes, "application/json");
+                execution.setVariable(targetVarName, resolvedTargetPath);
+                log.info("3c: Extracted '{}' → MinIO '{}' → var '{}'", sourceJsonPath, resolvedTargetPath, targetVarName);
+            } catch (Exception e) {
+                log.error("3c: Failed to upload extracted content to MinIO path '{}': {}", resolvedTargetPath, e.getMessage());
+                throw new BpmnError("STORAGE_ERROR", "Failed to store extracted MinIO file: " + resolvedTargetPath);
             }
         }
     }
