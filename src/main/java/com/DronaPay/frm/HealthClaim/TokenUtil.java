@@ -1,5 +1,6 @@
 package com.DronaPay.frm.HealthClaim;
 
+import com.DronaPay.generic.utils.TenantPropertiesUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;
 

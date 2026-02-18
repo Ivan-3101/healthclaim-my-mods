@@ -1,6 +1,6 @@
-package com.DronaPay.frm.HealthClaim.generic.services;
+package com.DronaPay.generic.services;
 
-import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
+import com.DronaPay.generic.storage.StorageProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.cibseven.bpm.engine.variable.Variables;
 import org.cibseven.bpm.engine.variable.value.FileValue;

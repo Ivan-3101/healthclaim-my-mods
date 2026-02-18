@@ -1,6 +1,6 @@
-package com.DronaPay.frm.HealthClaim.generic.delegates;
+package com.DronaPay.generic.delegates;
 
-import com.DronaPay.frm.HealthClaim.TenantPropertiesUtil;
+import com.DronaPay.generic.utils.TenantPropertiesUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;

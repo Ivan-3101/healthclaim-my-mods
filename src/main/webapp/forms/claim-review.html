@@ -1,0 +1,180 @@
+<form name="claimReviewForm">
+    <script cam-script type="text/form-script">
+        $scope.fields = [];
+
+        camForm.on('form-loaded', function() {
+          camForm.variableManager.fetchVariable('uiFieldsJson');
+        });
+
+        camForm.on('variables-fetched', function() {
+          var fieldsJsonVar = camForm.variableManager.variables.uiFieldsJson;
+
+          if (fieldsJsonVar && fieldsJsonVar.value) {
+            try {
+              var parsed = JSON.parse(fieldsJsonVar.value);
+              $scope.fields = parsed;
+
+              // Create or update process variables for each field
+              parsed.forEach(function(field) {
+                var varName = 'ui_' + field.label
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]/g, '_')
+                  .replace(/_+/g, '_')
+                  .replace(/^_|_$/g, '');
+
+                field.varName = varName;
+
+                // Use variableValue() instead of createVariable() to avoid duplicates
+                var existingVar = camForm.variableManager.variable(varName);
+                if (!existingVar) {
+                  // Variable doesn't exist, create it
+                  camForm.variableManager.createVariable({
+                    name: varName,
+                    type: 'String',
+                    value: field.value || ''
+                  });
+                } else {
+                  // Variable exists, update its value
+                  camForm.variableManager.variableValue(varName, field.value || '');
+                }
+              });
+
+              console.log('Loaded fields:', $scope.fields);
+            } catch(e) {
+              console.error('Error parsing fields:', e);
+              $scope.fields = [];
+            }
+          }
+        });
+
+        // Save modified values before submission
+        camForm.on('submit', function() {
+          console.log('=== FORM SUBMIT DEBUG ===');
+          $scope.fields.forEach(function(field) {  // or $scope.uiFields for final form
+            var inputElement = document.getElementById(field.varName);
+            var inputValue = inputElement ? inputElement.value : 'ELEMENT NOT FOUND';
+            console.log('Field:', field.label, '| varName:', field.varName, '| value:', inputValue);
+            camForm.variableManager.variableValue(field.varName, inputValue);
+          });
+          console.log('=== END SUBMIT DEBUG ===');
+        });
+    </script>
+
+    <style>
+        .container {
+          max-width: 900px;
+          margin: 20px auto;
+          font-family: Arial, sans-serif;
+        }
+        .field-group {
+          margin-bottom: 12px;
+          padding: 12px 15px;
+          background: #ffffff;
+          border: 1px solid #e0e0e0;
+          border-left: 3px solid #007bff;
+          border-radius: 4px;
+        }
+        .field-label {
+          font-weight: 600;
+          color: #333;
+          font-size: 13px;
+          margin-bottom: 6px;
+        }
+        .field-input {
+          width: 100%;
+          padding: 8px 10px;
+          font-size: 14px;
+          color: #333;
+          background: #fff;
+          border: 1px solid #ccc;
+          border-radius: 3px;
+          box-sizing: border-box;
+        }
+        .field-input:focus {
+          outline: none;
+          border-color: #007bff;
+          box-shadow: 0 0 0 2px rgba(0,123,255,0.1);
+        }
+        .doc-type {
+          font-size: 11px;
+          color: #888;
+          font-style: italic;
+          margin-top: 5px;
+        }
+        .no-data {
+          text-align: center;
+          padding: 40px 20px;
+          color: #999;
+          font-style: italic;
+          background: #fafafa;
+          border: 1px dashed #ddd;
+          border-radius: 4px;
+          margin: 20px 0;
+        }
+        h3 {
+          color: #222;
+          border-bottom: 2px solid #007bff;
+          padding-bottom: 10px;
+          margin-bottom: 20px;
+          font-size: 18px;
+        }
+        .action-section {
+          margin-top: 30px;
+          padding-top: 20px;
+          border-top: 2px solid #e0e0e0;
+        }
+        label {
+          font-weight: 600;
+          color: #333;
+          margin-bottom: 8px;
+          display: block;
+        }
+        select.form-control {
+          width: 100%;
+          padding: 10px;
+          font-size: 15px;
+          border: 2px solid #007bff;
+          border-radius: 4px;
+          background: white;
+        }
+        .edit-hint {
+          font-size: 11px;
+          color: #666;
+          font-style: italic;
+          margin-top: 3px;
+        }
+    </style>
+
+    <div class="container">
+        <h3>Claim Review - Extracted Information</h3>
+        <p class="edit-hint">All fields below are editable. Make any corrections needed before submitting.</p>
+
+        <div ng-if="fields.length === 0" class="no-data">
+            Loading fields...
+        </div>
+
+        <div ng-repeat="field in fields" class="field-group">
+            <label class="field-label">{{field.label}}</label>
+            <input type="text"
+                   class="field-input"
+                   id="{{field.varName}}"
+                   cam-variable-name="{{field.varName}}"
+                   cam-variable-type="String"
+                   ng-model="field.value" />
+            <div class="doc-type" ng-if="field.docType">Source: {{field.docType}}</div>
+        </div>
+
+        <div class="action-section">
+            <label for="action">Decision *</label>
+            <select cam-variable-name="Action"
+                    cam-variable-type="String"
+                    id="action"
+                    class="form-control"
+                    required>
+                <option value="">-- Select Action --</option>
+                <option value="approve">Approve</option>
+                <option value="reject">Reject</option>
+            </select>
+        </div>
+    </div>
+</form>

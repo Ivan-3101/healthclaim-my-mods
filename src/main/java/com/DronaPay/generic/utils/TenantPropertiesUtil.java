@@ -1,4 +1,4 @@
-package com.DronaPay.frm.HealthClaim;
+package com.DronaPay.generic.utils;
 
 import java.io.IOException;
 import java.util.Properties;

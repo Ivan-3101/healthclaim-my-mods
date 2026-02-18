@@ -1,4 +1,4 @@
-package com.DronaPay.frm.HealthClaim.generic.storage;
+package com.DronaPay.generic.storage;
 
 import java.io.InputStream;
 

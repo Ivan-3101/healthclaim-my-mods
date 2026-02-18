@@ -1,9 +1,9 @@
-package com.DronaPay.frm.HealthClaim.generic.delegates;
+package com.DronaPay.generic.delegates;
 
-import com.DronaPay.frm.HealthClaim.generic.services.ConfigurationService;
-import com.DronaPay.frm.HealthClaim.generic.services.DocumentProcessingService;
-import com.DronaPay.frm.HealthClaim.generic.storage.MinIOStorageProvider;
-import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
+import com.DronaPay.generic.services.ConfigurationService;
+import com.DronaPay.generic.services.DocumentProcessingService;
+import com.DronaPay.generic.storage.MinIOStorageProvider;
+import com.DronaPay.generic.storage.StorageProvider;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;

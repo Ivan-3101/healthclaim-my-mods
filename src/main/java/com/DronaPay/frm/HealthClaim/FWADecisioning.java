@@ -5,6 +5,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.UUID;
 
+import com.DronaPay.generic.utils.TenantPropertiesUtil;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;

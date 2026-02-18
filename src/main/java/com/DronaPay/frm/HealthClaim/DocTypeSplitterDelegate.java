@@ -1,8 +1,8 @@
 package com.DronaPay.frm.HealthClaim;
 
-import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
-import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
-import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
+import com.DronaPay.generic.services.AgentResultStorageService;
+import com.DronaPay.generic.services.ObjectStorageService;
+import com.DronaPay.generic.storage.StorageProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;

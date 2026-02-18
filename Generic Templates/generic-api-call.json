@@ -9,7 +9,7 @@
   "properties": [
     {
       "type": "Hidden",
-      "value": "com.DronaPay.frm.HealthClaim.generic.delegates.GenericApiCallDelegate",
+      "value": "com.DronaPay.generic.delegates.GenericApiCallDelegate",
       "binding": {
         "type": "property",
         "name": "camunda:class"

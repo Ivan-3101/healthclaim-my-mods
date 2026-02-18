@@ -1,9 +1,9 @@
-package com.DronaPay.frm.HealthClaim.generic.delegates;
+package com.DronaPay.generic.delegates;
 
-import com.DronaPay.frm.HealthClaim.TenantPropertiesUtil;
-import com.DronaPay.frm.HealthClaim.generic.services.AgentResultStorageService;
-import com.DronaPay.frm.HealthClaim.generic.services.ObjectStorageService;
-import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
+import com.DronaPay.generic.utils.TenantPropertiesUtil;
+import com.DronaPay.generic.services.AgentResultStorageService;
+import com.DronaPay.generic.services.ObjectStorageService;
+import com.DronaPay.generic.storage.StorageProvider;
 import com.jayway.jsonpath.Configuration; // Import Added
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.spi.json.JacksonJsonProvider; // Import Added

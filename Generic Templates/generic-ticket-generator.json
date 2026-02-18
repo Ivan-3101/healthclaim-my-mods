@@ -15,7 +15,7 @@
   "properties": [
     {
       "type": "Hidden",
-      "value": "com.DronaPay.frm.HealthClaim.generic.delegates.GenericTicketIdGenerator",
+      "value": "com.DronaPay.generic.delegates.GenericTicketIdGenerator",
       "binding": {
         "type": "property",
         "name": "camunda:class"

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0" xmlns:color="http://www.omg.org/spec/BPMN/non-normative/color/1.0" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_1xkdxhi" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.38.1" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.20.0">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0" xmlns:color="http://www.omg.org/spec/BPMN/non-normative/color/1.0" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_1xkdxhi" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.39.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.20.0">
   <bpmn:process id="HealthClaim" name="Health Claim" isExecutable="true">
     <bpmn:startEvent id="Event_1e3l95j" name="Create Ticket">
       <bpmn:outgoing>Flow_15rnuix</bpmn:outgoing>
@@ -93,33 +93,6 @@
     <bpmn:sequenceFlow id="Flow_1bnhbww" name="Approve" sourceRef="Gateway_0p3zjmg" targetRef="Activity_0yzeri4">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${Action4=="approve"}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sendTask id="Activity_1j0nx56" name="Request Info from Policy Holder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailTask">
-      <bpmn:extensionElements>
-        <camunda:field name="templateId">
-          <camunda:string>11</camunda:string>
-        </camunda:field>
-        <camunda:field name="recipientEmail">
-          <camunda:string>${sender_email}</camunda:string>
-        </camunda:field>
-        <camunda:field name="ccEmails">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-        <camunda:field name="bccEmails">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-        <camunda:field name="bodyParams">
-          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
-        </camunda:field>
-        <camunda:field name="enableAutoResponse">
-          <camunda:string>true</camunda:string>
-        </camunda:field>
-        <camunda:field name="autoResponseMessage">
-          <camunda:string>policyHolderResponse</camunda:string>
-        </camunda:field>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_0e0paeo</bpmn:incoming>
-      <bpmn:outgoing>Flow_0dw8jgw</bpmn:outgoing>
-    </bpmn:sendTask>
     <bpmn:sequenceFlow id="Flow_0e0paeo" sourceRef="Gateway_0p3zjmg" targetRef="Activity_1j0nx56">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${Action4=="reqinfo"}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
@@ -141,66 +114,12 @@
       <bpmn:incoming>Flow_0qaitho</bpmn:incoming>
     </bpmn:endEvent>
     <bpmn:sequenceFlow id="Flow_1mhzpf0" sourceRef="Activity_02zas1s" targetRef="Event_042633k" />
-    <bpmn:sendTask id="Activity_02zas1s" name="Send Reminder to Policy Holder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailTask">
-      <bpmn:extensionElements>
-        <camunda:field name="templateId">
-          <camunda:string>12</camunda:string>
-        </camunda:field>
-        <camunda:field name="recipientEmail">
-          <camunda:string>${sender_email}</camunda:string>
-        </camunda:field>
-        <camunda:field name="ccEmails">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-        <camunda:field name="bccEmails">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-        <camunda:field name="bodyParams">
-          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
-        </camunda:field>
-        <camunda:field name="enableAutoResponse">
-          <camunda:string>false</camunda:string>
-        </camunda:field>
-        <camunda:field name="autoResponseMessage">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_01d8u69</bpmn:incoming>
-      <bpmn:outgoing>Flow_1mhzpf0</bpmn:outgoing>
-    </bpmn:sendTask>
     <bpmn:boundaryEvent id="Event_0zodq4c" name="1 Day" attachedToRef="Activity_16lj75c">
       <bpmn:outgoing>Flow_1qmsn0b</bpmn:outgoing>
       <bpmn:timerEventDefinition id="TimerEventDefinition_0u3xvrk">
         <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">P1D</bpmn:timeDuration>
       </bpmn:timerEventDefinition>
     </bpmn:boundaryEvent>
-    <bpmn:sendTask id="Activity_1xoniv4" name="Missing info Rejection Email to Policy Holder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailTask">
-      <bpmn:extensionElements>
-        <camunda:field name="templateId">
-          <camunda:string>13</camunda:string>
-        </camunda:field>
-        <camunda:field name="recipientEmail">
-          <camunda:string>${sender_email}</camunda:string>
-        </camunda:field>
-        <camunda:field name="ccEmails">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-        <camunda:field name="bccEmails">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-        <camunda:field name="bodyParams">
-          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
-        </camunda:field>
-        <camunda:field name="enableAutoResponse">
-          <camunda:string>false</camunda:string>
-        </camunda:field>
-        <camunda:field name="autoResponseMessage">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_1qmsn0b</bpmn:incoming>
-      <bpmn:outgoing>Flow_0qaitho</bpmn:outgoing>
-    </bpmn:sendTask>
     <bpmn:sequenceFlow id="Flow_0qaitho" sourceRef="Activity_1xoniv4" targetRef="Event_042633k" />
     <bpmn:sequenceFlow id="Flow_1qmsn0b" sourceRef="Event_0zodq4c" targetRef="Activity_1xoniv4" />
     <bpmn:sequenceFlow id="Flow_039g65w" sourceRef="Activity_0yzeri4" targetRef="Activity_1ys761g" />
@@ -210,65 +129,9 @@
       <bpmn:outgoing>Flow_039g65w</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:sequenceFlow id="Flow_168aalw" sourceRef="Activity_1ys761g" targetRef="Event_1dn2bub" />
-    <bpmn:sendTask id="Activity_1ys761g" name="Intimate Claim Approval to Policy Holder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailTask">
-      <bpmn:extensionElements>
-        <camunda:field name="templateId">
-          <camunda:string>15</camunda:string>
-        </camunda:field>
-        <camunda:field name="recipientEmail">
-          <camunda:string>${sender_email}</camunda:string>
-        </camunda:field>
-        <camunda:field name="ccEmails">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-        <camunda:field name="bccEmails">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-        <camunda:field name="bodyParams">
-          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
-        </camunda:field>
-        <camunda:field name="enableAutoResponse">
-          <camunda:string>false</camunda:string>
-        </camunda:field>
-        <camunda:field name="autoResponseMessage">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_039g65w</bpmn:incoming>
-      <bpmn:outgoing>Flow_168aalw</bpmn:outgoing>
-    </bpmn:sendTask>
     <bpmn:sequenceFlow id="Flow_1in0ih4" name="Low Risk Score" sourceRef="Gateway_1k0f36m" targetRef="Activity_0yzeri4">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${RiskScore&lt;20}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sendTask id="Activity_16cm9bp" name="Send Rejection Email to Policy Holder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailTask">
-      <bpmn:extensionElements>
-        <camunda:field name="templateId">
-          <camunda:string>14</camunda:string>
-        </camunda:field>
-        <camunda:field name="recipientEmail">
-          <camunda:string>${sender_email}</camunda:string>
-        </camunda:field>
-        <camunda:field name="ccEmails">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-        <camunda:field name="bccEmails">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-        <camunda:field name="bodyParams">
-          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
-        </camunda:field>
-        <camunda:field name="enableAutoResponse">
-          <camunda:string>false</camunda:string>
-        </camunda:field>
-        <camunda:field name="autoResponseMessage">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_137z9il</bpmn:incoming>
-      <bpmn:incoming>Flow_0c2av7p</bpmn:incoming>
-      <bpmn:incoming>Flow_1b7zwic</bpmn:incoming>
-      <bpmn:outgoing>Flow_0j8gdpr</bpmn:outgoing>
-    </bpmn:sendTask>
     <bpmn:sequenceFlow id="Flow_0j8gdpr" sourceRef="Activity_16cm9bp" targetRef="Event_1dn2bub" />
     <bpmn:sequenceFlow id="Flow_137z9il" name="Reject" sourceRef="Gateway_0aphohc" targetRef="Activity_16cm9bp">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${Action2=="reject"}</bpmn:conditionExpression>
@@ -443,7 +306,7 @@
         <bpmn:incoming>Flow_0vzpcw3</bpmn:incoming>
       </bpmn:endEvent>
       <bpmn:sequenceFlow id="Flow_0vzpcw3" sourceRef="Identify_Forged_Documents" targetRef="Event_0oqarvk" />
-      <bpmn:serviceTask id="Identify_Forged_Documents" name="Identify forged documents" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+      <bpmn:serviceTask id="Identify_Forged_Documents" name="Identify forged documents" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.generic.delegates.GenericAgentDelegate">
         <bpmn:extensionElements>
           <camunda:field name="agentId">
             <camunda:string>forgeryagent</camunda:string>
@@ -490,7 +353,7 @@
         <bpmn:incoming>Flow_0llww76</bpmn:incoming>
       </bpmn:endEvent>
       <bpmn:sequenceFlow id="Flow_0llww76" sourceRef="Raw_OCR" targetRef="Event_1i3asb1" />
-      <bpmn:serviceTask id="Raw_OCR" name="Doing OCR on Documents" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+      <bpmn:serviceTask id="Raw_OCR" name="Doing OCR on Documents" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.generic.delegates.GenericAgentDelegate">
         <bpmn:extensionElements>
           <camunda:field name="agentId">
             <camunda:string>openaiVision</camunda:string>
@@ -543,7 +406,7 @@
         <bpmn:incoming>Flow_1thjhp7</bpmn:incoming>
       </bpmn:endEvent>
       <bpmn:sequenceFlow id="Flow_1thjhp7" sourceRef="Document_Classifier" targetRef="Event_0k3yxqs" />
-      <bpmn:serviceTask id="Document_Classifier" name="Doc Classifier" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+      <bpmn:serviceTask id="Document_Classifier" name="Doc Classifier" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.generic.delegates.GenericAgentDelegate">
         <bpmn:extensionElements>
           <camunda:field name="agentId">
             <camunda:string>Document_Classifier</camunda:string>
@@ -599,7 +462,7 @@
         <bpmn:incoming>Flow_0xnnumq</bpmn:incoming>
       </bpmn:endEvent>
       <bpmn:sequenceFlow id="Flow_0xnnumq" sourceRef="Raw_To_Structured_OCR" targetRef="Event_1pojsp1" />
-      <bpmn:serviceTask id="Raw_To_Structured_OCR" name="OCR to Static" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+      <bpmn:serviceTask id="Raw_To_Structured_OCR" name="OCR to Static" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.generic.delegates.GenericAgentDelegate">
         <bpmn:extensionElements>
           <camunda:field name="agentId">
             <camunda:string>ocrTostatic</camunda:string>
@@ -679,7 +542,14 @@
       <bpmn:incoming>Flow_1hfmdqo</bpmn:incoming>
       <bpmn:outgoing>Flow_0j2ifcv</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:serviceTask id="Generate_TicketID_and_Workflow_Name" name="Generate TicketID and Workflow Name" camunda:modelerTemplate="com.dronapay.generic.ticketgenerator" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericTicketIdGenerator">
+    <bpmn:sequenceFlow id="Flow_024y7gm" sourceRef="Verify_Master_Data" targetRef="Activity_17h17ae" />
+    <bpmn:sequenceFlow id="Flow_1446qaa" sourceRef="Activity_User_Verification" targetRef="Policy_Coherence" />
+    <bpmn:serviceTask id="Activity_04nhqma" name="FWA Decisioning" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FWADecisioning">
+      <bpmn:incoming>Flow_0xp9ktd</bpmn:incoming>
+      <bpmn:incoming>Flow_171ffw7</bpmn:incoming>
+      <bpmn:outgoing>Flow_0vxvqkn</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Generate_TicketID_and_Workflow_Name" name="Generate TicketID and Workflow Name" camunda:modelerTemplate="com.dronapay.generic.ticketgenerator" camunda:class="com.DronaPay.generic.delegates.GenericTicketIdGenerator">
       <bpmn:extensionElements>
         <camunda:field name="configKey">
           <camunda:expression>Generate TicketID and Workflow Name</camunda:expression>
@@ -688,7 +558,7 @@
       <bpmn:incoming>Flow_15rnuix</bpmn:incoming>
       <bpmn:outgoing>Flow_058ecar</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:serviceTask id="Verify_Master_Data" name="Verification of details from masters data" camunda:modelerTemplate="com.dronapay.generic.apicall" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericApiCallDelegate">
+    <bpmn:serviceTask id="Verify_Master_Data" name="Verification of details from masters data" camunda:modelerTemplate="com.dronapay.generic.apicall" camunda:class="com.DronaPay.generic.delegates.GenericApiCallDelegate">
       <bpmn:extensionElements>
         <camunda:field name="url">
           <camunda:string>${appproperties.springapi.url}/accounts/${processVariable.policy_id}</camunda:string>
@@ -709,95 +579,7 @@
       <bpmn:incoming>Flow_058ecar</bpmn:incoming>
       <bpmn:outgoing>Flow_024y7gm</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:sendTask id="Activity_RequestFWAInfo" name="Request Additional Info for FWA" camunda:modelerTemplate="com.dronapay.generic.email" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailTask">
-      <bpmn:extensionElements>
-        <camunda:field name="templateId">
-          <camunda:string>16</camunda:string>
-        </camunda:field>
-        <camunda:field name="recipientEmail">
-          <camunda:string>${sender_email}</camunda:string>
-        </camunda:field>
-        <camunda:field name="ccEmails">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-        <camunda:field name="bccEmails">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-        <camunda:field name="bodyParams">
-          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
-        </camunda:field>
-        <camunda:field name="enableAutoResponse">
-          <camunda:string>true</camunda:string>
-        </camunda:field>
-        <camunda:field name="autoResponseMessage">
-          <camunda:string>fwaInfoResponse</camunda:string>
-        </camunda:field>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_1ljexqk</bpmn:incoming>
-      <bpmn:outgoing>Flow_0xebx2i</bpmn:outgoing>
-    </bpmn:sendTask>
-    <bpmn:sendTask id="Activity_1jck5w8" name="Missing info Rejection Email to Policy Holder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailTask">
-      <bpmn:extensionElements>
-        <camunda:field name="templateId">
-          <camunda:string>18</camunda:string>
-        </camunda:field>
-        <camunda:field name="recipientEmail">
-          <camunda:string>${sender_email}</camunda:string>
-        </camunda:field>
-        <camunda:field name="ccEmails">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-        <camunda:field name="bccEmails">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-        <camunda:field name="bodyParams">
-          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
-        </camunda:field>
-        <camunda:field name="enableAutoResponse">
-          <camunda:string>false</camunda:string>
-        </camunda:field>
-        <camunda:field name="autoResponseMessage">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_1d0tsww</bpmn:incoming>
-      <bpmn:outgoing>Flow_0kpfbwi</bpmn:outgoing>
-    </bpmn:sendTask>
-    <bpmn:sendTask id="Activity_0ytppf9" name="Send FWA Reminder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailTask">
-      <bpmn:extensionElements>
-        <camunda:field name="templateId">
-          <camunda:string>17</camunda:string>
-        </camunda:field>
-        <camunda:field name="recipientEmail">
-          <camunda:string>${sender_email}</camunda:string>
-        </camunda:field>
-        <camunda:field name="ccEmails">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-        <camunda:field name="bccEmails">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-        <camunda:field name="bodyParams">
-          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
-        </camunda:field>
-        <camunda:field name="enableAutoResponse">
-          <camunda:string>false</camunda:string>
-        </camunda:field>
-        <camunda:field name="autoResponseMessage">
-          <camunda:string>NA</camunda:string>
-        </camunda:field>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_0k70ifz</bpmn:incoming>
-      <bpmn:outgoing>Flow_1m4191f</bpmn:outgoing>
-    </bpmn:sendTask>
-    <bpmn:sequenceFlow id="Flow_024y7gm" sourceRef="Verify_Master_Data" targetRef="Activity_17h17ae" />
-    <bpmn:sequenceFlow id="Flow_1446qaa" sourceRef="Activity_User_Verification" targetRef="Policy_Coherence" />
-    <bpmn:serviceTask id="Activity_04nhqma" name="FWA Decisioning" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FWADecisioning">
-      <bpmn:incoming>Flow_0xp9ktd</bpmn:incoming>
-      <bpmn:incoming>Flow_171ffw7</bpmn:incoming>
-      <bpmn:outgoing>Flow_0vxvqkn</bpmn:outgoing>
-    </bpmn:serviceTask>
-    <bpmn:serviceTask id="Submission_Validator" name="Submission Validator" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+    <bpmn:serviceTask id="Submission_Validator" name="Submission Validator" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.generic.delegates.GenericAgentDelegate">
       <bpmn:extensionElements>
         <camunda:field name="agentId">
           <camunda:string>Submission_Validator</camunda:string>
@@ -833,7 +615,7 @@
       <bpmn:incoming>Flow_0oa3vkg</bpmn:incoming>
       <bpmn:outgoing>Flow_0e8mxy3</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:serviceTask id="Submission_Consistency_Analyzer" name="Submission Consistency Analyzer" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+    <bpmn:serviceTask id="Submission_Consistency_Analyzer" name="Submission Consistency Analyzer" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.generic.delegates.GenericAgentDelegate">
       <bpmn:extensionElements>
         <camunda:field name="agentId">
           <camunda:string>FHIR_Analyser</camunda:string>
@@ -869,7 +651,7 @@
       <bpmn:incoming>Flow_0e8mxy3</bpmn:incoming>
       <bpmn:outgoing>Flow_1y4cq5x</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:serviceTask id="UI_Displayer_Agent" name="Activity_UIDisplayer" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate">
+    <bpmn:serviceTask id="UI_Displayer_Agent" name="Activity_UIDisplayer" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.generic.delegates.GenericAgentDelegate">
       <bpmn:extensionElements>
         <camunda:field name="agentId">
           <camunda:string>UI_Displayer</camunda:string>
@@ -905,6 +687,224 @@
       <bpmn:incoming>Flow_1y4cq5x</bpmn:incoming>
       <bpmn:outgoing>Flow_0w29skj</bpmn:outgoing>
     </bpmn:serviceTask>
+    <bpmn:sendTask id="Activity_16cm9bp" name="Send Rejection Email to Policy Holder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:class="com.DronaPay.generic.delegates.GenericEmailTask">
+      <bpmn:extensionElements>
+        <camunda:field name="templateId">
+          <camunda:string>14</camunda:string>
+        </camunda:field>
+        <camunda:field name="recipientEmail">
+          <camunda:string>${sender_email}</camunda:string>
+        </camunda:field>
+        <camunda:field name="ccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bodyParams">
+          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
+        </camunda:field>
+        <camunda:field name="enableAutoResponse">
+          <camunda:string>false</camunda:string>
+        </camunda:field>
+        <camunda:field name="autoResponseMessage">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_137z9il</bpmn:incoming>
+      <bpmn:incoming>Flow_0c2av7p</bpmn:incoming>
+      <bpmn:incoming>Flow_1b7zwic</bpmn:incoming>
+      <bpmn:outgoing>Flow_0j8gdpr</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sendTask id="Activity_1ys761g" name="Intimate Claim Approval to Policy Holder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:class="com.DronaPay.generic.delegates.GenericEmailTask">
+      <bpmn:extensionElements>
+        <camunda:field name="templateId">
+          <camunda:string>15</camunda:string>
+        </camunda:field>
+        <camunda:field name="recipientEmail">
+          <camunda:string>${sender_email}</camunda:string>
+        </camunda:field>
+        <camunda:field name="ccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bodyParams">
+          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
+        </camunda:field>
+        <camunda:field name="enableAutoResponse">
+          <camunda:string>false</camunda:string>
+        </camunda:field>
+        <camunda:field name="autoResponseMessage">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_039g65w</bpmn:incoming>
+      <bpmn:outgoing>Flow_168aalw</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sendTask id="Activity_1j0nx56" name="Request Info from Policy Holder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:class="com.DronaPay.generic.delegates.GenericEmailTask">
+      <bpmn:extensionElements>
+        <camunda:field name="templateId">
+          <camunda:string>11</camunda:string>
+        </camunda:field>
+        <camunda:field name="recipientEmail">
+          <camunda:string>${sender_email}</camunda:string>
+        </camunda:field>
+        <camunda:field name="ccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bodyParams">
+          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
+        </camunda:field>
+        <camunda:field name="enableAutoResponse">
+          <camunda:string>true</camunda:string>
+        </camunda:field>
+        <camunda:field name="autoResponseMessage">
+          <camunda:string>policyHolderResponse</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0e0paeo</bpmn:incoming>
+      <bpmn:outgoing>Flow_0dw8jgw</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sendTask id="Activity_1xoniv4" name="Missing info Rejection Email to Policy Holder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:class="com.DronaPay.generic.delegates.GenericEmailTask">
+      <bpmn:extensionElements>
+        <camunda:field name="templateId">
+          <camunda:string>13</camunda:string>
+        </camunda:field>
+        <camunda:field name="recipientEmail">
+          <camunda:string>${sender_email}</camunda:string>
+        </camunda:field>
+        <camunda:field name="ccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bodyParams">
+          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
+        </camunda:field>
+        <camunda:field name="enableAutoResponse">
+          <camunda:string>false</camunda:string>
+        </camunda:field>
+        <camunda:field name="autoResponseMessage">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_1qmsn0b</bpmn:incoming>
+      <bpmn:outgoing>Flow_0qaitho</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sendTask id="Activity_02zas1s" name="Send Reminder to Policy Holder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:class="com.DronaPay.generic.delegates.GenericEmailTask">
+      <bpmn:extensionElements>
+        <camunda:field name="templateId">
+          <camunda:string>12</camunda:string>
+        </camunda:field>
+        <camunda:field name="recipientEmail">
+          <camunda:string>${sender_email}</camunda:string>
+        </camunda:field>
+        <camunda:field name="ccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bodyParams">
+          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
+        </camunda:field>
+        <camunda:field name="enableAutoResponse">
+          <camunda:string>false</camunda:string>
+        </camunda:field>
+        <camunda:field name="autoResponseMessage">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_01d8u69</bpmn:incoming>
+      <bpmn:outgoing>Flow_1mhzpf0</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sendTask id="Activity_RequestFWAInfo" name="Request Additional Info for FWA" camunda:modelerTemplate="com.dronapay.generic.email" camunda:class="com.DronaPay.generic.delegates.GenericEmailTask">
+      <bpmn:extensionElements>
+        <camunda:field name="templateId">
+          <camunda:string>16</camunda:string>
+        </camunda:field>
+        <camunda:field name="recipientEmail">
+          <camunda:string>${sender_email}</camunda:string>
+        </camunda:field>
+        <camunda:field name="ccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bodyParams">
+          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
+        </camunda:field>
+        <camunda:field name="enableAutoResponse">
+          <camunda:string>true</camunda:string>
+        </camunda:field>
+        <camunda:field name="autoResponseMessage">
+          <camunda:string>fwaInfoResponse</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_1ljexqk</bpmn:incoming>
+      <bpmn:outgoing>Flow_0xebx2i</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sendTask id="Activity_1jck5w8" name="Missing info Rejection Email to Policy Holder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:class="com.DronaPay.generic.delegates.GenericEmailTask">
+      <bpmn:extensionElements>
+        <camunda:field name="templateId">
+          <camunda:string>18</camunda:string>
+        </camunda:field>
+        <camunda:field name="recipientEmail">
+          <camunda:string>${sender_email}</camunda:string>
+        </camunda:field>
+        <camunda:field name="ccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bodyParams">
+          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
+        </camunda:field>
+        <camunda:field name="enableAutoResponse">
+          <camunda:string>false</camunda:string>
+        </camunda:field>
+        <camunda:field name="autoResponseMessage">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_1d0tsww</bpmn:incoming>
+      <bpmn:outgoing>Flow_0kpfbwi</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sendTask id="Activity_0ytppf9" name="Send FWA Reminder" camunda:modelerTemplate="com.dronapay.generic.email" camunda:class="com.DronaPay.generic.delegates.GenericEmailTask">
+      <bpmn:extensionElements>
+        <camunda:field name="templateId">
+          <camunda:string>17</camunda:string>
+        </camunda:field>
+        <camunda:field name="recipientEmail">
+          <camunda:string>${sender_email}</camunda:string>
+        </camunda:field>
+        <camunda:field name="ccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bccEmails">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="bodyParams">
+          <camunda:string>{"name": "${holder_name}", "policyId": "${policy_id}"}</camunda:string>
+        </camunda:field>
+        <camunda:field name="enableAutoResponse">
+          <camunda:string>false</camunda:string>
+        </camunda:field>
+        <camunda:field name="autoResponseMessage">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0k70ifz</bpmn:incoming>
+      <bpmn:outgoing>Flow_1m4191f</bpmn:outgoing>
+    </bpmn:sendTask>
   </bpmn:process>
   <bpmn:error id="Error_1brcit7" name="forgeddoc" />
   <bpmn:message id="Message_3r951pg" name="policyHolderResponse" />
@@ -948,10 +948,6 @@
       <bpmndi:BPMNShape id="Gateway_0p3zjmg_di" bpmnElement="Gateway_0p3zjmg" isMarkerVisible="true" bioc:stroke="#6b3c00" bioc:fill="#ffe0b2" color:background-color="#ffe0b2" color:border-color="#6b3c00">
         <dc:Bounds x="5595" y="815" width="50" height="50" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0lkgdzc_di" bpmnElement="Activity_1j0nx56">
-        <dc:Bounds x="5570" y="500" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_0783jje_di" bpmnElement="Activity_16lj75c">
         <dc:Bounds x="5260" y="500" width="100" height="80" />
         <bpmndi:BPMNLabel />
@@ -959,21 +955,8 @@
       <bpmndi:BPMNShape id="Event_042633k_di" bpmnElement="Event_042633k">
         <dc:Bounds x="5092" y="332" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1f88d96_di" bpmnElement="Activity_02zas1s">
-        <dc:Bounds x="5060" y="500" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_0l2uywj" bpmnElement="Activity_1xoniv4">
-        <dc:Bounds x="5260" y="310" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_1qqtykl_di" bpmnElement="Activity_0yzeri4">
         <dc:Bounds x="5880" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1rzc3zp_di" bpmnElement="Activity_1ys761g" bioc:stroke="#205022" bioc:fill="#c8e6c9" color:background-color="#c8e6c9" color:border-color="#205022">
-        <dc:Bounds x="6110" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0odh4qu_di" bpmnElement="Activity_16cm9bp" bioc:stroke="#831311" bioc:fill="#ffcdd2" color:background-color="#ffcdd2" color:border-color="#831311">
-        <dc:Bounds x="6110" y="500" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_0znz3uw" bpmnElement="Activity_0mp65dm" bioc:stroke="#831311" bioc:fill="#ffcdd2" color:background-color="#ffcdd2" color:border-color="#831311">
         <dc:Bounds x="4770" y="600" width="100" height="80" />
@@ -1006,6 +989,45 @@
         <dc:Bounds x="4180" y="500" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0nzvhik_di" bpmnElement="Generate_TicketID_and_Workflow_Name">
+        <dc:Bounds x="290" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0nxltty_di" bpmnElement="Verify_Master_Data">
+        <dc:Bounds x="470" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0er9t1p_di" bpmnElement="Submission_Validator" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+        <dc:Bounds x="2670" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0g9hrp1_di" bpmnElement="Submission_Consistency_Analyzer" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+        <dc:Bounds x="2840" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1tqxrsz_di" bpmnElement="UI_Displayer_Agent" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+        <dc:Bounds x="3000" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0y6wcwl_di" bpmnElement="Activity_16cm9bp" bioc:stroke="#831311" bioc:fill="#ffcdd2" color:background-color="#ffcdd2" color:border-color="#831311">
+        <dc:Bounds x="6110" y="500" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0fg8wxl_di" bpmnElement="Activity_1ys761g" bioc:stroke="#205022" bioc:fill="#c8e6c9" color:background-color="#c8e6c9" color:border-color="#205022">
+        <dc:Bounds x="6110" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1mombif_di" bpmnElement="Activity_1j0nx56">
+        <dc:Bounds x="5570" y="500" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0x4v41w_di" bpmnElement="Activity_1xoniv4">
+        <dc:Bounds x="5260" y="310" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_04zehpf_di" bpmnElement="Activity_02zas1s">
+        <dc:Bounds x="5060" y="500" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1u6iano_di" bpmnElement="Activity_RequestFWAInfo">
+        <dc:Bounds x="4360" y="500" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_07qqjhh_di" bpmnElement="Activity_1jck5w8">
+        <dc:Bounds x="4180" y="310" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1ntjw80_di" bpmnElement="Activity_0ytppf9">
+        <dc:Bounds x="3980" y="500" width="100" height="80" />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_17h17ae_di" bpmnElement="Activity_17h17ae" isExpanded="true">
         <dc:Bounds x="670" y="740" width="330" height="200" />
       </bpmndi:BPMNShape>
@@ -1015,7 +1037,7 @@
       <bpmndi:BPMNShape id="Event_0oqarvk_di" bpmnElement="Event_0oqarvk">
         <dc:Bounds x="932" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0xgwqm9_di" bpmnElement="Identify_Forged_Documents" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+      <bpmndi:BPMNShape id="Activity_00t8otu_di" bpmnElement="Identify_Forged_Documents" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="780" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_1c5c7cj_di" bpmnElement="Flow_1c5c7cj">
@@ -1035,7 +1057,7 @@
       <bpmndi:BPMNShape id="Event_1i3asb1_di" bpmnElement="Event_1i3asb1">
         <dc:Bounds x="1922" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_02wtrqj_di" bpmnElement="Raw_OCR" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+      <bpmndi:BPMNShape id="Activity_166lttu_di" bpmnElement="Raw_OCR" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="1760" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_0we714j_di" bpmnElement="Flow_0we714j">
@@ -1055,7 +1077,7 @@
       <bpmndi:BPMNShape id="Event_0k3yxqs_di" bpmnElement="Event_0k3yxqs">
         <dc:Bounds x="1372" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1cnvvsu_di" bpmnElement="Document_Classifier" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+      <bpmndi:BPMNShape id="Activity_0jjxosp_di" bpmnElement="Document_Classifier" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="1210" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_1p7jmc8_di" bpmnElement="Flow_1p7jmc8">
@@ -1079,7 +1101,7 @@
       <bpmndi:BPMNShape id="Event_1pojsp1_di" bpmnElement="Event_1pojsp1">
         <dc:Bounds x="2372" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0de1vds_di" bpmnElement="Raw_To_Structured_OCR" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+      <bpmndi:BPMNShape id="Activity_19xk1rp_di" bpmnElement="Raw_To_Structured_OCR" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="2210" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_084cttl_di" bpmnElement="Flow_084cttl">
@@ -1104,33 +1126,8 @@
         <dc:Bounds x="3670" y="800" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1s3pyve_di" bpmnElement="Generate_TicketID_and_Workflow_Name">
-        <dc:Bounds x="290" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_19n0d2o_di" bpmnElement="Verify_Master_Data">
-        <dc:Bounds x="470" y="800" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1p2ko92_di" bpmnElement="Activity_RequestFWAInfo">
-        <dc:Bounds x="4360" y="500" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1a39hm6_di" bpmnElement="Activity_1jck5w8">
-        <dc:Bounds x="4180" y="310" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_00pbdht_di" bpmnElement="Activity_0ytppf9">
-        <dc:Bounds x="3980" y="500" width="100" height="80" />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_0txw8dc_di" bpmnElement="Activity_04nhqma">
         <dc:Bounds x="3980" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1yqs7d6_di" bpmnElement="Submission_Validator" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
-        <dc:Bounds x="2670" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_055b7hd_di" bpmnElement="Submission_Consistency_Analyzer" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
-        <dc:Bounds x="2840" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0iaprh1_di" bpmnElement="UI_Displayer_Agent" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
-        <dc:Bounds x="3000" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_1me4x9n" bpmnElement="Event_100gl67">
         <dc:Bounds x="4162" y="522" width="36" height="36" />
@@ -1255,7 +1252,7 @@
         <di:waypoint x="6160" y="100" />
         <di:waypoint x="6160" y="500" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="4991" y="82" width="32" height="14" />
+          <dc:Bounds x="4991" y="82" width="33" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0c2av7p_di" bpmnElement="Flow_0c2av7p" bioc:stroke="#831311" color:border-color="#831311">
@@ -1264,7 +1261,7 @@
         <di:waypoint x="5690" y="540" />
         <di:waypoint x="6110" y="540" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="5771" y="523" width="32" height="14" />
+          <dc:Bounds x="5771" y="523" width="33" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0q4ms3r_di" bpmnElement="Flow_0q4ms3r">
@@ -1354,7 +1351,7 @@
         <di:waypoint x="6160" y="160" />
         <di:waypoint x="6160" y="500" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="4514" y="283" width="32" height="14" />
+          <dc:Bounds x="4514" y="283" width="33" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0974uhc_di" bpmnElement="Flow_0974uhc">

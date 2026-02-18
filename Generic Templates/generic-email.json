@@ -8,7 +8,7 @@
   "properties": [
     {
       "type": "Hidden",
-      "value": "com.DronaPay.frm.HealthClaim.generic.delegates.GenericEmailTask",
+      "value": "com.DronaPay.generic.delegates.GenericEmailTask",
       "binding": {
         "type": "property",
         "name": "camunda:class"

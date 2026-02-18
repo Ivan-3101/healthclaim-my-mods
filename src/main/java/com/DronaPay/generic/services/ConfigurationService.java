@@ -1,4 +1,4 @@
-package com.DronaPay.frm.HealthClaim.generic.services;
+package com.DronaPay.generic.services;
 
 import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;

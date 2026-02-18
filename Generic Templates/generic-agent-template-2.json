@@ -8,7 +8,7 @@
   "properties": [
     {
       "type": "Hidden",
-      "value": "com.DronaPay.frm.HealthClaim.generic.delegates.GenericAgentDelegate",
+      "value": "com.DronaPay.generic.delegates.GenericAgentDelegate",
       "binding": {
         "type": "property",
         "name": "camunda:class"

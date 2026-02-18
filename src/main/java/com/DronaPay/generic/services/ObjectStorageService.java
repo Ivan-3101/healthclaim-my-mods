@@ -1,7 +1,7 @@
-package com.DronaPay.frm.HealthClaim.generic.services;
+package com.DronaPay.generic.services;
 
-import com.DronaPay.frm.HealthClaim.generic.storage.MinIOStorageProvider;
-import com.DronaPay.frm.HealthClaim.generic.storage.StorageProvider;
+import com.DronaPay.generic.storage.MinIOStorageProvider;
+import com.DronaPay.generic.storage.StorageProvider;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashMap;
