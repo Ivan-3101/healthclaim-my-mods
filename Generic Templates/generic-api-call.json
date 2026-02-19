@@ -70,7 +70,7 @@
     },
     {
       "label": "Request Body",
-      "description": "JSON body for POST/PUT. Enter NA for GET requests.",
+      "description": "JSON body for POST/PUT. Enter NA for GET requests or when using MinIO Body Path below.",
       "type": "Text",
       "value": "NA",
       "binding": {
@@ -79,8 +79,28 @@
       }
     },
     {
+      "label": "MinIO Body Path",
+      "description": "Process variable holding the MinIO path of a JSON file to use as request body (e.g. ${attribsMinioPath}). Overrides Request Body above. Enter NA to skip.",
+      "type": "String",
+      "value": "NA",
+      "binding": {
+        "type": "camunda:field",
+        "name": "minioBodyPath"
+      }
+    },
+    {
+      "label": "MinIO Body JsonPath",
+      "description": "JsonPath to extract from the MinIO file. Use $ for the entire file, or a specific path e.g. $.attribs.hni",
+      "type": "String",
+      "value": "$",
+      "binding": {
+        "type": "camunda:field",
+        "name": "minioBodyJsonPath"
+      }
+    },
+    {
       "label": "Output Variable Name",
-      "description": "Name of the process variable to store the full JSON response. Also used to derive the MinIO path variable: {name}_minioPath",
+      "description": "Name of the process variable to store the full JSON response. Also derives {name}_minioPath.",
       "type": "String",
       "value": "apiResponse",
       "binding": {
@@ -90,7 +110,7 @@
     },
     {
       "label": "Output Mapping (JSON)",
-      "description": "Extract specific JsonPath values from the response and store as process variables. Example: {\"policyFound\": \"$.policyFound\", \"holderName\": \"$.name\"}. Enter {} to skip.",
+      "description": "Extract specific JsonPath values from the response and store as process variables. Example: {\"policyFound\": \"$.verified\", \"holderName\": \"$.accountName\"}. Enter {} to skip.",
       "type": "Text",
       "value": "{}",
       "binding": {

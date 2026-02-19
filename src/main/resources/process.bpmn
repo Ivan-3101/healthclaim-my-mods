@@ -915,21 +915,20 @@
         <camunda:field name="body">
           <camunda:string>NA</camunda:string>
         </camunda:field>
+        <camunda:field name="minioBodyPath">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="minioBodyJsonPath">
+          <camunda:string>$</camunda:string>
+        </camunda:field>
         <camunda:field name="outputVar">
           <camunda:string>verifyResponse</camunda:string>
         </camunda:field>
         <camunda:field name="outputMapping">
-          <camunda:string>{
-"policyFound": "$.verified", 
-"holderName": "$.accountName", 
-"policyId": "$.externalId", 
-"amt_in_policy":"$.attribs.amt",
-"attribs_plan":"$.attribs.plan"
-}</camunda:string>
+          <camunda:string>{"policyFound": "$.verified", "holderName": "$.accountName", "policyId": "$.externalId", "amt_in_policy": "$.attribs.amt"}</camunda:string>
         </camunda:field>
         <camunda:field name="minioExtract">
-          <camunda:string>[{"sourceJsonPath": "$.attribs", 
-"targetPath": "1/${workflowKey}/${TicketID}/Verify_Master_Data_EXTRA/attribs.json", "targetVarName": "attribsMinioPath"}]</camunda:string>
+          <camunda:string>[{"sourceJsonPath": "$.attribs", "targetPath": "1/${workflowKey}/${TicketID}/Verify_Master_Data_EXTRA/attribs.json", "targetVarName": "attribsMinioPath"}]</camunda:string>
         </camunda:field>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_058ecar</bpmn:incoming>
@@ -1019,7 +1018,7 @@
         <dc:Bounds x="4180" y="500" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1pei1oi_di" bpmnElement="Verify_Master_Data">
+      <bpmndi:BPMNShape id="Activity_1f2lat8_di" bpmnElement="Verify_Master_Data">
         <dc:Bounds x="470" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_17h17ae_di" bpmnElement="Activity_17h17ae" isExpanded="true">

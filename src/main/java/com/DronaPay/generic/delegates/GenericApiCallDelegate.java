@@ -33,14 +33,16 @@ import java.util.regex.Pattern;
 public class GenericApiCallDelegate implements JavaDelegate {
 
     // INPUTS (Injected from the Camunda Element Template)
-    private Expression baseUrl;       // Dropdown key that maps to a property prefix (e.g., "springapi" -> "springapi.url")
-    private Expression route;         // Specific API route, supports process variables (e.g., "/accounts/${processVariable.policy_id}")
-    private Expression authType;      // Authentication method (e.g., "xApiKey" -> reads "springapi.api.key" from properties)
-    private Expression method;        // HTTP Method (e.g., "GET", "POST")
-    private Expression body;          // JSON Payload for POST/PUT requests. Use "NA" as placeholder when no body is needed.
-    private Expression outputVar;     // Variable name to store the full response. Also derives {outputVar}_minioPath.
-    private Expression outputMapping; // 3d: JSON Object - extract JsonPath values from response → process variables
-    private Expression minioExtract;  // 3c: JSON Array - extract JsonPath values from response → new MinIO files
+    private Expression baseUrl;          // Dropdown key → property prefix (e.g. "springapi" → "springapi.url")
+    private Expression route;            // API route, supports ${processVariable.x} (e.g. "/accounts/${processVariable.policy_id}")
+    private Expression authType;         // Auth method (e.g. "xApiKey")
+    private Expression method;           // HTTP Method (GET/POST/PUT/DELETE)
+    private Expression body;             // Direct JSON body for POST/PUT. Use "NA" when not needed or when using minioBodyPath.
+    private Expression minioBodyPath;    // Process variable holding a MinIO path to use as request body. Overrides body. "NA" to skip.
+    private Expression minioBodyJsonPath;// JsonPath to extract from the MinIO file. "$" = entire file.
+    private Expression outputVar;        // Process variable name for full response. Also derives {outputVar}_minioPath.
+    private Expression outputMapping;    // 3d: JSON Object — extract JsonPath values from response → process variables
+    private Expression minioExtract;     // 3c: JSON Array — extract JsonPath values from response → new MinIO files
 
     @Override
     public void execute(DelegateExecution execution) throws Exception {
@@ -56,7 +58,7 @@ public class GenericApiCallDelegate implements JavaDelegate {
 
         // 2. READ INPUTS
         if (baseUrl == null || route == null) {
-            throw new BpmnError("CONFIG_ERROR", "Missing required fields: 'baseUrl' and 'route'. Ensure the BPMN task uses the correct template.");
+            throw new BpmnError("CONFIG_ERROR", "Missing required fields: 'baseUrl' and 'route'.");
         }
 
         String baseUrlKey = (String) baseUrl.getValue(execution);
@@ -65,10 +67,56 @@ public class GenericApiCallDelegate implements JavaDelegate {
         String reqMethod  = method != null ? (String) method.getValue(execution) : "GET";
         String targetVar  = outputVar != null ? (String) outputVar.getValue(execution) : "apiResponse";
 
-        String reqBody = body != null ? (String) body.getValue(execution) : "NA";
-        if ("NA".equalsIgnoreCase(reqBody)) reqBody = "";
+        // 3. RESOLVE REQUEST BODY
+        // Priority: minioBodyPath (if not NA) → body field
+        String finalBody = "";
+        String rawMinioBodyPath = minioBodyPath != null ? (String) minioBodyPath.getValue(execution) : "NA";
 
-        // 3. CONSTRUCT URL
+        if (!"NA".equalsIgnoreCase(rawMinioBodyPath.trim())) {
+            // Resolve placeholder in the path variable name (e.g. ${attribsMinioPath} → actual path string)
+            String resolvedMinioBodyPath = resolvePlaceholders(rawMinioBodyPath, execution, props);
+            String jsonPathExpr = minioBodyJsonPath != null ? (String) minioBodyJsonPath.getValue(execution) : "$";
+
+            log.info("Using MinIO file as request body. Path: {}, JsonPath: {}", resolvedMinioBodyPath, jsonPathExpr);
+
+            try {
+                StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+                byte[] fileBytes = storage.downloadDocument(resolvedMinioBodyPath).readAllBytes();
+                String fileContent = new String(fileBytes, StandardCharsets.UTF_8);
+
+                if ("$".equals(jsonPathExpr.trim())) {
+                    // Entire file as body
+                    finalBody = fileContent;
+                } else {
+                    // Extract specific JsonPath from file
+                    Configuration jacksonConfig = Configuration.builder()
+                            .jsonProvider(new JacksonJsonProvider())
+                            .mappingProvider(new JacksonMappingProvider())
+                            .build();
+                    Object extracted = JsonPath.using(jacksonConfig).parse(fileContent).read(jsonPathExpr);
+
+                    if (extracted instanceof Map) {
+                        finalBody = new JSONObject((Map<?, ?>) extracted).toString();
+                    } else if (extracted instanceof List) {
+                        finalBody = new JSONArray((List<?>) extracted).toString();
+                    } else {
+                        finalBody = new JSONObject().put("value", extracted).toString();
+                    }
+                }
+                log.info("MinIO body resolved ({} bytes)", finalBody.length());
+            } catch (Exception e) {
+                log.error("Failed to load request body from MinIO path '{}': {}", resolvedMinioBodyPath, e.getMessage());
+                throw new BpmnError("FILE_ERROR", "Could not load request body from MinIO: " + resolvedMinioBodyPath);
+            }
+        } else {
+            // Use direct body field
+            String reqBody = body != null ? (String) body.getValue(execution) : "NA";
+            if (!"NA".equalsIgnoreCase(reqBody)) {
+                finalBody = resolvePlaceholders(reqBody, execution, props);
+            }
+        }
+
+        // 4. CONSTRUCT URL
         String resolvedBase = props.getProperty(baseUrlKey + ".url");
         if (resolvedBase == null) {
             throw new BpmnError("CONFIG_ERROR", "Property not found: " + baseUrlKey + ".url");
@@ -79,16 +127,14 @@ public class GenericApiCallDelegate implements JavaDelegate {
         String resolvedRoute = resolvePlaceholders(routePath, execution, props);
         if (!resolvedRoute.startsWith("/")) resolvedRoute = "/" + resolvedRoute;
 
-        String finalUrl  = resolvedBase + resolvedRoute;
-        String finalBody = resolvePlaceholders(reqBody, execution, props);
-
+        String finalUrl = resolvedBase + resolvedRoute;
         log.info("Making {} request to: {}", reqMethod, finalUrl);
 
-        // 4. EXECUTE HTTP REQUEST
+        // 5. EXECUTE HTTP REQUEST
         try (CloseableHttpClient client = HttpClients.createDefault()) {
             HttpRequestBase request = createRequest(reqMethod, finalUrl, finalBody);
 
-            // 5. AUTHENTICATION
+            // 6. AUTHENTICATION
             if ("xApiKey".equalsIgnoreCase(authMethod)) {
                 String apiKey = props.getProperty(baseUrlKey + ".api.key");
                 if (apiKey == null) {
@@ -105,13 +151,13 @@ public class GenericApiCallDelegate implements JavaDelegate {
 
                 log.info("API Response Status: {}", statusCode);
 
-                // 6. FAIL LOGIC
+                // 7. FAIL LOGIC
                 if (statusCode != 200) {
                     log.error("API Call Failed. Status: {}, Body: {}", statusCode, responseBody);
                     throw new BpmnError("API_ERROR", "API Call failed with status code: " + statusCode);
                 }
 
-                // 7. STORE FULL RESPONSE AS PROCESS VARIABLE (always happens)
+                // 8. STORE FULL RESPONSE AS PROCESS VARIABLE (always happens)
                 execution.setVariable(targetVar + "_statusCode", statusCode);
                 try {
                     ObjectValue respJson = Variables.objectValue(responseBody)
@@ -121,10 +167,9 @@ public class GenericApiCallDelegate implements JavaDelegate {
                     execution.setVariable(targetVar, responseBody);
                 }
 
-                // 8. STORE FULL RESPONSE IN MINIO (3b - always happens)
+                // 9. STORE FULL RESPONSE IN MINIO (3b - always happens)
                 // Path: {tenantId}/{workflowKey}/{ticketId}/{stageName}/{outputVar}.json
                 // Sets: {outputVar}_minioPath
-                String minioPath;
                 try {
                     String ticketId = execution.getVariable("TicketID") != null
                             ? String.valueOf(execution.getVariable("TicketID"))
@@ -132,7 +177,7 @@ public class GenericApiCallDelegate implements JavaDelegate {
                     String workflowKey = execution.getProcessDefinitionId().split(":")[0];
                     String stageName = execution.getCurrentActivityId();
 
-                    minioPath = tenantId + "/" + workflowKey + "/" + ticketId + "/" + stageName + "/" + targetVar + ".json";
+                    String minioPath = tenantId + "/" + workflowKey + "/" + ticketId + "/" + stageName + "/" + targetVar + ".json";
 
                     StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
                     byte[] bytes = responseBody.getBytes(StandardCharsets.UTF_8);
@@ -145,13 +190,13 @@ public class GenericApiCallDelegate implements JavaDelegate {
                     throw new BpmnError("STORAGE_ERROR", "Failed to store API response to MinIO: " + e.getMessage());
                 }
 
-                // 9. OUTPUT MAPPING (3d) - Extract JsonPath values from response → process variables
-                // Example: {"policyFound": "$.policyFound", "holderName": "$.name"}
+                // 10. OUTPUT MAPPING (3d) - Extract JsonPath values from response → process variables
+                // Example: {"policyFound": "$.verified", "holderName": "$.accountName"}
                 String outputMappingStr = (outputMapping != null) ? (String) outputMapping.getValue(execution) : "{}";
                 mapOutputs(responseBody, outputMappingStr, execution);
 
-                // 10. MINIO EXTRACT (3c) - Extract JsonPath values from response → new MinIO files
-                // Example: [{"sourceJsonPath": "$.attribs", "targetPath": "${TicketID}/attribs.json", "targetVarName": "attribsMinioPath"}]
+                // 11. MINIO EXTRACT (3c) - Extract JsonPath values from response → new MinIO files
+                // Example: [{"sourceJsonPath": "$.attribs", "targetPath": "1/${workflowKey}/${TicketID}/Verify_Master_Data_EXTRA/attribs.json", "targetVarName": "attribsMinioPath"}]
                 String minioExtractStr = (minioExtract != null) ? (String) minioExtract.getValue(execution) : "[]";
                 extractToMinioFiles(responseBody, minioExtractStr, tenantId, execution, props);
             }
@@ -163,7 +208,6 @@ public class GenericApiCallDelegate implements JavaDelegate {
     /**
      * 3d: Extracts JsonPath values from the response body and sets them as process variables.
      * Input format: {"processVarName": "$.jsonPath", ...}
-     * Example: {"policyFound": "$.policyFound", "holderName": "$.name"}
      */
     private void mapOutputs(String responseBody, String mappingStr, DelegateExecution execution) {
         if (mappingStr == null || mappingStr.trim().equals("{}")) return;
@@ -193,9 +237,9 @@ public class GenericApiCallDelegate implements JavaDelegate {
      * Input format (JSON Array):
      * [
      *   {
-     *     "sourceJsonPath": "$.attribs.hni",        // JsonPath into the response body
-     *     "targetPath":     "${TicketID}/hni.json",  // MinIO path, supports ${var} placeholders
-     *     "targetVarName":  "hniMinioPath"           // process variable to store the resulting MinIO path
+     *     "sourceJsonPath": "$.attribs",
+     *     "targetPath":     "1/${workflowKey}/${TicketID}/stage/attribs.json",
+     *     "targetVarName":  "attribsMinioPath"
      *   }
      * ]
      */
@@ -247,7 +291,6 @@ public class GenericApiCallDelegate implements JavaDelegate {
                 continue;
             }
 
-            // Serialize extracted value to JSON string
             String serialized;
             if (extracted instanceof Map) {
                 serialized = new JSONObject((Map<?, ?>) extracted).toString(2);
