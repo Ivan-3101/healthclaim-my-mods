@@ -918,6 +918,19 @@
         <camunda:field name="outputVar">
           <camunda:string>verifyResponse</camunda:string>
         </camunda:field>
+        <camunda:field name="outputMapping">
+          <camunda:string>{
+"policyFound": "$.verified", 
+"holderName": "$.accountName", 
+"policyId": "$.externalId", 
+"amt_in_policy":"$.attribs.amt",
+"attribs_plan":"$.attribs.plan"
+}</camunda:string>
+        </camunda:field>
+        <camunda:field name="minioExtract">
+          <camunda:string>[{"sourceJsonPath": "$.attribs", 
+"targetPath": "1/${workflowKey}/${TicketID}/Verify_Master_Data_EXTRA/attribs.json", "targetVarName": "attribsMinioPath"}]</camunda:string>
+        </camunda:field>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_058ecar</bpmn:incoming>
       <bpmn:outgoing>Flow_024y7gm</bpmn:outgoing>
@@ -1005,6 +1018,9 @@
       <bpmndi:BPMNShape id="BPMNShape_0mqtdcy" bpmnElement="Activity_ReceiveFWAInfoResponse">
         <dc:Bounds x="4180" y="500" width="100" height="80" />
         <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1pei1oi_di" bpmnElement="Verify_Master_Data">
+        <dc:Bounds x="470" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_17h17ae_di" bpmnElement="Activity_17h17ae" isExpanded="true">
         <dc:Bounds x="670" y="740" width="330" height="200" />
@@ -1142,9 +1158,6 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_1ntjw80_di" bpmnElement="Activity_0ytppf9">
         <dc:Bounds x="3980" y="500" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_17cyphs_di" bpmnElement="Verify_Master_Data">
-        <dc:Bounds x="470" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_1me4x9n" bpmnElement="Event_100gl67">
         <dc:Bounds x="4162" y="522" width="36" height="36" />

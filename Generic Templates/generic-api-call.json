@@ -80,12 +80,32 @@
     },
     {
       "label": "Output Variable Name",
-      "description": "Name of the process variable to store the JSON response",
+      "description": "Name of the process variable to store the full JSON response. Also used to derive the MinIO path variable: {name}_minioPath",
       "type": "String",
       "value": "apiResponse",
       "binding": {
         "type": "camunda:field",
         "name": "outputVar"
+      }
+    },
+    {
+      "label": "Output Mapping (JSON)",
+      "description": "Extract specific JsonPath values from the response and store as process variables. Example: {\"policyFound\": \"$.policyFound\", \"holderName\": \"$.name\"}. Enter {} to skip.",
+      "type": "Text",
+      "value": "{}",
+      "binding": {
+        "type": "camunda:field",
+        "name": "outputMapping"
+      }
+    },
+    {
+      "label": "MinIO Extract (JSON)",
+      "description": "Extract JsonPath values from the response and save each as a new MinIO file. Example: [{\"sourceJsonPath\": \"$.attribs\", \"targetPath\": \"${TicketID}/attribs.json\", \"targetVarName\": \"attribsMinioPath\"}]. Enter [] to skip.",
+      "type": "Text",
+      "value": "[]",
+      "binding": {
+        "type": "camunda:field",
+        "name": "minioExtract"
       }
     }
   ]
