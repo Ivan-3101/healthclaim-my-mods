@@ -107,8 +107,6 @@ public class GenericApiCallDelegate implements JavaDelegate {
         } else {
             String reqBody = body != null ? (String) body.getValue(execution) : "NA";
             if (!"NA".equalsIgnoreCase(reqBody)) {
-                // Camunda field values may have escaped quotes when stored via element template
-                reqBody = reqBody.replace("\\\"", "\"").replace("\\'", "'");
                 finalBody = resolvePlaceholders(reqBody, execution, props);
             }
         }
@@ -126,6 +124,7 @@ public class GenericApiCallDelegate implements JavaDelegate {
 
         String finalUrl = resolvedBase + resolvedRoute;
         log.info("Making {} request to: {}", reqMethod, finalUrl);
+        log.info("Request body being sent: {}", finalBody); // DEBUG - uncomment to trace request bodies
 
         // 5. EXECUTE HTTP REQUEST
         try (CloseableHttpClient client = HttpClients.createDefault()) {
