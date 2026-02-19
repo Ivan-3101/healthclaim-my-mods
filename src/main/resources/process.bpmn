@@ -11,11 +11,6 @@
     <bpmn:sequenceFlow id="Flow_15rnuix" sourceRef="Event_1e3l95j" targetRef="Generate_TicketID_and_Workflow_Name" />
     <bpmn:sequenceFlow id="Flow_058ecar" sourceRef="Generate_TicketID_and_Workflow_Name" targetRef="Verify_Master_Data" />
     <bpmn:sequenceFlow id="Flow_0l7iwzz" sourceRef="Activity_0v6rfa2" targetRef="Gateway_1k0f36m" />
-    <bpmn:serviceTask id="Activity_0v6rfa2" name="Claim Cost Computation" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.ClaimCostComputation">
-      <bpmn:incoming>Flow_050y4q1</bpmn:incoming>
-      <bpmn:incoming>Flow_0gtta65</bpmn:incoming>
-      <bpmn:outgoing>Flow_0l7iwzz</bpmn:outgoing>
-    </bpmn:serviceTask>
     <bpmn:exclusiveGateway id="Gateway_1k0f36m">
       <bpmn:incoming>Flow_0l7iwzz</bpmn:incoming>
       <bpmn:outgoing>Flow_1fbkfzh</bpmn:outgoing>
@@ -556,7 +551,67 @@
     </bpmn:userTask>
     <bpmn:sequenceFlow id="Flow_024y7gm" sourceRef="Verify_Master_Data" targetRef="Activity_04nhqma" />
     <bpmn:sequenceFlow id="Flow_1446qaa" sourceRef="Activity_User_Verification" targetRef="Policy_Coherence" />
-    <bpmn:serviceTask id="Activity_04nhqma" name="FWA Decisioning" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.frm.HealthClaim.FWADecisioning">
+    <bpmn:serviceTask id="Activity_04nhqma" name="FWA Decisioning" camunda:modelerTemplate="com.dronapay.generic.apicall" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.generic.delegates.GenericApiCallDelegate">
+      <bpmn:extensionElements>
+        <camunda:field name="baseUrl">
+          <camunda:string>springapi</camunda:string>
+        </camunda:field>
+        <camunda:field name="route">
+          <camunda:string>/score</camunda:string>
+        </camunda:field>
+        <camunda:field name="authType">
+          <camunda:string>xApiKey</camunda:string>
+        </camunda:field>
+        <camunda:field name="method">
+          <camunda:string>POST</camunda:string>
+        </camunda:field>
+        <camunda:field name="body">
+          <camunda:string>{
+  "reqid": "${fn.uuid}",
+  "org": "SIT",
+  "ts": "${fn.isoTimestamp}",
+  "txn": {
+    "ts": "${fn.isoTimestamp}",
+    "id": "${fn.randomTxnId}",
+    "org_txn_id": "",
+    "note": "",
+    "type": "PAY",
+    "class": "health_claim",
+    "attribs": {
+  },
+  "payer": {
+    "addr": "helliiooiiooohooo@1",
+    "mcc": 0,
+    "type": "PERSON",
+    "amount": 500000,
+    "currency": "INR",
+    "attribs": { "mid": "EPIFI101" }
+  },
+  "payee": {
+    "addr": "b5ZbTaCQzpgmlrtCB8DI_cZQPfRVNsC1C1XrzVfGgzWUiHbF6cCKO6-lyYFQ09Vf",
+    "type": "PERSON",
+    "amount": 500000,
+    "currency": "INR",
+    "attribs": {}
+  }
+}</camunda:string>
+        </camunda:field>
+        <camunda:field name="minioBodyPath">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="minioBodyJsonPath">
+          <camunda:string>$</camunda:string>
+        </camunda:field>
+        <camunda:field name="outputVar">
+          <camunda:string>fwaResponse</camunda:string>
+        </camunda:field>
+        <camunda:field name="outputMapping">
+          <camunda:string>{"RiskScore": "$.score.score"}</camunda:string>
+        </camunda:field>
+        <camunda:field name="minioExtract">
+          <camunda:string>[]</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
       <bpmn:incoming>Flow_0xp9ktd</bpmn:incoming>
       <bpmn:incoming>Flow_171ffw7</bpmn:incoming>
       <bpmn:incoming>Flow_0450puq</bpmn:incoming>
@@ -934,6 +989,88 @@
       <bpmn:incoming>Flow_058ecar</bpmn:incoming>
       <bpmn:outgoing>Flow_024y7gm</bpmn:outgoing>
     </bpmn:serviceTask>
+    <bpmn:serviceTask id="Activity_0v6rfa2" name="Claim Cost Computation" camunda:modelerTemplate="com.dronapay.generic.apicall" camunda:class="com.DronaPay.generic.delegates.GenericApiCallDelegate">
+      <bpmn:extensionElements>
+        <camunda:field name="baseUrl">
+          <camunda:string>springapi</camunda:string>
+        </camunda:field>
+        <camunda:field name="route">
+          <camunda:string>/score</camunda:string>
+        </camunda:field>
+        <camunda:field name="authType">
+          <camunda:string>xApiKey</camunda:string>
+        </camunda:field>
+        <camunda:field name="method">
+          <camunda:string>POST</camunda:string>
+        </camunda:field>
+        <camunda:field name="body">
+          <camunda:string>{
+  "reqid": "${fn.uuid}",
+  "org": "SIT",
+  "ts": "${fn.isoTimestamp}",
+  "txn": {
+    "ts": "${fn.isoTimestamp}",
+    "id": "${fn.randomTxnId}",
+    "org_txn_id": "",
+    "note": "",
+    "type": "PAY",
+    "class": "health_claim_cost",
+    "attribs": {
+      "patient_name": "${processVariable.patientName}",
+      "gender": "${processVariable.gender}",
+      "doctor_id": "${processVariable.doctorIdentifier}",
+      "doctor_name": "${processVariable.doctorName}",
+      "disease_name": "${processVariable.diseaseName}",
+      "procedure": "${processVariable.procedure}",
+      "start_date": "${processVariable.startDate}",
+      "end_date": "${processVariable.endDate}",
+      "medication_name": "${processVariable.medicationName}",
+      "instruction_for_usage": "${processVariable.dosageInstruction}",
+      "patient_contact": "${processVariable.contact}",
+      "insurance_company": "${processVariable.insuranceCompany}",
+      "time_period": "${processVariable.period}",
+      "hospital_name": "${processVariable.hospitalName}",
+      "claim_for": "${processVariable.claimFor}",
+      "claim_amount": "${processVariable.claimAmount}"
+    }
+  },
+  "payer": {
+    "addr": "helliiooiiooohooo@1",
+    "mcc": 0,
+    "type": "PERSON",
+    "amount": 500000,
+    "currency": "INR",
+    "attribs": { "mid": "EPIFI101" }
+  },
+  "payee": {
+    "addr": "b5ZbTaCQzpgmlrtCB8DI_cZQPfRVNsC1C1XrzVfGgzWUiHbF6cCKO6-lyYFQ09Vf",
+    "type": "PERSON",
+    "amount": 500000,
+    "currency": "INR",
+    "attribs": {}
+  }
+}</camunda:string>
+        </camunda:field>
+        <camunda:field name="minioBodyPath">
+          <camunda:string>NA</camunda:string>
+        </camunda:field>
+        <camunda:field name="minioBodyJsonPath">
+          <camunda:string>$</camunda:string>
+        </camunda:field>
+        <camunda:field name="outputVar">
+          <camunda:string>claimCostResp</camunda:string>
+        </camunda:field>
+        <camunda:field name="outputMapping">
+          <camunda:string>{"approvedAmount": "$.score.decisiondetails[0].approved_amount", "bonusAmount": "$.score.decisiondetails[0].bonus", "finalAmount": "$.score.decisiondetails[0].final_amount"}</camunda:string>
+        </camunda:field>
+        <camunda:field name="minioExtract">
+          <camunda:string>[]</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_050y4q1</bpmn:incoming>
+      <bpmn:incoming>Flow_0gtta65</bpmn:incoming>
+      <bpmn:outgoing>Flow_0l7iwzz</bpmn:outgoing>
+    </bpmn:serviceTask>
   </bpmn:process>
   <bpmn:error id="Error_1brcit7" name="forgeddoc" />
   <bpmn:message id="Message_3r951pg" name="policyHolderResponse" />
@@ -955,10 +1092,6 @@
         <bpmndi:BPMNLabel>
           <dc:Bounds x="6478" y="833" width="61" height="14" />
         </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1bnxgr3_di" bpmnElement="Activity_0v6rfa2">
-        <dc:Bounds x="4770" y="800" width="100" height="80" />
-        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_1k0f36m_di" bpmnElement="Gateway_1k0f36m" isMarkerVisible="true" bioc:stroke="#6b3c00" bioc:fill="#ffe0b2" color:background-color="#ffe0b2" color:border-color="#6b3c00">
         <dc:Bounds x="4955" y="815" width="50" height="50" />
@@ -1020,6 +1153,9 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_1f2lat8_di" bpmnElement="Verify_Master_Data">
         <dc:Bounds x="470" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_16rz7pf_di" bpmnElement="Activity_0v6rfa2">
+        <dc:Bounds x="4770" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_17h17ae_di" bpmnElement="Activity_17h17ae" isExpanded="true">
         <dc:Bounds x="670" y="740" width="330" height="200" />
@@ -1170,9 +1306,6 @@
           <dc:Bounds x="4245" y="473" width="30" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Event_0a5hlg8_di" bpmnElement="Event_1qmso98" bioc:stroke="#831311" bioc:fill="#ffcdd2" color:background-color="#ffcdd2" color:border-color="#831311">
-        <dc:Bounds x="4802" y="782" width="36" height="36" />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_15ndmjn_di" bpmnElement="Event_1wb0mkj" bioc:stroke="#831311" bioc:fill="#ffcdd2" color:background-color="#ffcdd2" color:border-color="#831311">
         <dc:Bounds x="4012" y="862" width="36" height="36" />
       </bpmndi:BPMNShape>
@@ -1187,6 +1320,9 @@
         <bpmndi:BPMNLabel>
           <dc:Bounds x="5229" y="565" width="23" height="14" />
         </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_0a5hlg8_di" bpmnElement="Event_1qmso98" bioc:stroke="#831311" bioc:fill="#ffcdd2" color:background-color="#ffcdd2" color:border-color="#831311">
+        <dc:Bounds x="4802" y="782" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_15rnuix_di" bpmnElement="Flow_15rnuix">
         <di:waypoint x="208" y="840" />
@@ -1343,7 +1479,7 @@
         <di:waypoint x="4575" y="840" />
         <di:waypoint x="4770" y="840" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="4653" y="822" width="41" height="14" />
+          <dc:Bounds x="4654" y="822" width="40" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BPMNEdge_0axlcqx" bpmnElement="Flow_0xebx2i">
