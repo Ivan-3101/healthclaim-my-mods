@@ -37,7 +37,6 @@ storage.minio.endpoint=http://host.docker.internal:9000
 storage.minio.accessKey=minioadmin
 storage.minio.secretKey=minioadmin123
 storage.minio.bucketName=insurance-claims
-storage.minio.region=us-east-1
 storage.pathPattern={tenantId}/{workflowKey}/{ticketId}/{stageName}/
 
 
