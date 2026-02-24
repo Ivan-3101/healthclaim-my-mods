@@ -290,7 +290,6 @@
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="Flow_0974uhc" sourceRef="Activity_ReceiveFWAInfoResponse" targetRef="Activity_ReviewFWAResults" />
     <bpmn:subProcess id="Activity_17h17ae">
-      <bpmn:incoming>Flow_024y7gm</bpmn:incoming>
       <bpmn:outgoing>Flow_0450puq</bpmn:outgoing>
       <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_11ox0g4">
@@ -329,20 +328,12 @@
           </camunda:field>
           <camunda:field name="outputMapping">
             <camunda:string>{
-"forgery_agentId":"$.agentId",
 "isForged": "$.rawResponse.answer",
-"wasForgeryAgentsuccessful":"$.statusCode",
 "entireForgeryResponse":"$"
 }</camunda:string>
           </camunda:field>
           <camunda:field name="outputMinioExtract">
-            <camunda:string>[
-  {
-    "sourceJsonPath": "$.rawResponse.answer",
-    "targetPath": "1/HealthClaim/${TicketID}/forgery_specifc_json_extracted_using_minio_extract/${attachment}.json",
-    "targetVarName": "forgerySpecificExtraction"
-  }
-]</camunda:string>
+            <camunda:string>[]</camunda:string>
           </camunda:field>
         </bpmn:extensionElements>
         <bpmn:incoming>Flow_1c5c7cj</bpmn:incoming>
@@ -560,7 +551,7 @@
       <bpmn:incoming>Flow_1hfmdqo</bpmn:incoming>
       <bpmn:outgoing>Flow_0j2ifcv</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:sequenceFlow id="Flow_024y7gm" sourceRef="Verify_Master_Data" targetRef="Activity_17h17ae" />
+    <bpmn:sequenceFlow id="Flow_024y7gm" sourceRef="Verify_Master_Data" targetRef="FWA_Decisioning" />
     <bpmn:sequenceFlow id="Flow_1446qaa" sourceRef="Activity_User_Verification" targetRef="Policy_Coherence" />
     <bpmn:serviceTask id="FWA_Decisioning" name="FWA Decisioning" camunda:modelerTemplate="com.dronapay.generic.apicall" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.generic.delegates.GenericApiCallDelegate">
       <bpmn:extensionElements>
@@ -598,6 +589,7 @@
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_0xp9ktd</bpmn:incoming>
       <bpmn:incoming>Flow_171ffw7</bpmn:incoming>
+      <bpmn:incoming>Flow_024y7gm</bpmn:incoming>
       <bpmn:outgoing>Flow_0vxvqkn</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Generate_TicketID_and_Workflow_Name" name="Generate TicketID and Workflow Name" camunda:modelerTemplate="com.dronapay.generic.ticketgenerator" camunda:class="com.DronaPay.generic.delegates.GenericTicketIdGenerator">
@@ -854,10 +846,10 @@
           <camunda:string>verifyResponse</camunda:string>
         </camunda:field>
         <camunda:field name="outputMapping">
-          <camunda:string>{"policyFound": "$.verified", "holderName": "$.accountName", "policyId": "$.externalId", "amt_in_policy": "$.attribs.amt"}</camunda:string>
+          <camunda:string>{"verifyMasterDataEntireResponse": "$"}</camunda:string>
         </camunda:field>
         <camunda:field name="minioExtract">
-          <camunda:string>[{"sourceJsonPath": "$.attribs", "targetPath": "1/${workflowKey}/${TicketID}/Verify_Master_Data_EXTRA/attribs.json", "targetVarName": "attribsMinioPath"}]</camunda:string>
+          <camunda:string>[]</camunda:string>
         </camunda:field>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_058ecar</bpmn:incoming>
@@ -1145,15 +1137,6 @@
         <dc:Bounds x="4180" y="500" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_06x5w8b_di" bpmnElement="Submission_Validator" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
-        <dc:Bounds x="2670" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_06w9u0v_di" bpmnElement="Submission_Consistency_Analyzer" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
-        <dc:Bounds x="2840" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1nyq2v1_di" bpmnElement="UI_Displayer_Agent" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
-        <dc:Bounds x="3000" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_17h17ae_di" bpmnElement="Activity_17h17ae" isExpanded="true">
         <dc:Bounds x="670" y="740" width="330" height="200" />
       </bpmndi:BPMNShape>
@@ -1287,6 +1270,15 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_16rz7pf_di" bpmnElement="Claim_Cost_Computation">
         <dc:Bounds x="4770" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_06x5w8b_di" bpmnElement="Submission_Validator" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+        <dc:Bounds x="2670" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_06w9u0v_di" bpmnElement="Submission_Consistency_Analyzer" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+        <dc:Bounds x="2840" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1nyq2v1_di" bpmnElement="UI_Displayer_Agent" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+        <dc:Bounds x="3000" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_1me4x9n" bpmnElement="Event_100gl67">
         <dc:Bounds x="4162" y="522" width="36" height="36" />
@@ -1569,7 +1561,7 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_024y7gm_di" bpmnElement="Flow_024y7gm">
         <di:waypoint x="570" y="840" />
-        <di:waypoint x="670" y="840" />
+        <di:waypoint x="3980" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_1446qaa_di" bpmnElement="Flow_1446qaa">
         <di:waypoint x="3260" y="840" />
