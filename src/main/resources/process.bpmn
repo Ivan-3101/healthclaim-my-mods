@@ -396,6 +396,11 @@
     "targetVarName": "consolidatedReportMinioPath",
     "mergePaths": [
       {
+        "keyName": "policy_holder",
+        "sourceType": "processVariable",
+        "variableName": "policy_holder"
+      },
+      {
         "keyName": "currentDocAnswer",
         "sourceType": "responseJson",
         "dataType": "json",
