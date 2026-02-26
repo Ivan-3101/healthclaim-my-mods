@@ -290,6 +290,7 @@
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="Flow_0974uhc" sourceRef="Activity_ReceiveFWAInfoResponse" targetRef="Activity_ReviewFWAResults" />
     <bpmn:subProcess id="Activity_17h17ae">
+      <bpmn:incoming>Flow_024y7gm</bpmn:incoming>
       <bpmn:outgoing>Flow_0450puq</bpmn:outgoing>
       <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_11ox0g4">
@@ -551,7 +552,7 @@
       <bpmn:incoming>Flow_1hfmdqo</bpmn:incoming>
       <bpmn:outgoing>Flow_0j2ifcv</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:sequenceFlow id="Flow_024y7gm" sourceRef="Verify_Master_Data" targetRef="FWA_Decisioning" />
+    <bpmn:sequenceFlow id="Flow_024y7gm" sourceRef="Verify_Master_Data" targetRef="Activity_17h17ae" />
     <bpmn:sequenceFlow id="Flow_1446qaa" sourceRef="Activity_User_Verification" targetRef="Policy_Coherence" />
     <bpmn:serviceTask id="FWA_Decisioning" name="FWA Decisioning" camunda:modelerTemplate="com.dronapay.generic.apicall" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:class="com.DronaPay.generic.delegates.GenericApiCallDelegate">
       <bpmn:extensionElements>
@@ -589,7 +590,6 @@
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_0xp9ktd</bpmn:incoming>
       <bpmn:incoming>Flow_171ffw7</bpmn:incoming>
-      <bpmn:incoming>Flow_024y7gm</bpmn:incoming>
       <bpmn:outgoing>Flow_0vxvqkn</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Generate_TicketID_and_Workflow_Name" name="Generate TicketID and Workflow Name" camunda:modelerTemplate="com.dronapay.generic.ticketgenerator" camunda:class="com.DronaPay.generic.delegates.GenericTicketIdGenerator">
@@ -846,7 +846,7 @@
           <camunda:string>verifyResponse</camunda:string>
         </camunda:field>
         <camunda:field name="outputMapping">
-          <camunda:string>{"verifyMasterDataEntireResponse": "$"}</camunda:string>
+          <camunda:string>{"VerifyMasterDataEntireResponse": "$"}</camunda:string>
         </camunda:field>
         <camunda:field name="minioExtract">
           <camunda:string>[]</camunda:string>
@@ -1561,7 +1561,7 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_024y7gm_di" bpmnElement="Flow_024y7gm">
         <di:waypoint x="570" y="840" />
-        <di:waypoint x="3980" y="840" />
+        <di:waypoint x="670" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_1446qaa_di" bpmnElement="Flow_1446qaa">
         <di:waypoint x="3260" y="840" />
