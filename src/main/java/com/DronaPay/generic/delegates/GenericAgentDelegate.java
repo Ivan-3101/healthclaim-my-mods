@@ -326,6 +326,19 @@ public class GenericAgentDelegate implements JavaDelegate {
                                             "not set — skipping", outputKey, i, variableName);
                                     continue;
                                 }
+                                // Unwrap PGobject (PostgreSQL JSONB columns come back as
+                                // org.postgresql.util.PGobject, not a plain String).
+                                // Reflection avoids a hard compile dependency on the PG driver.
+                                if (rawVal.getClass().getSimpleName().equals("PGobject")) {
+                                    try {
+                                        rawVal = rawVal.getClass().getMethod("getValue").invoke(rawVal);
+                                        log.debug("Merge [{}]: keyName='{}' unwrapped PGobject → String",
+                                                outputKey, keyName);
+                                    } catch (Exception pgEx) {
+                                        log.warn("Merge [{}]: keyName='{}' failed to unwrap PGobject: {}",
+                                                outputKey, keyName, pgEx.getMessage());
+                                    }
+                                }
                                 if (rawVal instanceof String) {
                                     String strVal = ((String) rawVal).trim();
                                     if (strVal.startsWith("{")) {
