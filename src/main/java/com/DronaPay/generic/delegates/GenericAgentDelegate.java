@@ -41,29 +41,31 @@ import java.util.regex.Pattern;
 
 /**
  * A Generic Agent Delegate that executes external API calls based on a BPMN Element Template.
+ *
  * It handles:
  * 1. Dynamic URL construction (Base URL + Route)
  * 2. Authentication (Basic Auth)
  * 3. Input payload construction (including file downloads from MinIO)
- * 4. Storing results back to MinIO and mapping outputs to process variables.
+ * 4. Storing results back to MinIO and mapping outputs via a unified outputMapping config.
  *
- * Output options (all optional, can be combined):
+ * Output options:
  *   3a. Always stores full result as MinIO JSON (default, always happens)
- *   3b. outputMapping      - extract JsonPath values from full result JSON → process variables
- *   3c. outputMinioExtract - extract JsonPath values from full result JSON → new MinIO files
+ *   3b. outputMapping (unified) — single JSON config that handles BOTH:
+ *         - storing extracted values as Camunda process variables  (storeIn: "processVariable")
+ *         - storing extracted values as new MinIO files             (storeIn: "objectStorage")
+ *         - merging multiple JsonPaths into one JSON object         (mergeVariables: true)
  */
 @Slf4j
 public class GenericAgentDelegate implements JavaDelegate {
 
     // Fields injected from the BPMN Element Template
-    private Expression baseUrl;            // Key for the base URL (e.g., "dia" -> "agent.api.url")
-    private Expression route;              // Specific API route (e.g., "agent")
-    private Expression authType;           // Authentication method (e.g., "basicAuth")
-    private Expression method;             // HTTP Method (POST/GET)
-    private Expression agentId;            // Unique Identifier for this agent task
-    private Expression inputParams;        // JSON Array defining input data structure
-    private Expression outputMapping;      // JSON Object: JsonPath → process variable name (3b)
-    private Expression outputMinioExtract; // JSON Array: extract JsonPath → save as new MinIO file (3c)
+    private Expression baseUrl;        // Key for the base URL (e.g., "dia" -> "agent.api.url")
+    private Expression route;          // Specific API route (e.g., "agent")
+    private Expression authType;       // Authentication method (e.g., "basicAuth")
+    private Expression method;         // HTTP Method (POST/GET)
+    private Expression agentId;        // Unique Identifier for this agent task
+    private Expression inputParams;    // JSON Array defining input data structure
+    private Expression outputMapping;  // Unified output mapping (replaces old outputMapping + outputMinioExtract)
 
     @Override
     public void execute(DelegateExecution execution) throws Exception {
@@ -142,7 +144,7 @@ public class GenericAgentDelegate implements JavaDelegate {
         log.info("Calling Agent API: {} [{}]", finalUrl, reqMethod);
         String responseBody = executeAgentCall(reqMethod, finalUrl, apiUser, apiPass, requestBody.toString());
 
-        // 8. Store Full Result in MinIO (3a - always happens)
+        // 8. Store Full Result in MinIO (3a — always happens)
         Map<String, Object> resultMap = AgentResultStorageService.buildResultMap(
                 currentAgentId, 200, responseBody, new HashMap<>());
 
@@ -156,9 +158,9 @@ public class GenericAgentDelegate implements JavaDelegate {
         execution.setVariable(currentAgentId + "_MinioPath", minioPath);
         log.info("Agent Result stored: {}", minioPath);
 
-        // Build parsed full result JSON — used by both 3b and 3c.
-        // rawResponse is stored as an escaped JSON string — parse it into a real JSONObject
-        // so that paths like $.rawResponse.answer can be traversed correctly.
+        // Build parsed full result JSON — used by the unified output mapping below.
+        // rawResponse is stored as an escaped JSON string inside resultMap — parse it
+        // into a real JSONObject so that paths like $.rawResponse.answer work correctly.
         JSONObject resultJson = new JSONObject(resultMap);
         if (resultJson.has("rawResponse")) {
             try {
@@ -170,21 +172,239 @@ public class GenericAgentDelegate implements JavaDelegate {
         }
         String fullResultJson = resultJson.toString();
 
-        // 9. Map Output Variables (3b)
-        // Runs JsonPath against the full MinIO result JSON.
-        // Available root keys: agentId, statusCode, success, rawResponse (parsed), extractedData, timestamp
-        // Example: {"isForged": "$.rawResponse.answer", "agentSuccess": "$.success"}
+        // 9. Unified Output Mapping (3b)
+        // Handles both process variable storage and object storage in one config block.
+        // See processOutputMapping() below for full format documentation.
         String outputMapStr = (outputMapping != null) ? (String) outputMapping.getValue(execution) : "{}";
-        mapOutputs(fullResultJson, outputMapStr, execution);
-
-        // 10. Extract to new MinIO Files (3c)
-        // Each entry extracts a JsonPath from the full result JSON and saves it as a brand new MinIO file.
-        // Example: [{"sourceJsonPath": "$.rawResponse.answer", "targetPath": "${TicketID}/forgery/answer.json", "targetVarName": "forgeryAnswerMinioPath"}]
-        String outputMinioExtractStr = (outputMinioExtract != null) ? (String) outputMinioExtract.getValue(execution) : "[]";
-        extractToMinioFiles(fullResultJson, outputMinioExtractStr, tenantId, execution, props);
+        processOutputMapping(fullResultJson, outputMapStr, tenantId, execution, props);
 
         log.info("=== Generic Agent Delegate Completed ===");
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // UNIFIED OUTPUT MAPPING
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Unified output mapping processor (replaces old mapOutputs + extractToMinioFiles).
+     *
+     * The "outputMapping" field is a JSON Object where:
+     *   - Each top-level KEY   = the output variable name (or MinIO targetVarName for objectStorage)
+     *   - Each top-level VALUE = a descriptor object with the fields below
+     *
+     * Descriptor fields:
+     * ─────────────────────────────────────────────────────────────────────────
+     *  storeIn        (required)  "processVariable" | "objectStorage"
+     *  dataType       (optional)  "string" | "json"                   default: "json"
+     *  path           (optional)  JsonPath into fullResultJson         default: "$"
+     *                             (ignored when mergeVariables = true)
+     *
+     *  — For storeIn = "objectStorage" only —
+     *  storageType    (optional)  "minio"                             default: "minio"
+     *  targetPath     (required)  MinIO destination path. Supports ${var} placeholders.
+     *  targetVarName  (optional)  Process variable to receive the resolved MinIO path.
+     *                             Defaults to the top-level key name.
+     *
+     *  — For merging multiple paths into one object —
+     *  mergeVariables (optional)  true | false                        default: false
+     *  mergePaths     (required when mergeVariables=true)
+     *                 JSON Array of { keyName, dataType, path }
+     *                 Each entry is extracted and placed under keyName in the merged object.
+     *                 If the same keyName appears more than once, values are collected
+     *                 into a JSON Array under that key.
+     * ─────────────────────────────────────────────────────────────────────────
+     *
+     * PATTERN A — store single JsonPath value as Camunda process variable:
+     * {
+     *   "isForged": {
+     *     "storeIn": "processVariable",
+     *     "dataType": "string",
+     *     "path": "$.rawResponse.answer"
+     *   }
+     * }
+     *
+     * PATTERN B — extract JsonPath value and upload as a new MinIO file:
+     * {
+     *   "forgeryResultFile": {
+     *     "storeIn": "objectStorage",
+     *     "storageType": "minio",
+     *     "dataType": "json",
+     *     "path": "$",
+     *     "targetPath": "${TicketID}/forgery/result.json",
+     *     "targetVarName": "forgeryResultMinioPath"
+     *   }
+     * }
+     *
+     * PATTERN C — merge multiple JsonPaths into one JSON object, store as process variable:
+     * {
+     *   "mergedSummary": {
+     *     "storeIn": "processVariable",
+     *     "dataType": "json",
+     *     "mergeVariables": true,
+     *     "mergePaths": [
+     *       { "keyName": "answer", "dataType": "string", "path": "$.rawResponse.answer" },
+     *       { "keyName": "score",  "dataType": "json",   "path": "$.rawResponse.score"  }
+     *     ]
+     *   }
+     * }
+     *
+     * Available root keys in fullResultJson (from AgentResultStorageService.buildResultMap):
+     *   agentId, statusCode, success, rawResponse (parsed object), extractedData, timestamp
+     */
+    private void processOutputMapping(String fullResultJson, String mappingStr,
+                                      String tenantId, DelegateExecution execution, Properties props) {
+        if (mappingStr == null || mappingStr.trim().equals("{}")) {
+            log.debug("outputMapping is empty — skipping.");
+            return;
+        }
+
+        JSONObject mapping;
+        try {
+            mapping = new JSONObject(mappingStr);
+        } catch (Exception e) {
+            log.error("outputMapping is not valid JSON — skipping. Value: {}", mappingStr);
+            return;
+        }
+
+        Configuration jacksonConfig = Configuration.builder()
+                .jsonProvider(new JacksonJsonProvider())
+                .mappingProvider(new JacksonMappingProvider())
+                .build();
+
+        var documentContext = JsonPath.using(jacksonConfig).parse(fullResultJson);
+
+        for (String outputKey : mapping.keySet()) {
+            JSONObject descriptor = mapping.getJSONObject(outputKey);
+            String storeIn   = descriptor.optString("storeIn", "processVariable");
+            String dataType  = descriptor.optString("dataType", "json");
+            boolean isMerge  = descriptor.optBoolean("mergeVariables", false);
+
+            try {
+
+                // ── PATTERN C: Merge multiple paths into one JSON object ───────────────
+                if (isMerge) {
+                    JSONArray mergePaths = descriptor.optJSONArray("mergePaths");
+                    if (mergePaths == null || mergePaths.length() == 0) {
+                        log.warn("outputMapping key '{}': mergeVariables=true but mergePaths is missing/empty — skipping", outputKey);
+                        continue;
+                    }
+
+                    JSONObject merged = new JSONObject();
+                    for (int i = 0; i < mergePaths.length(); i++) {
+                        JSONObject mp      = mergePaths.getJSONObject(i);
+                        String keyName     = mp.optString("keyName", "key" + i);
+                        String mergePath   = mp.optString("path", "$");
+                        String mergeType   = mp.optString("dataType", "json");
+
+                        try {
+                            Object val = documentContext.read(mergePath);
+                            val = coerceType(val, mergeType);
+
+                            // If the same keyName is used more than once, collect into a JSON Array
+                            if (merged.has(keyName)) {
+                                Object existing = merged.get(keyName);
+                                JSONArray arr;
+                                if (existing instanceof JSONArray) {
+                                    arr = (JSONArray) existing;
+                                } else {
+                                    arr = new JSONArray();
+                                    arr.put(existing);
+                                }
+                                arr.put(val);
+                                merged.put(keyName, arr);
+                            } else {
+                                merged.put(keyName, val);
+                            }
+                            log.debug("Merge [{}]: keyName='{}' path='{}' → '{}'", outputKey, keyName, mergePath, val);
+                        } catch (Exception e) {
+                            log.warn("Merge [{}]: could not extract path '{}' for keyName '{}' — skipping entry", outputKey, mergePath, keyName);
+                        }
+                    }
+
+                    execution.setVariable(outputKey, merged.toString());
+                    log.info("Output mapping (merge/processVariable): set '{}' as merged JSON object", outputKey);
+                    continue;
+                }
+
+                // ── PATTERN A & B: Single path extraction ─────────────────────────────
+                String path = descriptor.optString("path", "$");
+                Object val;
+                try {
+                    val = documentContext.read(path);
+                } catch (Exception e) {
+                    log.warn("outputMapping key '{}': could not extract path '{}' — skipping", outputKey, path);
+                    continue;
+                }
+
+                val = coerceType(val, dataType);
+
+                if ("objectStorage".equalsIgnoreCase(storeIn)) {
+
+                    // ── PATTERN B: Upload extracted value as a new MinIO file ──────────
+                    String targetPath    = descriptor.optString("targetPath", "");
+                    String targetVarName = descriptor.optString("targetVarName", outputKey + "_minioPath");
+
+                    if (targetPath.isEmpty()) {
+                        log.warn("outputMapping key '{}': storeIn=objectStorage but targetPath is empty — skipping", outputKey);
+                        continue;
+                    }
+
+                    // Serialize the extracted value to a JSON string for upload
+                    String serialized;
+                    if (val instanceof Map) {
+                        serialized = new JSONObject((Map<?, ?>) val).toString(2);
+                    } else if (val instanceof List) {
+                        serialized = new JSONArray((List<?>) val).toString(2);
+                    } else {
+                        serialized = (val != null) ? val.toString() : "null";
+                    }
+
+                    String resolvedTargetPath = resolvePlaceholders(targetPath, execution, props);
+                    StorageProvider storage   = ObjectStorageService.getStorageProvider(tenantId);
+                    storage.uploadDocument(resolvedTargetPath, serialized.getBytes(StandardCharsets.UTF_8), "application/json");
+                    execution.setVariable(targetVarName, resolvedTargetPath);
+                    log.info("Output mapping (objectStorage): path='{}' → MinIO='{}' → var='{}'", path, resolvedTargetPath, targetVarName);
+
+                } else {
+
+                    // ── PATTERN A: Set as Camunda process variable ─────────────────────
+                    execution.setVariable(outputKey, val);
+                    log.info("Output mapping (processVariable): set '{}' from path '{}' = '{}'", outputKey, path, val);
+                }
+
+            } catch (Exception e) {
+                log.error("outputMapping key '{}': unexpected error — {}", outputKey, e.getMessage(), e);
+                throw new BpmnError("OUTPUT_MAPPING_ERROR",
+                        "Failed to process output mapping key '" + outputKey + "': " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Coerces an extracted JsonPath value to the declared dataType.
+     *
+     * "string" — calls toString() on anything (Maps/Lists become their JSON string representation)
+     * "json"   — keeps Maps and Lists as-is so Camunda serializes them via Jackson;
+     *            wraps primitives in a JSONObject {"value": <val>} when the caller
+     *            needs a JSON object but got a primitive (only relevant for objectStorage uploads)
+     */
+    private Object coerceType(Object val, String dataType) {
+        if (val == null) return null;
+        if ("string".equalsIgnoreCase(dataType)) {
+            if (val instanceof Map) {
+                return new JSONObject((Map<?, ?>) val).toString();
+            } else if (val instanceof List) {
+                return new JSONArray((List<?>) val).toString();
+            }
+            return val.toString();
+        }
+        // "json" — return as-is; Camunda / JSONObject serialization handles Maps and Lists
+        return val;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // HELPER METHODS (unchanged from original)
+    // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * Constructs the 'data' JSON object expected by the Agent API.
@@ -196,8 +416,8 @@ public class GenericAgentDelegate implements JavaDelegate {
 
         for (int i = 0; i < inputs.length(); i++) {
             JSONObject input = inputs.getJSONObject(i);
-            String key = input.getString("key");
-            String type = input.optString("type", "value");
+            String key   = input.getString("key");
+            String type  = input.optString("type", "value");
             String value = input.optString("value", "");
 
             if (value.isEmpty()) continue;
@@ -270,133 +490,8 @@ public class GenericAgentDelegate implements JavaDelegate {
     }
 
     /**
-     * 3b: Maps JsonPath values from the full MinIO result JSON to process variables.
-     *
-     * Input format (outputMapping field):
-     *   {"processVarName": "$.jsonPath", ...}
-     *
-     * Example:
-     *   {"isForged": "$.rawResponse.answer", "agentSuccess": "$.success"}
-     *
-     * Available root keys in fullResultJson:
-     *   agentId, statusCode, success, rawResponse (parsed object), extractedData, timestamp
+     * Resolves ${variable} and ${appproperties.key} placeholders in a string.
      */
-    private void mapOutputs(String fullResultJson, String mappingStr, DelegateExecution execution) {
-        if (mappingStr == null || mappingStr.equals("{}")) return;
-
-        Configuration jacksonConfig = Configuration.builder()
-                .jsonProvider(new JacksonJsonProvider())
-                .mappingProvider(new JacksonMappingProvider())
-                .build();
-
-        JSONObject mapping = new JSONObject(mappingStr);
-        var documentContext = JsonPath.using(jacksonConfig).parse(fullResultJson);
-
-        for (String varName : mapping.keySet()) {
-            String path = mapping.getString(varName);
-            try {
-                Object val = documentContext.read(path);
-                execution.setVariable(varName, val);
-                log.debug("Set process variable '{}' from path '{}'", varName, path);
-            } catch (Exception e) {
-                log.warn("Could not extract path '{}' for variable '{}'. Field might be missing in response.", path, varName);
-            }
-        }
-    }
-
-    /**
-     * 3c: Extracts JsonPath values from the full MinIO result JSON and saves each as a new MinIO file.
-     *
-     * Input format (outputMinioExtract field) - JSON Array:
-     * [
-     *   {
-     *     "sourceJsonPath": "$.rawResponse.answer",        // JsonPath into the full result JSON
-     *     "targetPath":     "${TicketID}/forgery/answer.json", // MinIO path, supports ${var} placeholders
-     *     "targetVarName":  "forgeryAnswerMinioPath"       // process variable to store the resulting MinIO path
-     *   }
-     * ]
-     *
-     * - Map/List extracted values are serialized as JSON directly.
-     * - Primitives (String, Number, Boolean) are wrapped: {"value": <extracted>}
-     * - If sourceJsonPath cannot be resolved, a WARN is logged and that entry is skipped (no fail-fast).
-     */
-    private void extractToMinioFiles(String fullResultJson, String extractStr,
-                                     String tenantId, DelegateExecution execution, Properties props) {
-        if (extractStr == null || extractStr.trim().equals("[]")) return;
-
-        JSONArray extractions;
-        try {
-            extractions = new JSONArray(extractStr);
-        } catch (Exception e) {
-            log.warn("outputMinioExtract is not a valid JSON array, skipping 3c. Value: {}", extractStr);
-            return;
-        }
-
-        if (extractions.length() == 0) return;
-
-        Configuration jacksonConfig = Configuration.builder()
-                .jsonProvider(new JacksonJsonProvider())
-                .mappingProvider(new JacksonMappingProvider())
-                .build();
-
-        var documentContext = JsonPath.using(jacksonConfig).parse(fullResultJson);
-
-        StorageProvider storage;
-        try {
-            storage = ObjectStorageService.getStorageProvider(tenantId);
-        } catch (Exception e) {
-            log.error("Could not get storage provider for 3c extraction", e);
-            throw new BpmnError("STORAGE_ERROR", "Could not get storage provider: " + e.getMessage());
-        }
-
-        for (int i = 0; i < extractions.length(); i++) {
-            JSONObject entry = extractions.getJSONObject(i);
-            String sourceJsonPath = entry.optString("sourceJsonPath", "");
-            String targetPath     = entry.optString("targetPath", "");
-            String targetVarName  = entry.optString("targetVarName", "");
-
-            if (sourceJsonPath.isEmpty() || targetPath.isEmpty() || targetVarName.isEmpty()) {
-                log.warn("outputMinioExtract entry {} is missing sourceJsonPath, targetPath or targetVarName — skipping", i);
-                continue;
-            }
-
-            // Extract value from the full result JSON
-            Object extracted;
-            try {
-                extracted = documentContext.read(sourceJsonPath);
-            } catch (Exception e) {
-                log.warn("Could not extract path '{}' for MinIO extraction entry {} — skipping", sourceJsonPath, i);
-                continue;
-            }
-
-            // Serialize extracted value to JSON string
-            String serialized;
-            if (extracted instanceof Map) {
-                serialized = new JSONObject((Map<?, ?>) extracted).toString(2);
-            } else if (extracted instanceof List) {
-                serialized = new JSONArray((List<?>) extracted).toString(2);
-            } else {
-                // Primitive — wrap it
-                serialized = new JSONObject().put("value", extracted).toString(2);
-            }
-
-            byte[] bytes = serialized.getBytes(StandardCharsets.UTF_8);
-
-            // Resolve ${processVariable} placeholders in targetPath
-            String resolvedTargetPath = resolvePlaceholders(targetPath, execution, props);
-
-            // Upload to MinIO and set process variable
-            try {
-                storage.uploadDocument(resolvedTargetPath, bytes, "application/json");
-                execution.setVariable(targetVarName, resolvedTargetPath);
-                log.info("3c: Extracted '{}' → MinIO '{}' → var '{}'", sourceJsonPath, resolvedTargetPath, targetVarName);
-            } catch (Exception e) {
-                log.error("3c: Failed to upload extracted content to MinIO path '{}': {}", resolvedTargetPath, e.getMessage());
-                throw new BpmnError("STORAGE_ERROR", "Failed to store extracted MinIO file: " + resolvedTargetPath);
-            }
-        }
-    }
-
     private String resolvePlaceholders(String input, DelegateExecution execution, Properties props) {
         if (input == null) return null;
         Pattern pattern = Pattern.compile("\\$\\{([^}]+)\\}");
@@ -423,12 +518,15 @@ public class GenericAgentDelegate implements JavaDelegate {
         return sb.toString();
     }
 
+    /**
+     * Resolves map access tokens like documentPaths[attachment] from process variables.
+     */
     private String resolveMapValue(String token, DelegateExecution execution) {
         try {
             int bracketIndex = token.indexOf("[");
-            String mapName = token.substring(0, bracketIndex);
+            String mapName   = token.substring(0, bracketIndex);
             String keyVarName = token.substring(bracketIndex + 1, token.length() - 1);
-            Object mapObj = execution.getVariable(mapName);
+            Object mapObj    = execution.getVariable(mapName);
             Object keyValObj = execution.getVariable(keyVarName);
             String resolvedKey = (keyValObj != null) ? keyValObj.toString() : keyVarName;
 
@@ -438,7 +536,7 @@ public class GenericAgentDelegate implements JavaDelegate {
                 return value != null ? value.toString() : "";
             }
         } catch (Exception e) {
-            // ignore
+            // ignore — return placeholder unchanged
         }
         return "${" + token + "}";
     }

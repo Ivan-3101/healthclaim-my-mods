@@ -329,19 +329,54 @@
           </camunda:field>
           <camunda:field name="outputMapping">
             <camunda:string>{
-"isForged": "$.rawResponse.answer",
-"entireForgeryResponse":"$"
+  "isForged": {
+    "storeIn": "processVariable",
+    "dataType": "string",
+    "path": "$.rawResponse.answer"
+  },
+  "entireForgeryResponse": {
+    "storeIn": "processVariable",
+    "dataType": "json",
+    "path": "$"
+  },
+  "forgeryArchiveFile": {
+    "storeIn": "objectStorage",
+    "storageType": "minio",
+    "dataType": "json",
+    "path": "$.rawResponse",
+    "targetPath": "${TicketID}/forgery/archive.json",
+    "targetVarName": "forgeryArchiveMinioPath"
+  },
+  "forgerySummary": {
+    "storeIn": "processVariable",
+    "dataType": "json",
+    "mergeVariables": true,
+    "mergePaths": [
+      {
+        "keyName": "answer",
+        "dataType": "string",
+        "path": "$.rawResponse.answer"
+      },
+      {
+        "keyName": "agentId",
+        "dataType": "string",
+        "path": "$.agentId"
+      },
+      {
+        "keyName": "callSuccess",
+        "dataType": "string",
+        "path": "$.success"
+      }
+    ]
+  }
 }</camunda:string>
-          </camunda:field>
-          <camunda:field name="outputMinioExtract">
-            <camunda:string>[]</camunda:string>
           </camunda:field>
         </bpmn:extensionElements>
         <bpmn:incoming>Flow_1c5c7cj</bpmn:incoming>
         <bpmn:outgoing>Flow_0vzpcw3</bpmn:outgoing>
       </bpmn:serviceTask>
     </bpmn:subProcess>
-    <bpmn:sequenceFlow id="Flow_0450puq" sourceRef="Activity_17h17ae" targetRef="Activity_DocClassifier" />
+    <bpmn:sequenceFlow id="Flow_0450puq" sourceRef="Activity_17h17ae" targetRef="FWA_Decisioning" />
     <bpmn:subProcess id="Activity_1kzv5fa">
       <bpmn:incoming>Flow_1edsz88</bpmn:incoming>
       <bpmn:outgoing>Flow_037ubon</bpmn:outgoing>
@@ -399,7 +434,6 @@
       </bpmn:serviceTask>
     </bpmn:subProcess>
     <bpmn:subProcess id="Activity_DocClassifier">
-      <bpmn:incoming>Flow_0450puq</bpmn:incoming>
       <bpmn:outgoing>Flow_0ys2arf</bpmn:outgoing>
       <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_1dyf5j7">
@@ -590,6 +624,7 @@
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_0xp9ktd</bpmn:incoming>
       <bpmn:incoming>Flow_171ffw7</bpmn:incoming>
+      <bpmn:incoming>Flow_0450puq</bpmn:incoming>
       <bpmn:outgoing>Flow_0vxvqkn</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Generate_TicketID_and_Workflow_Name" name="Generate TicketID and Workflow Name" camunda:modelerTemplate="com.dronapay.generic.ticketgenerator" camunda:class="com.DronaPay.generic.delegates.GenericTicketIdGenerator">
@@ -1146,7 +1181,7 @@
       <bpmndi:BPMNShape id="Event_0oqarvk_di" bpmnElement="Event_0oqarvk">
         <dc:Bounds x="932" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1ljjk2r_di" bpmnElement="Identify_Forged_Documents" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+      <bpmndi:BPMNShape id="Activity_1sn3ri4_di" bpmnElement="Identify_Forged_Documents">
         <dc:Bounds x="780" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_1c5c7cj_di" bpmnElement="Flow_1c5c7cj">
@@ -1513,7 +1548,7 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0450puq_di" bpmnElement="Flow_0450puq">
         <di:waypoint x="1000" y="840" />
-        <di:waypoint x="1080" y="840" />
+        <di:waypoint x="3980" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0ys2arf_di" bpmnElement="Flow_0ys2arf">
         <di:waypoint x="1430" y="840" />

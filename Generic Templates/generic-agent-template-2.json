@@ -99,22 +99,12 @@
     },
     {
       "label": "Output Mapping (JSON)",
-      "description": "Map JsonPath values from the full result JSON to process variables. Available root keys: agentId, statusCode, success, rawResponse, extractedData, timestamp. Example: {\"isForged\": \"$.rawResponse.answer\", \"agentSuccess\": \"$.success\"}",
+      "description": "Unified output config. Each key is the output name. Use storeIn: processVariable to set a Camunda variable, or storeIn: objectStorage to save to MinIO. Supports mergeVariables to combine multiple paths into one object. Available root keys: agentId, statusCode, success, rawResponse, extractedData, timestamp. See template docs for full format.",
       "type": "Text",
       "value": "{}",
       "binding": {
         "type": "camunda:field",
         "name": "outputMapping"
-      }
-    },
-    {
-      "label": "Output MinIO Extract (JSON)",
-      "description": "Extract JsonPath values from the full result JSON and save each as a new MinIO file. Example: [{\"sourceJsonPath\": \"$.rawResponse.answer\", \"targetPath\": \"${TicketID}/forgery/answer.json\", \"targetVarName\": \"forgeryAnswerMinioPath\"}]. Leave as [] to skip.",
-      "type": "Text",
-      "value": "[]",
-      "binding": {
-        "type": "camunda:field",
-        "name": "outputMinioExtract"
       }
     }
   ]
