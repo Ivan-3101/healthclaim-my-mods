@@ -5,7 +5,7 @@
   "appliesTo": [
     "bpmn:ServiceTask"
   ],
-  "description": "Makes a generic HTTP call using App Properties and Process Variables",
+  "description": "Makes a generic HTTP call using App Properties and Process Variables. Supports unified output mapping (Patterns A/B/C/D) identical to Generic Agent Task.",
   "properties": [
     {
       "type": "Hidden",
@@ -57,9 +57,9 @@
       "label": "Method",
       "type": "Dropdown",
       "choices": [
-        { "name": "GET", "value": "GET" },
-        { "name": "POST", "value": "POST" },
-        { "name": "PUT", "value": "PUT" },
+        { "name": "GET",    "value": "GET"    },
+        { "name": "POST",   "value": "POST"   },
+        { "name": "PUT",    "value": "PUT"    },
         { "name": "DELETE", "value": "DELETE" }
       ],
       "value": "GET",
@@ -100,7 +100,7 @@
     },
     {
       "label": "Output Variable Name",
-      "description": "Name of the process variable to store the full JSON response. Also derives {name}_minioPath.",
+      "description": "Name of the process variable to store the full JSON response. Also derives {name}_minioPath which is always auto-populated with the MinIO storage path.",
       "type": "String",
       "value": "apiResponse",
       "binding": {
@@ -110,22 +110,12 @@
     },
     {
       "label": "Output Mapping (JSON)",
-      "description": "Extract specific JsonPath values from the response and store as process variables. Example: {\"policyFound\": \"$.verified\", \"holderName\": \"$.accountName\"}. Enter {} to skip.",
+      "description": "Unified output config. Each key is the output name. Supports 4 patterns:\n\nPATTERN A — single path → process variable:\n{\"myVar\": {\"storeIn\": \"processVariable\", \"dataType\": \"string\", \"path\": \"$.verified\"}}\n\nPATTERN B — single path → MinIO file:\n{\"myFile\": {\"storeIn\": \"objectStorage\", \"path\": \"$.attribs\", \"targetPath\": \"1/${workflowKey}/${TicketID}/stage/attribs.json\", \"targetVarName\": \"attribsMinioPath\"}}\n\nPATTERN C — merge multiple sources → process variable:\n{\"summary\": {\"storeIn\": \"processVariable\", \"mergeVariables\": true, \"mergePaths\": [{\"keyName\": \"holderName\", \"sourceType\": \"responseJson\", \"path\": \"$.accountName\"}, {\"keyName\": \"risk\", \"sourceType\": \"processVariable\", \"variableName\": \"RiskScore\"}, {\"keyName\": \"doc\", \"sourceType\": \"minioFile\", \"sourcePath\": \"1/${workflowKey}/${TicketID}/stage/doc.json\", \"path\": \"$\"}]}}\n\nPATTERN D — merge multiple sources → MinIO file:\n{\"report\": {\"storeIn\": \"objectStorage\", \"mergeVariables\": true, \"targetPath\": \"1/${workflowKey}/${TicketID}/stage/report.json\", \"targetVarName\": \"reportMinioPath\", \"mergePaths\": [...]}}\n\nEnter {} to skip.",
       "type": "Text",
       "value": "{}",
       "binding": {
         "type": "camunda:field",
         "name": "outputMapping"
-      }
-    },
-    {
-      "label": "MinIO Extract (JSON)",
-      "description": "Extract JsonPath values from the response and save each as a new MinIO file. Example: [{\"sourceJsonPath\": \"$.attribs\", \"targetPath\": \"${TicketID}/attribs.json\", \"targetVarName\": \"attribsMinioPath\"}]. Enter [] to skip.",
-      "type": "Text",
-      "value": "[]",
-      "binding": {
-        "type": "camunda:field",
-        "name": "minioExtract"
       }
     }
   ]
