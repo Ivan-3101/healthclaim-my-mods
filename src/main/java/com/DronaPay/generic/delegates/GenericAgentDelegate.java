@@ -218,6 +218,7 @@ public class GenericAgentDelegate implements JavaDelegate {
      *                              Works for plain strings ("Ashish Singhal"),
      *                              JSON strings ("{\"key\":\"val\"}"), and objects.
      *                              JSON strings are auto-parsed into nested objects.
+     *                              dataType field is ignored for this sourceType.
      *
      *                 ── sourceType = "minioFile" ─────────────────────────────
      *                 sourcePath   Explicit MinIO path. Supports ${var} placeholders.
@@ -301,22 +302,18 @@ public class GenericAgentDelegate implements JavaDelegate {
                         String mergeType  = mp.optString("dataType", "json");
                         String mergePath  = mp.optString("path", "$");
 
-                        // val holds the final value to put into the merged object.
-                        // It can be: JSONObject, JSONArray, String, Number, Boolean.
                         Object val = null;
 
                         try {
                             if ("processVariable".equalsIgnoreCase(sourceType)) {
                                 // ── SOURCE: Camunda process variable ──────────────────────
-                                // Handles three cases:
-                                //   1. Plain string  e.g. holder_name = "Ashish Singhal"
-                                //      → stored as plain string in merged object
-                                //   2. JSON string   e.g. vpaAttribs = "{\"key\":\"val\"}"
-                                //      → auto-parsed to JSONObject, stored as nested object
-                                //   3. Non-string    e.g. already a Map/Number/Boolean
-                                //      → stored as-is
-                                // dataType field is intentionally ignored here because the
-                                // type is driven by the actual variable content, not a hint.
+                                // Handles:
+                                //   plain string  e.g. "Ashish Singhal"  → stored as string
+                                //   JSON string   e.g. "{\"key\":\"v\"}" → parsed to JSONObject
+                                //   JSON array    e.g. "[1,2,3]"         → parsed to JSONArray
+                                //   non-string    e.g. Map / Number      → stored as-is
+                                // dataType is intentionally ignored — type is driven by
+                                // the actual variable content to avoid double-serialization.
                                 String variableName = mp.optString("variableName", "");
                                 if (variableName.isEmpty()) {
                                     log.warn("Merge [{}] entry {}: sourceType=processVariable but " +
@@ -333,11 +330,9 @@ public class GenericAgentDelegate implements JavaDelegate {
                                     String strVal = ((String) rawVal).trim();
                                     if (strVal.startsWith("{")) {
                                         try {
-                                            // JSON object string → parse to JSONObject so it
-                                            // serializes as a proper nested object, not escaped string
                                             val = new JSONObject(strVal);
                                         } catch (Exception ignored) {
-                                            val = strVal; // not valid JSON, keep as plain string
+                                            val = strVal;
                                         }
                                     } else if (strVal.startsWith("[")) {
                                         try {
@@ -346,7 +341,6 @@ public class GenericAgentDelegate implements JavaDelegate {
                                             val = strVal;
                                         }
                                     } else {
-                                        // plain string like "Ashish Singhal", "true", "42"
                                         val = strVal;
                                     }
                                 } else {
@@ -375,8 +369,6 @@ public class GenericAgentDelegate implements JavaDelegate {
 
                             } else {
                                 // ── SOURCE: responseJson (DEFAULT) ────────────────────────
-                                // Reads from the current agent's live response JSON.
-                                // This is the original behaviour — unchanged.
                                 val = responseDocumentContext.read(mergePath);
                                 val = coerceType(val, mergeType);
                                 log.debug("Merge [{}]: keyName='{}' sourceType=responseJson " +
@@ -393,17 +385,12 @@ public class GenericAgentDelegate implements JavaDelegate {
                         // Duplicate keyNames collect into a JSON Array.
                         if (merged.has(keyName)) {
                             Object existing = merged.get(keyName);
-                            JSONArray arr;
-                            if (existing instanceof JSONArray) {
-                                arr = (JSONArray) existing;
-                            } else {
-                                arr = new JSONArray();
-                                arr.put(existing);
-                            }
-                            arr.put(val);
+                            JSONArray arr = new JSONArray();
+                            addToArray(arr, existing);
+                            addToArray(arr, val);
                             merged.put(keyName, arr);
                         } else {
-                            merged.put(keyName, val);
+                            putJsonValue(merged, keyName, val);
                         }
                     }
 
@@ -437,7 +424,7 @@ public class GenericAgentDelegate implements JavaDelegate {
 
                 } else {
                     // ── PATTERN A & B ─────────────────────────────────────────────────────
-                    // Unchanged from original — reads from current agent response only.
+                    // Unchanged — reads from current agent response only.
 
                     String path = descriptor.optString("path", "$");
                     Object val;
@@ -493,6 +480,50 @@ public class GenericAgentDelegate implements JavaDelegate {
                         "Failed to process output mapping key '" + outputKey + "': " + e.getMessage());
             }
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // TYPE-SAFE JSON HELPERS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Type-safe put into a JSONObject.
+     *
+     * Explicitly dispatches by runtime type before calling the matching put() overload.
+     * This avoids the "Ambiguous method call" compile error that occurs when passing
+     * an Object to JSONObject.put() — the compiler cannot choose between overloads
+     * like put(String, Map) and put(String, Collection) when the type is Object.
+     */
+    private void putJsonValue(JSONObject target, String key, Object val) throws Exception {
+        if (val == null)                 target.put(key, JSONObject.NULL);
+        else if (val instanceof JSONObject)  target.put(key, (JSONObject) val);
+        else if (val instanceof JSONArray)   target.put(key, (JSONArray) val);
+        else if (val instanceof Map)         target.put(key, new JSONObject((Map<?, ?>) val));
+        else if (val instanceof List)        target.put(key, new JSONArray((List<?>) val));
+        else if (val instanceof Boolean)     target.put(key, (boolean) val);
+        else if (val instanceof Integer)     target.put(key, (int) val);
+        else if (val instanceof Long)        target.put(key, (long) val);
+        else if (val instanceof Double)      target.put(key, (double) val);
+        else                                 target.put(key, val.toString());
+    }
+
+    /**
+     * Type-safe add to a JSONArray.
+     *
+     * Same reason as putJsonValue — avoids ambiguous overload compile errors
+     * when the value is typed as Object.
+     */
+    private void addToArray(JSONArray arr, Object val) throws Exception {
+        if (val == null)                 arr.put(JSONObject.NULL);
+        else if (val instanceof JSONObject)  arr.put((JSONObject) val);
+        else if (val instanceof JSONArray)   arr.put((JSONArray) val);
+        else if (val instanceof Map)         arr.put(new JSONObject((Map<?, ?>) val));
+        else if (val instanceof List)        arr.put(new JSONArray((List<?>) val));
+        else if (val instanceof Boolean)     arr.put((boolean) val);
+        else if (val instanceof Integer)     arr.put((int) val);
+        else if (val instanceof Long)        arr.put((long) val);
+        else if (val instanceof Double)      arr.put((double) val);
+        else                                 arr.put(val.toString());
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -558,11 +589,11 @@ public class GenericAgentDelegate implements JavaDelegate {
             InputStream stream      = storage.downloadDocument(minioPath);
             String raw              = new String(IOUtils.toByteArray(stream), StandardCharsets.UTF_8);
 
-            // ── FIX 1: normalize rawResponse escaped string → nested object ──────────
+            // Normalize rawResponse escaped string → nested object.
             // Agent result files store rawResponse as an escaped JSON string:
             //   "rawResponse": "{\"answer\":{...}}"
             // This makes $.rawResponse.answer unreachable via JsonPath.
-            // We parse it here so all JsonPath expressions work consistently.
+            // We parse it here so all paths work consistently with the live response.
             try {
                 JSONObject fileJson = new JSONObject(raw);
                 if (fileJson.has("rawResponse")) {
@@ -571,18 +602,16 @@ public class GenericAgentDelegate implements JavaDelegate {
                         String rawRespStr = ((String) rawResp).trim();
                         if (rawRespStr.startsWith("{")) {
                             fileJson.put("rawResponse", new JSONObject(rawRespStr));
-                            raw = fileJson.toString(); // use normalized version for JsonPath
+                            raw = fileJson.toString();
                             log.debug("Merge [{}] entry {}: normalized rawResponse in '{}'",
                                     outputKey, entryIndex, minioPath);
                         }
                     }
                 }
             } catch (Exception e) {
-                // Not a JSON object or rawResponse already parsed — proceed with raw content as-is
                 log.debug("Merge [{}] entry {}: rawResponse normalization skipped for '{}': {}",
                         outputKey, entryIndex, minioPath, e.getMessage());
             }
-            // ── END FIX 1 ─────────────────────────────────────────────────────────────
 
             log.debug("Merge [{}] entry {}: downloaded MinIO file '{}' ({} bytes)",
                     outputKey, entryIndex, minioPath, raw.length());
@@ -622,8 +651,8 @@ public class GenericAgentDelegate implements JavaDelegate {
      * "string" — calls toString() (Maps/Lists serialized to JSON string)
      * "json"   — keeps Maps and Lists as-is for proper nested serialization
      *
-     * Note: This is NOT called for sourceType=processVariable entries.
-     * Those handle their own type resolution inline to avoid double-serialization.
+     * Note: NOT called for sourceType=processVariable entries — those handle
+     * their own type resolution inline to avoid double-serialization issues.
      */
     private Object coerceType(Object val, String dataType) {
         if (val == null) return null;
@@ -671,7 +700,14 @@ public class GenericAgentDelegate implements JavaDelegate {
                     if (apiResponse == null) throw new Exception("Empty apiResponse");
                     String sourcePath = input.optString("sourceJsonPath", "");
                     if (!sourcePath.isEmpty()) {
-                        data.put(key, JsonPath.read(apiResponse, sourcePath));
+                        Object extracted = JsonPath.read(apiResponse, sourcePath);
+                        if (extracted instanceof Map) {
+                            data.put(key, new JSONObject((Map<?, ?>) extracted));
+                        } else if (extracted instanceof List) {
+                            data.put(key, new JSONArray((List<?>) extracted));
+                        } else {
+                            data.put(key, extracted);
+                        }
                     } else {
                         data.put(key, new JSONObject(apiResponse));
                     }
