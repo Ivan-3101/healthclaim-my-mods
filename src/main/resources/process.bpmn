@@ -387,6 +387,59 @@
         "path": "$.success"
       }
     ]
+  },
+  "consolidatedReport": {
+    "storeIn": "objectStorage",
+    "storageType": "minio",
+    "mergeVariables": true,
+    "targetPath": "1/HealthClaim/${TicketID}/consolidated/report.json",
+    "targetVarName": "consolidatedReportMinioPath",
+    "mergePaths": [
+      {
+        "keyName": "currentDocAnswer",
+        "sourceType": "responseJson",
+        "dataType": "json",
+        "path": "$.rawResponse.answer"
+      },
+      {
+        "keyName": "vpaAttribs",
+        "sourceType": "processVariable",
+        "variableName": "vpaAttribs"
+      },
+      {
+        "keyName": "accountAttribs",
+        "sourceType": "processVariable",
+        "variableName": "accountAttribs"
+      },
+      {
+        "keyName": "doc1FullResult",
+        "sourceType": "minioFile",
+        "sourcePath": "1/HealthClaim/${TicketID}/Identify_Forged_Documents/Doc1.pdf.json",
+        "dataType": "json",
+        "path": "$"
+      },
+      {
+        "keyName": "doc1Answer",
+        "sourceType": "minioFile",
+        "sourcePath": "1/HealthClaim/${TicketID}/Identify_Forged_Documents/Doc1.pdf.json",
+        "dataType": "json",
+        "path": "$.rawResponse.answer"
+      },
+      {
+        "keyName": "verifyAccountId",
+        "sourceType": "minioFile",
+        "variableName": "verifyResponse_minioPath",
+        "dataType": "string",
+        "path": "$.accountId"
+      },
+      {
+        "keyName": "verifyFullResponse",
+        "sourceType": "minioFile",
+        "variableName": "verifyResponse_minioPath",
+        "dataType": "json",
+        "path": "$"
+      }
+    ]
   }
 }</camunda:string>
           </camunda:field>
