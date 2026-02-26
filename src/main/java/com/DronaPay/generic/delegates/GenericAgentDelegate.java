@@ -50,10 +50,11 @@ import java.util.regex.Pattern;
  *
  * Output options:
  *   3a. Always stores full result as MinIO JSON (default, always happens)
- *   3b. outputMapping (unified) — single JSON config that handles BOTH:
- *         - storing extracted values as Camunda process variables  (storeIn: "processVariable")
- *         - storing extracted values as new MinIO files             (storeIn: "objectStorage")
- *         - merging multiple JsonPaths into one JSON object         (mergeVariables: true)
+ *   3b. outputMapping (unified) — single JSON config that handles ALL of:
+ *         PATTERN A — extract single path  → Camunda process variable
+ *         PATTERN B — extract single path  → new MinIO file
+ *         PATTERN C — merge multiple paths → Camunda process variable
+ *         PATTERN D — merge multiple paths → new MinIO file          ← NEW
  */
 @Slf4j
 public class GenericAgentDelegate implements JavaDelegate {
@@ -65,7 +66,7 @@ public class GenericAgentDelegate implements JavaDelegate {
     private Expression method;         // HTTP Method (POST/GET)
     private Expression agentId;        // Unique Identifier for this agent task
     private Expression inputParams;    // JSON Array defining input data structure
-    private Expression outputMapping;  // Unified output mapping (replaces old outputMapping + outputMinioExtract)
+    private Expression outputMapping;  // Unified output mapping
 
     @Override
     public void execute(DelegateExecution execution) throws Exception {
@@ -89,7 +90,7 @@ public class GenericAgentDelegate implements JavaDelegate {
         }
 
         String baseUrlKey = (String) baseUrl.getValue(execution);
-        String routePath = (String) route.getValue(execution);
+        String routePath  = (String) route.getValue(execution);
         String authMethod = (authType != null) ? (String) authType.getValue(execution) : "none";
 
         // 3. Determine Property Prefix
@@ -132,7 +133,7 @@ public class GenericAgentDelegate implements JavaDelegate {
         String reqMethod = (method != null) ? (String) method.getValue(execution) : "POST";
 
         // 6. Build Request Payload
-        String inputJsonStr = (inputParams != null) ? (String) inputParams.getValue(execution) : "[]";
+        String inputJsonStr   = (inputParams != null) ? (String) inputParams.getValue(execution) : "[]";
         String resolvedInputJson = resolvePlaceholders(inputJsonStr, execution, props);
         JSONObject dataObject = buildDataObject(resolvedInputJson, tenantId);
 
@@ -173,8 +174,6 @@ public class GenericAgentDelegate implements JavaDelegate {
         String fullResultJson = resultJson.toString();
 
         // 9. Unified Output Mapping (3b)
-        // Handles both process variable storage and object storage in one config block.
-        // See processOutputMapping() below for full format documentation.
         String outputMapStr = (outputMapping != null) ? (String) outputMapping.getValue(execution) : "{}";
         processOutputMapping(fullResultJson, outputMapStr, tenantId, execution, props);
 
@@ -186,69 +185,47 @@ public class GenericAgentDelegate implements JavaDelegate {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * Unified output mapping processor (replaces old mapOutputs + extractToMinioFiles).
-     *
-     * The "outputMapping" field is a JSON Object where:
-     *   - Each top-level KEY   = the output variable name (or MinIO targetVarName for objectStorage)
-     *   - Each top-level VALUE = a descriptor object with the fields below
+     * Unified output mapping processor supporting 4 patterns.
      *
      * Descriptor fields:
      * ─────────────────────────────────────────────────────────────────────────
      *  storeIn        (required)  "processVariable" | "objectStorage"
-     *  dataType       (optional)  "string" | "json"                   default: "json"
-     *  path           (optional)  JsonPath into fullResultJson         default: "$"
+     *  dataType       (optional)  "string" | "json"                    default: "json"
+     *  path           (optional)  JsonPath into fullResultJson          default: "$"
      *                             (ignored when mergeVariables = true)
      *
-     *  — For storeIn = "objectStorage" only —
-     *  storageType    (optional)  "minio"                             default: "minio"
+     *  ── For storeIn = "objectStorage" ───────────────────────────────────────
+     *  storageType    (optional)  "minio"                              default: "minio"
      *  targetPath     (required)  MinIO destination path. Supports ${var} placeholders.
-     *  targetVarName  (optional)  Process variable to receive the resolved MinIO path.
+     *  targetVarName  (optional)  Process variable that receives the resolved MinIO path.
      *                             Defaults to the top-level key name.
      *
-     *  — For merging multiple paths into one object —
-     *  mergeVariables (optional)  true | false                        default: false
+     *  ── For merging multiple paths ───────────────────────────────────────────
+     *  mergeVariables (optional)  true | false                         default: false
      *  mergePaths     (required when mergeVariables=true)
      *                 JSON Array of { keyName, dataType, path }
-     *                 Each entry is extracted and placed under keyName in the merged object.
-     *                 If the same keyName appears more than once, values are collected
-     *                 into a JSON Array under that key.
+     *                 Duplicate keyNames collect into a JSON Array under that key.
      * ─────────────────────────────────────────────────────────────────────────
      *
-     * PATTERN A — store single JsonPath value as Camunda process variable:
-     * {
-     *   "isForged": {
-     *     "storeIn": "processVariable",
-     *     "dataType": "string",
-     *     "path": "$.rawResponse.answer"
-     *   }
-     * }
+     * PATTERN A — single path → process variable:
+     *   "isForged": { "storeIn": "processVariable", "dataType": "string", "path": "$.rawResponse.answer" }
      *
-     * PATTERN B — extract JsonPath value and upload as a new MinIO file:
-     * {
-     *   "forgeryResultFile": {
-     *     "storeIn": "objectStorage",
-     *     "storageType": "minio",
-     *     "dataType": "json",
-     *     "path": "$",
-     *     "targetPath": "${TicketID}/forgery/result.json",
-     *     "targetVarName": "forgeryResultMinioPath"
-     *   }
-     * }
+     * PATTERN B — single path → MinIO file:
+     *   "forgeryArchive": { "storeIn": "objectStorage", "path": "$.rawResponse",
+     *                       "targetPath": "${TicketID}/forgery/${attachment}_archive.json",
+     *                       "targetVarName": "forgeryArchiveMinioPath" }
      *
-     * PATTERN C — merge multiple JsonPaths into one JSON object, store as process variable:
-     * {
-     *   "mergedSummary": {
-     *     "storeIn": "processVariable",
-     *     "dataType": "json",
-     *     "mergeVariables": true,
-     *     "mergePaths": [
-     *       { "keyName": "answer", "dataType": "string", "path": "$.rawResponse.answer" },
-     *       { "keyName": "score",  "dataType": "json",   "path": "$.rawResponse.score"  }
-     *     ]
-     *   }
-     * }
+     * PATTERN C — merged paths → process variable:
+     *   "forgerySummary": { "storeIn": "processVariable", "mergeVariables": true,
+     *                       "mergePaths": [ { "keyName": "answer", "path": "$.rawResponse.answer" }, ... ] }
      *
-     * Available root keys in fullResultJson (from AgentResultStorageService.buildResultMap):
+     * PATTERN D — merged paths → MinIO file:
+     *   "forgeryMergedArchive": { "storeIn": "objectStorage", "mergeVariables": true,
+     *                             "targetPath": "${TicketID}/forgery/${attachment}_merged.json",
+     *                             "targetVarName": "forgeryMergedArchiveMinioPath",
+     *                             "mergePaths": [ { "keyName": "answer", "path": "$.rawResponse.answer" }, ... ] }
+     *
+     * Available root keys in fullResultJson:
      *   agentId, statusCode, success, rawResponse (parsed object), extractedData, timestamp
      */
     private void processOutputMapping(String fullResultJson, String mappingStr,
@@ -275,32 +252,36 @@ public class GenericAgentDelegate implements JavaDelegate {
 
         for (String outputKey : mapping.keySet()) {
             JSONObject descriptor = mapping.getJSONObject(outputKey);
-            String storeIn   = descriptor.optString("storeIn", "processVariable");
-            String dataType  = descriptor.optString("dataType", "json");
-            boolean isMerge  = descriptor.optBoolean("mergeVariables", false);
+            String storeIn  = descriptor.optString("storeIn", "processVariable");
+            String dataType = descriptor.optString("dataType", "json");
+            boolean isMerge = descriptor.optBoolean("mergeVariables", false);
 
             try {
 
-                // ── PATTERN C: Merge multiple paths into one JSON object ───────────────
                 if (isMerge) {
+                    // ── PATTERN C & D ─────────────────────────────────────────────────────
+                    // Build merged JSON object from multiple paths, then route to process
+                    // variable (C) or MinIO file (D) based on storeIn.
+
                     JSONArray mergePaths = descriptor.optJSONArray("mergePaths");
                     if (mergePaths == null || mergePaths.length() == 0) {
                         log.warn("outputMapping key '{}': mergeVariables=true but mergePaths is missing/empty — skipping", outputKey);
                         continue;
                     }
 
+                    // Build the merged object
                     JSONObject merged = new JSONObject();
                     for (int i = 0; i < mergePaths.length(); i++) {
-                        JSONObject mp      = mergePaths.getJSONObject(i);
-                        String keyName     = mp.optString("keyName", "key" + i);
-                        String mergePath   = mp.optString("path", "$");
-                        String mergeType   = mp.optString("dataType", "json");
+                        JSONObject mp    = mergePaths.getJSONObject(i);
+                        String keyName   = mp.optString("keyName", "key" + i);
+                        String mergePath = mp.optString("path", "$");
+                        String mergeType = mp.optString("dataType", "json");
 
                         try {
                             Object val = documentContext.read(mergePath);
                             val = coerceType(val, mergeType);
 
-                            // If the same keyName is used more than once, collect into a JSON Array
+                            // Duplicate keyName → collect into a JSON Array
                             if (merged.has(keyName)) {
                                 Object existing = merged.get(keyName);
                                 JSONArray arr;
@@ -317,59 +298,88 @@ public class GenericAgentDelegate implements JavaDelegate {
                             }
                             log.debug("Merge [{}]: keyName='{}' path='{}' → '{}'", outputKey, keyName, mergePath, val);
                         } catch (Exception e) {
-                            log.warn("Merge [{}]: could not extract path '{}' for keyName '{}' — skipping entry", outputKey, mergePath, keyName);
+                            log.warn("Merge [{}]: could not extract path '{}' for keyName '{}' — skipping entry",
+                                    outputKey, mergePath, keyName);
                         }
                     }
 
-                    execution.setVariable(outputKey, merged.toString());
-                    log.info("Output mapping (merge/processVariable): set '{}' as merged JSON object", outputKey);
-                    continue;
-                }
+                    if ("objectStorage".equalsIgnoreCase(storeIn)) {
+                        // ── PATTERN D: Upload merged object as a MinIO file ───────────────
+                        String targetPath    = descriptor.optString("targetPath", "");
+                        String targetVarName = descriptor.optString("targetVarName", outputKey + "_minioPath");
 
-                // ── PATTERN A & B: Single path extraction ─────────────────────────────
-                String path = descriptor.optString("path", "$");
-                Object val;
-                try {
-                    val = documentContext.read(path);
-                } catch (Exception e) {
-                    log.warn("outputMapping key '{}': could not extract path '{}' — skipping", outputKey, path);
-                    continue;
-                }
+                        if (targetPath.isEmpty()) {
+                            log.warn("outputMapping key '{}': storeIn=objectStorage + mergeVariables=true " +
+                                    "but targetPath is empty — skipping", outputKey);
+                            continue;
+                        }
 
-                val = coerceType(val, dataType);
+                        String serialized         = merged.toString(2);
+                        String resolvedTargetPath = resolvePlaceholders(targetPath, execution, props);
+                        StorageProvider storage   = ObjectStorageService.getStorageProvider(tenantId);
+                        storage.uploadDocument(resolvedTargetPath,
+                                serialized.getBytes(StandardCharsets.UTF_8), "application/json");
+                        execution.setVariable(targetVarName, resolvedTargetPath);
+                        log.info("Output mapping (merge/objectStorage): merged {} paths → MinIO='{}' → var='{}'",
+                                mergePaths.length(), resolvedTargetPath, targetVarName);
 
-                if ("objectStorage".equalsIgnoreCase(storeIn)) {
+                    } else {
+                        // ── PATTERN C: Set merged object as Camunda process variable ──────
+                        execution.setVariable(outputKey, merged.toString());
+                        log.info("Output mapping (merge/processVariable): set '{}' as merged JSON object ({} paths)",
+                                outputKey, mergePaths.length());
+                    }
 
-                    // ── PATTERN B: Upload extracted value as a new MinIO file ──────────
-                    String targetPath    = descriptor.optString("targetPath", "");
-                    String targetVarName = descriptor.optString("targetVarName", outputKey + "_minioPath");
+                } else {
+                    // ── PATTERN A & B ─────────────────────────────────────────────────────
+                    // Extract a single JsonPath value, then route to process variable (A)
+                    // or MinIO file (B) based on storeIn.
 
-                    if (targetPath.isEmpty()) {
-                        log.warn("outputMapping key '{}': storeIn=objectStorage but targetPath is empty — skipping", outputKey);
+                    String path = descriptor.optString("path", "$");
+                    Object val;
+                    try {
+                        val = documentContext.read(path);
+                    } catch (Exception e) {
+                        log.warn("outputMapping key '{}': could not extract path '{}' — skipping", outputKey, path);
                         continue;
                     }
 
-                    // Serialize the extracted value to a JSON string for upload
-                    String serialized;
-                    if (val instanceof Map) {
-                        serialized = new JSONObject((Map<?, ?>) val).toString(2);
-                    } else if (val instanceof List) {
-                        serialized = new JSONArray((List<?>) val).toString(2);
+                    val = coerceType(val, dataType);
+
+                    if ("objectStorage".equalsIgnoreCase(storeIn)) {
+                        // ── PATTERN B: Upload extracted value as a new MinIO file ──────────
+                        String targetPath    = descriptor.optString("targetPath", "");
+                        String targetVarName = descriptor.optString("targetVarName", outputKey + "_minioPath");
+
+                        if (targetPath.isEmpty()) {
+                            log.warn("outputMapping key '{}': storeIn=objectStorage but targetPath is empty — skipping",
+                                    outputKey);
+                            continue;
+                        }
+
+                        String serialized;
+                        if (val instanceof Map) {
+                            serialized = new JSONObject((Map<?, ?>) val).toString(2);
+                        } else if (val instanceof List) {
+                            serialized = new JSONArray((List<?>) val).toString(2);
+                        } else {
+                            serialized = (val != null) ? val.toString() : "null";
+                        }
+
+                        String resolvedTargetPath = resolvePlaceholders(targetPath, execution, props);
+                        StorageProvider storage   = ObjectStorageService.getStorageProvider(tenantId);
+                        storage.uploadDocument(resolvedTargetPath,
+                                serialized.getBytes(StandardCharsets.UTF_8), "application/json");
+                        execution.setVariable(targetVarName, resolvedTargetPath);
+                        log.info("Output mapping (objectStorage): path='{}' → MinIO='{}' → var='{}'",
+                                path, resolvedTargetPath, targetVarName);
+
                     } else {
-                        serialized = (val != null) ? val.toString() : "null";
+                        // ── PATTERN A: Set as Camunda process variable ─────────────────────
+                        execution.setVariable(outputKey, val);
+                        log.info("Output mapping (processVariable): set '{}' from path '{}' = '{}'",
+                                outputKey, path, val);
                     }
-
-                    String resolvedTargetPath = resolvePlaceholders(targetPath, execution, props);
-                    StorageProvider storage   = ObjectStorageService.getStorageProvider(tenantId);
-                    storage.uploadDocument(resolvedTargetPath, serialized.getBytes(StandardCharsets.UTF_8), "application/json");
-                    execution.setVariable(targetVarName, resolvedTargetPath);
-                    log.info("Output mapping (objectStorage): path='{}' → MinIO='{}' → var='{}'", path, resolvedTargetPath, targetVarName);
-
-                } else {
-
-                    // ── PATTERN A: Set as Camunda process variable ─────────────────────
-                    execution.setVariable(outputKey, val);
-                    log.info("Output mapping (processVariable): set '{}' from path '{}' = '{}'", outputKey, path, val);
                 }
 
             } catch (Exception e) {
@@ -383,10 +393,8 @@ public class GenericAgentDelegate implements JavaDelegate {
     /**
      * Coerces an extracted JsonPath value to the declared dataType.
      *
-     * "string" — calls toString() on anything (Maps/Lists become their JSON string representation)
-     * "json"   — keeps Maps and Lists as-is so Camunda serializes them via Jackson;
-     *            wraps primitives in a JSONObject {"value": <val>} when the caller
-     *            needs a JSON object but got a primitive (only relevant for objectStorage uploads)
+     * "string" — calls toString() (Maps/Lists become their JSON string representation)
+     * "json"   — keeps Maps and Lists as-is so Camunda/JSONObject serialization handles them
      */
     private Object coerceType(Object val, String dataType) {
         if (val == null) return null;
@@ -398,7 +406,6 @@ public class GenericAgentDelegate implements JavaDelegate {
             }
             return val.toString();
         }
-        // "json" — return as-is; Camunda / JSONObject serialization handles Maps and Lists
         return val;
     }
 
@@ -410,8 +417,8 @@ public class GenericAgentDelegate implements JavaDelegate {
      * Constructs the 'data' JSON object expected by the Agent API.
      */
     private JSONObject buildDataObject(String inputJsonStr, String tenantId) throws Exception {
-        JSONObject data = new JSONObject();
-        JSONArray inputs = new JSONArray(inputJsonStr);
+        JSONObject data   = new JSONObject();
+        JSONArray inputs  = new JSONArray(inputJsonStr);
         StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
 
         for (int i = 0; i < inputs.length(); i++) {
@@ -479,7 +486,7 @@ public class GenericAgentDelegate implements JavaDelegate {
             }
 
             try (CloseableHttpResponse response = client.execute(request)) {
-                int status = response.getStatusLine().getStatusCode();
+                int status   = response.getStatusLine().getStatusCode();
                 String respStr = EntityUtils.toString(response.getEntity());
                 if (status != 200) {
                     throw new BpmnError("AGENT_ERROR", "Agent returned " + status + ": " + respStr);
@@ -508,7 +515,8 @@ public class GenericAgentDelegate implements JavaDelegate {
             } else if (token.contains("[") && token.endsWith("]")) {
                 replacement = resolveMapValue(token, execution);
             } else {
-                String varName = token.startsWith("processVariable.") ? token.substring("processVariable.".length()) : token;
+                String varName = token.startsWith("processVariable.")
+                        ? token.substring("processVariable.".length()) : token;
                 Object val = execution.getVariable(varName);
                 replacement = (val != null) ? val.toString() : "${" + token + "}";
             }
@@ -523,16 +531,16 @@ public class GenericAgentDelegate implements JavaDelegate {
      */
     private String resolveMapValue(String token, DelegateExecution execution) {
         try {
-            int bracketIndex = token.indexOf("[");
-            String mapName   = token.substring(0, bracketIndex);
+            int bracketIndex  = token.indexOf("[");
+            String mapName    = token.substring(0, bracketIndex);
             String keyVarName = token.substring(bracketIndex + 1, token.length() - 1);
-            Object mapObj    = execution.getVariable(mapName);
-            Object keyValObj = execution.getVariable(keyVarName);
+            Object mapObj     = execution.getVariable(mapName);
+            Object keyValObj  = execution.getVariable(keyVarName);
             String resolvedKey = (keyValObj != null) ? keyValObj.toString() : keyVarName;
 
             if (mapObj instanceof Map) {
                 Map<?, ?> map = (Map<?, ?>) mapObj;
-                Object value = map.get(resolvedKey);
+                Object value  = map.get(resolvedKey);
                 return value != null ? value.toString() : "";
             }
         } catch (Exception e) {

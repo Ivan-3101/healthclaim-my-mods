@@ -334,6 +334,11 @@
     "dataType": "string",
     "path": "$.rawResponse.answer"
   },
+  "isForgedAsJSON": {
+    "storeIn": "processVariable",
+    "dataType": "json",
+    "path": "$.rawResponse.answer"
+  },
   "entireForgeryResponse": {
     "storeIn": "processVariable",
     "dataType": "json",
@@ -344,7 +349,7 @@
     "storageType": "minio",
     "dataType": "json",
     "path": "$.rawResponse",
-    "targetPath": "${TicketID}/forgery/archive.json",
+    "targetPath": "1/HealthClaim/${TicketID}/forgery_specific_json_extracted_using_minio_extract/${attachment}_archive.json",
     "targetVarName": "forgeryArchiveMinioPath"
   },
   "forgerySummary": {
@@ -353,17 +358,31 @@
     "mergeVariables": true,
     "mergePaths": [
       {
-        "keyName": "answer",
-        "dataType": "string",
-        "path": "$.rawResponse.answer"
-      },
-      {
         "keyName": "agentId",
         "dataType": "string",
         "path": "$.agentId"
       },
       {
         "keyName": "callSuccess",
+        "dataType": "string",
+        "path": "$.success"
+      }
+    ]
+  },
+  "forgeryMergedArchive": {
+    "storeIn": "objectStorage",
+    "storageType": "minio",
+    "mergeVariables": true,
+    "targetPath": "1/HealthClaim/${TicketID}/forgery_merged_archive/${attachment}_merged.json",
+    "targetVarName": "forgeryMergedArchiveMinioPath",
+    "mergePaths": [
+      {
+        "keyName": "agentId",
+        "dataType": "string",
+        "path": "$.agentId"
+      },
+      {
+        "keyName": "success",
         "dataType": "string",
         "path": "$.success"
       }
