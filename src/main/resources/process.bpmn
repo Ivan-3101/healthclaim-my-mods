@@ -1256,10 +1256,11 @@
     "dataType": "json",
     "path": "$"
   },
- "missing_documents":{
-  "storeIn":"processVariable",
-  "dataType":"json",
-  "path":"$.rawResponse.answer"
+  "missing_documents": {
+    "storeIn": "processVariable",
+    "dataType": "json",
+    "path": "$.rawResponse.answer"
+  }
 }</camunda:string>
         </camunda:field>
       </bpmn:extensionElements>
@@ -1299,7 +1300,8 @@
     "storeIn": "processVariable",
     "dataType": "json",
     "path": "$"
-  }</camunda:string>
+  }
+}</camunda:string>
         </camunda:field>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_0e8mxy3</bpmn:incoming>
