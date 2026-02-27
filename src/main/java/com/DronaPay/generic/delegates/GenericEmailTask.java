@@ -19,6 +19,8 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 @Slf4j
@@ -166,14 +168,85 @@ public class GenericEmailTask implements JavaDelegate {
 
             for (String key : rawParams.keySet()) {
                 String value = rawParams.getString(key);
-                String resolvedValue = resolveValue(value, execution);
-                params.put(key, resolvedValue);
+
+                // Check if it's a variable reference like ${varName}
+                if (value.startsWith("${") && value.endsWith("}")) {
+                    String varName = value.substring(2, value.length() - 1);
+                    Object varValue = execution.getVariable(varName);
+
+                    if (varValue instanceof List) {
+                        // Special handling: List variable → formatted HTML bullet list
+                        log.info("Variable '{}' is a List — formatting as HTML list", varName);
+                        params.put(key, formatListVariable((List<?>) varValue));
+                    } else {
+                        // Normal variable — just toString()
+                        String resolvedValue = varValue != null ? varValue.toString() : "";
+                        params.put(key, resolvedValue);
+                    }
+                } else {
+                    // Plain string value, no variable resolution needed
+                    params.put(key, value);
+                }
             }
         } catch (Exception e) {
             log.error("Error parsing body params: {}", bodyParamsJson, e);
         }
 
         return params;
+    }
+
+    /**
+     * Converts a List of missing document objects into an HTML <ul> list string.
+     *
+     * Handles two formats:
+     *   1. List<Map> — e.g. [{missing_document: "medical_bill"}, ...] (from application/json deserialization)
+     *   2. List<Object> — plain toString() fallback for any other format
+     *
+     * Output example:
+     *   <ul><li>Medical Bill</li><li>Claim Form</li></ul>
+     */
+    private String formatListVariable(List<?> list) {
+        if (list == null || list.isEmpty()) {
+            log.warn("formatListVariable called with null or empty list");
+            return "<ul><li>No documents listed</li></ul>";
+        }
+
+        StringBuilder html = new StringBuilder("<ul>");
+        for (Object item : list) {
+            String docName;
+            if (item instanceof Map) {
+                // application/json deserialization gives LinkedHashMap
+                Object val = ((Map<?, ?>) item).get("missing_document");
+                docName = val != null ? val.toString() : item.toString();
+            } else {
+                docName = item.toString();
+            }
+            // Convert snake_case/underscore to Title Case for readability
+            String displayName = toTitleCase(docName.replace("_", " "));
+            html.append("<li>").append(displayName).append("</li>");
+        }
+        html.append("</ul>");
+
+        log.info("Formatted list variable to HTML: {}", html);
+        return html.toString();
+    }
+
+    /**
+     * Converts a space-separated string to Title Case.
+     * e.g. "medical bill" → "Medical Bill"
+     */
+    private String toTitleCase(String input) {
+        if (input == null || input.isEmpty()) return input;
+        String[] words = input.split(" ");
+        StringBuilder sb = new StringBuilder();
+        for (String word : words) {
+            if (!word.isEmpty()) {
+                sb.append(Character.toUpperCase(word.charAt(0)))
+                        .append(word.substring(1).toLowerCase())
+                        .append(" ");
+            }
+        }
+        return sb.toString().trim();
     }
 
     private void sendEmail(JSONObject emailRequest, String tenantId, Properties props) throws Exception {
@@ -222,7 +295,8 @@ public class GenericEmailTask implements JavaDelegate {
 
             try (CloseableHttpResponse response = client.execute(post)) {
                 int statusCode = response.getStatusLine().getStatusCode();
-                String responseBody = response.getEntity() != null ? EntityUtils.toString(response.getEntity()) : "";
+                String responseBody = response.getEntity() != null ?
+                        EntityUtils.toString(response.getEntity()) : "";
 
                 log.info("Email API response - Status: {}, Body: {}", statusCode, responseBody);
 
