@@ -290,6 +290,7 @@
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="Flow_0974uhc" sourceRef="Activity_ReceiveFWAInfoResponse" targetRef="Activity_ReviewFWAResults" />
     <bpmn:subProcess id="Activity_17h17ae">
+      <bpmn:incoming>Flow_024y7gm</bpmn:incoming>
       <bpmn:outgoing>Flow_0450puq</bpmn:outgoing>
       <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:asyncBefore="true" camunda:asyncAfter="true" camunda:collection="${attachmentVars}" camunda:elementVariable="attachment" />
       <bpmn:startEvent id="Event_11ox0g4">
@@ -498,11 +499,12 @@
           </camunda:field>
           <camunda:field name="outputMapping">
             <camunda:string>{
-  "ocr_raw_output": "$"
+  "ocr_raw_output": {
+    "storeIn": "processVariable",
+    "dataType": "json",
+    "path": "$"
+  }
 }</camunda:string>
-          </camunda:field>
-          <camunda:field name="outputMinioExtract">
-            <camunda:string>[]</camunda:string>
           </camunda:field>
         </bpmn:extensionElements>
         <bpmn:incoming>Flow_0we714j</bpmn:incoming>
@@ -549,11 +551,17 @@
           </camunda:field>
           <camunda:field name="outputMapping">
             <camunda:string>{
-  "classification_result":  "$"
+  "classifier_onlyAnswer": {
+    "storeIn": "processVariable",
+    "dataType": "json",
+    "path": "$.rawResponse.answer"
+  },
+  "classification_result": {
+    "storeIn": "processVariable",
+    "dataType": "json",
+    "path": "$"
+  }
 }</camunda:string>
-          </camunda:field>
-          <camunda:field name="outputMinioExtract">
-            <camunda:string>[]</camunda:string>
           </camunda:field>
         </bpmn:extensionElements>
         <bpmn:incoming>Flow_1p7jmc8</bpmn:incoming>
@@ -615,9 +623,6 @@
           <camunda:field name="outputMapping">
             <camunda:string>{}</camunda:string>
           </camunda:field>
-          <camunda:field name="outputMinioExtract">
-            <camunda:string>[]</camunda:string>
-          </camunda:field>
         </bpmn:extensionElements>
         <bpmn:incoming>Flow_084cttl</bpmn:incoming>
         <bpmn:outgoing>Flow_0xnnumq</bpmn:outgoing>
@@ -663,7 +668,7 @@
       <bpmn:incoming>Flow_1hfmdqo</bpmn:incoming>
       <bpmn:outgoing>Flow_0j2ifcv</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:sequenceFlow id="Flow_024y7gm" sourceRef="Verify_Master_Data" targetRef="FWA_Decisioning" />
+    <bpmn:sequenceFlow id="Flow_024y7gm" sourceRef="Verify_Master_Data" targetRef="Activity_17h17ae" />
     <bpmn:sequenceFlow id="Flow_1446qaa" sourceRef="Activity_User_Verification" targetRef="Policy_Coherence" />
     <bpmn:serviceTask id="Generate_TicketID_and_Workflow_Name" name="Generate TicketID and Workflow Name" camunda:modelerTemplate="com.dronapay.generic.ticketgenerator" camunda:class="com.DronaPay.generic.delegates.GenericTicketIdGenerator">
       <bpmn:extensionElements>
@@ -892,123 +897,6 @@
       <bpmn:incoming>Flow_0k70ifz</bpmn:incoming>
       <bpmn:outgoing>Flow_1m4191f</bpmn:outgoing>
     </bpmn:sendTask>
-    <bpmn:serviceTask id="Submission_Validator" name="Submission Validator" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.generic.delegates.GenericAgentDelegate">
-      <bpmn:extensionElements>
-        <camunda:field name="agentId">
-          <camunda:string>Submission_Validator</camunda:string>
-        </camunda:field>
-        <camunda:field name="baseUrl">
-          <camunda:string>dia</camunda:string>
-        </camunda:field>
-        <camunda:field name="route">
-          <camunda:string>agent</camunda:string>
-        </camunda:field>
-        <camunda:field name="authType">
-          <camunda:string>basicAuth</camunda:string>
-        </camunda:field>
-        <camunda:field name="method">
-          <camunda:string>POST</camunda:string>
-        </camunda:field>
-        <camunda:field name="inputParams">
-          <camunda:string>[
-  {
-    "key": "doc_fhir",
-    "type": "minioJson",
-    "value": "${fhirConsolidatorMinioPath}",
-    "sourceJsonPath": "$.doc_fhir"
-  }
-]</camunda:string>
-        </camunda:field>
-        <camunda:field name="outputMapping">
-          <camunda:string>{
-  "submissionValidatorForm": "$"
-}</camunda:string>
-        </camunda:field>
-        <camunda:field name="outputMinioExtract">
-          <camunda:string>[]</camunda:string>
-        </camunda:field>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_0oa3vkg</bpmn:incoming>
-      <bpmn:outgoing>Flow_0e8mxy3</bpmn:outgoing>
-    </bpmn:serviceTask>
-    <bpmn:serviceTask id="Submission_Consistency_Analyzer" name="Submission Consistency Analyzer" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.generic.delegates.GenericAgentDelegate">
-      <bpmn:extensionElements>
-        <camunda:field name="agentId">
-          <camunda:string>FHIR_Analyser</camunda:string>
-        </camunda:field>
-        <camunda:field name="baseUrl">
-          <camunda:string>dia</camunda:string>
-        </camunda:field>
-        <camunda:field name="route">
-          <camunda:string>agent</camunda:string>
-        </camunda:field>
-        <camunda:field name="authType">
-          <camunda:string>basicAuth</camunda:string>
-        </camunda:field>
-        <camunda:field name="method">
-          <camunda:string>POST</camunda:string>
-        </camunda:field>
-        <camunda:field name="inputParams">
-          <camunda:string>[
-  {
-    "key": "doc_fhir",
-    "type": "minioJson",
-    "value": "${fhirConsolidatorMinioPath}",
-    "sourceJsonPath": "$.doc_fhir"
-  }
-]</camunda:string>
-        </camunda:field>
-        <camunda:field name="outputMapping">
-          <camunda:string>{
-  "submissionConsistencyAnalyzerForm": "$"
-}</camunda:string>
-        </camunda:field>
-        <camunda:field name="outputMinioExtract">
-          <camunda:string>[]</camunda:string>
-        </camunda:field>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_0e8mxy3</bpmn:incoming>
-      <bpmn:outgoing>Flow_1y4cq5x</bpmn:outgoing>
-    </bpmn:serviceTask>
-    <bpmn:serviceTask id="UI_Displayer_Agent" name="Activity_UIDisplayer" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.generic.delegates.GenericAgentDelegate">
-      <bpmn:extensionElements>
-        <camunda:field name="agentId">
-          <camunda:string>UI_Displayer</camunda:string>
-        </camunda:field>
-        <camunda:field name="baseUrl">
-          <camunda:string>dia</camunda:string>
-        </camunda:field>
-        <camunda:field name="route">
-          <camunda:string>agent</camunda:string>
-        </camunda:field>
-        <camunda:field name="authType">
-          <camunda:string>basicAuth</camunda:string>
-        </camunda:field>
-        <camunda:field name="method">
-          <camunda:string>POST</camunda:string>
-        </camunda:field>
-        <camunda:field name="inputParams">
-          <camunda:string>[
-  {
-    "key": "doc_fhir",
-    "type": "minioJson",
-    "value": "${fhirConsolidatorMinioPath}",
-    "sourceJsonPath": "$.doc_fhir"
-  }
-]</camunda:string>
-        </camunda:field>
-        <camunda:field name="outputMapping">
-          <camunda:string>{
-"verificationForm": "$"
-}</camunda:string>
-        </camunda:field>
-        <camunda:field name="outputMinioExtract">
-          <camunda:string>[]</camunda:string>
-        </camunda:field>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_1y4cq5x</bpmn:incoming>
-      <bpmn:outgoing>Flow_0w29skj</bpmn:outgoing>
-    </bpmn:serviceTask>
     <bpmn:serviceTask id="Verify_Master_Data" name="Verification of details from masters data" camunda:modelerTemplate="com.dronapay.generic.apicall" camunda:class="com.DronaPay.generic.delegates.GenericApiCallDelegate">
       <bpmn:extensionElements>
         <camunda:field name="baseUrl">
@@ -1235,7 +1123,6 @@
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_0xp9ktd</bpmn:incoming>
       <bpmn:incoming>Flow_171ffw7</bpmn:incoming>
-      <bpmn:incoming>Flow_024y7gm</bpmn:incoming>
       <bpmn:outgoing>Flow_0vxvqkn</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Claim_Cost_Computation" name="Claim Cost Computation" camunda:modelerTemplate="com.dronapay.generic.apicall" camunda:class="com.DronaPay.generic.delegates.GenericApiCallDelegate">
@@ -1335,6 +1222,129 @@
       <bpmn:incoming>Flow_0gtta65</bpmn:incoming>
       <bpmn:outgoing>Flow_0l7iwzz</bpmn:outgoing>
     </bpmn:serviceTask>
+    <bpmn:serviceTask id="Submission_Validator" name="Submission Validator" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.generic.delegates.GenericAgentDelegate">
+      <bpmn:extensionElements>
+        <camunda:field name="agentId">
+          <camunda:string>Submission_Validator</camunda:string>
+        </camunda:field>
+        <camunda:field name="baseUrl">
+          <camunda:string>dia</camunda:string>
+        </camunda:field>
+        <camunda:field name="route">
+          <camunda:string>agent</camunda:string>
+        </camunda:field>
+        <camunda:field name="authType">
+          <camunda:string>basicAuth</camunda:string>
+        </camunda:field>
+        <camunda:field name="method">
+          <camunda:string>POST</camunda:string>
+        </camunda:field>
+        <camunda:field name="inputParams">
+          <camunda:string>[
+  {
+    "key": "doc_fhir",
+    "type": "minioJson",
+    "value": "${fhirConsolidatorMinioPath}",
+    "sourceJsonPath": "$.doc_fhir"
+  }
+]</camunda:string>
+        </camunda:field>
+        <camunda:field name="outputMapping">
+          <camunda:string>{
+  "submissionValidatorForm": {
+    "storeIn": "processVariable",
+    "dataType": "json",
+    "path": "$"
+  },
+ "missing_documents":{
+  "storeIn":"processVariable",
+  "dataType":"json",
+  "path":"$.rawResponse.answer"
+}</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0oa3vkg</bpmn:incoming>
+      <bpmn:outgoing>Flow_0e8mxy3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Submission_Consistency_Analyzer" name="Submission Consistency Analyzer" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.generic.delegates.GenericAgentDelegate">
+      <bpmn:extensionElements>
+        <camunda:field name="agentId">
+          <camunda:string>FHIR_Analyser</camunda:string>
+        </camunda:field>
+        <camunda:field name="baseUrl">
+          <camunda:string>dia</camunda:string>
+        </camunda:field>
+        <camunda:field name="route">
+          <camunda:string>agent</camunda:string>
+        </camunda:field>
+        <camunda:field name="authType">
+          <camunda:string>basicAuth</camunda:string>
+        </camunda:field>
+        <camunda:field name="method">
+          <camunda:string>POST</camunda:string>
+        </camunda:field>
+        <camunda:field name="inputParams">
+          <camunda:string>[
+  {
+    "key": "doc_fhir",
+    "type": "minioJson",
+    "value": "${fhirConsolidatorMinioPath}",
+    "sourceJsonPath": "$.doc_fhir"
+  }
+]</camunda:string>
+        </camunda:field>
+        <camunda:field name="outputMapping">
+          <camunda:string>{
+  "submissionConsistencyAnalyzerForm": {
+    "storeIn": "processVariable",
+    "dataType": "json",
+    "path": "$"
+  }</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0e8mxy3</bpmn:incoming>
+      <bpmn:outgoing>Flow_1y4cq5x</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="UI_Displayer_Agent" name="Activity_UIDisplayer" camunda:modelerTemplate="com.dronapay.generic.agent.v2" camunda:class="com.DronaPay.generic.delegates.GenericAgentDelegate">
+      <bpmn:extensionElements>
+        <camunda:field name="agentId">
+          <camunda:string>UI_Displayer</camunda:string>
+        </camunda:field>
+        <camunda:field name="baseUrl">
+          <camunda:string>dia</camunda:string>
+        </camunda:field>
+        <camunda:field name="route">
+          <camunda:string>agent</camunda:string>
+        </camunda:field>
+        <camunda:field name="authType">
+          <camunda:string>basicAuth</camunda:string>
+        </camunda:field>
+        <camunda:field name="method">
+          <camunda:string>POST</camunda:string>
+        </camunda:field>
+        <camunda:field name="inputParams">
+          <camunda:string>[
+  {
+    "key": "doc_fhir",
+    "type": "minioJson",
+    "value": "${fhirConsolidatorMinioPath}",
+    "sourceJsonPath": "$.doc_fhir"
+  }
+]</camunda:string>
+        </camunda:field>
+        <camunda:field name="outputMapping">
+          <camunda:string>{
+  "verificationForm": {
+    "storeIn": "processVariable",
+    "dataType": "json",
+    "path": "$"
+  }
+}</camunda:string>
+        </camunda:field>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_1y4cq5x</bpmn:incoming>
+      <bpmn:outgoing>Flow_0w29skj</bpmn:outgoing>
+    </bpmn:serviceTask>
   </bpmn:process>
   <bpmn:error id="Error_1brcit7" name="forgeddoc" />
   <bpmn:message id="Message_3r951pg" name="policyHolderResponse" />
@@ -1415,6 +1425,15 @@
         <dc:Bounds x="4180" y="500" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1hkje19_di" bpmnElement="Submission_Validator" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+        <dc:Bounds x="2670" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_13d06h3_di" bpmnElement="Submission_Consistency_Analyzer" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+        <dc:Bounds x="2840" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_09bfh7s_di" bpmnElement="UI_Displayer_Agent" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+        <dc:Bounds x="3000" y="800" width="100" height="80" />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_17h17ae_di" bpmnElement="Activity_17h17ae" isExpanded="true">
         <dc:Bounds x="670" y="740" width="330" height="200" />
       </bpmndi:BPMNShape>
@@ -1424,7 +1443,7 @@
       <bpmndi:BPMNShape id="Event_0oqarvk_di" bpmnElement="Event_0oqarvk">
         <dc:Bounds x="932" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1sn3ri4_di" bpmnElement="Identify_Forged_Documents">
+      <bpmndi:BPMNShape id="Activity_1sn3ri4_di" bpmnElement="Identify_Forged_Documents" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="780" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_1c5c7cj_di" bpmnElement="Flow_1c5c7cj">
@@ -1488,7 +1507,7 @@
       <bpmndi:BPMNShape id="Event_1pojsp1_di" bpmnElement="Event_1pojsp1">
         <dc:Bounds x="2372" y="822" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0a1ctmv_di" bpmnElement="Raw_To_Structured_OCR" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
+      <bpmndi:BPMNShape id="Activity_0t7hy5s_di" bpmnElement="Raw_To_Structured_OCR" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
         <dc:Bounds x="2210" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_084cttl_di" bpmnElement="Flow_084cttl">
@@ -1539,15 +1558,6 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_1ntjw80_di" bpmnElement="Activity_0ytppf9">
         <dc:Bounds x="3980" y="500" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_06x5w8b_di" bpmnElement="Submission_Validator" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
-        <dc:Bounds x="2670" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_06w9u0v_di" bpmnElement="Submission_Consistency_Analyzer" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
-        <dc:Bounds x="2840" y="800" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1nyq2v1_di" bpmnElement="UI_Displayer_Agent" bioc:stroke="#0d4372" bioc:fill="#bbdefb" color:background-color="#bbdefb" color:border-color="#0d4372">
-        <dc:Bounds x="3000" y="800" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_1y8erh3_di" bpmnElement="Verify_Master_Data">
         <dc:Bounds x="470" y="800" width="100" height="80" />
@@ -1839,7 +1849,7 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_024y7gm_di" bpmnElement="Flow_024y7gm">
         <di:waypoint x="570" y="840" />
-        <di:waypoint x="3980" y="840" />
+        <di:waypoint x="670" y="840" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_1446qaa_di" bpmnElement="Flow_1446qaa">
         <di:waypoint x="3260" y="840" />
