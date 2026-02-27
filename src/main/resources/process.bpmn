@@ -1214,7 +1214,7 @@
           <camunda:string>{
   "RiskScore": {
     "storeIn": "processVariable",
-    "dataType": "json",
+    "dataType": "long",
     "path": "$.score.score"
   },
   "fwaAnalysis": {

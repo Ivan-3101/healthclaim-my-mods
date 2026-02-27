@@ -729,12 +729,27 @@ public class GenericApiCallDelegate implements JavaDelegate {
 
     /**
      * Coerces a value to the requested dataType.
-     *   "string" → calls toString()
-     *   "json"   → returns as-is (default)
+     *   "string"  -> calls toString()
+     *   "long"    -> converts Number to Long (safely handles 70.0 doubles from scoring APIs)
+     *   "int"     -> converts Number to Integer
+     *   "json"    -> returns as-is (default)
      */
     private Object coerceType(Object val, String dataType) {
-        if ("string".equalsIgnoreCase(dataType) && val != null) {
+        if (val == null) return null;
+        if ("string".equalsIgnoreCase(dataType)) {
             return val instanceof String ? val : val.toString();
+        }
+        if ("long".equalsIgnoreCase(dataType)) {
+            if (val instanceof Long)   return val;
+            if (val instanceof Number) return ((Number) val).longValue();
+            try { return Long.parseLong(val.toString().trim().replaceAll("[.][0-9]+$", "")); }
+            catch (Exception e) { log.warn("coerceType long: could not convert {} to Long, returning as-is", val); }
+        }
+        if ("int".equalsIgnoreCase(dataType) || "integer".equalsIgnoreCase(dataType)) {
+            if (val instanceof Integer) return val;
+            if (val instanceof Number)  return ((Number) val).intValue();
+            try { return Integer.parseInt(val.toString().trim().replaceAll("[.][0-9]+$", "")); }
+            catch (Exception e) { log.warn("coerceType int: could not convert {} to Integer, returning as-is", val); }
         }
         return val;
     }
