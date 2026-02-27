@@ -5,7 +5,7 @@
   "appliesTo": [
     "bpmn:ServiceTask"
   ],
-  "description": "Makes a generic HTTP call using App Properties and Process Variables. Supports unified output mapping (Patterns A/B/C/D) identical to Generic Agent Task.",
+  "description": "Makes a generic HTTP call. Request body is built from a single inputParams JSON Array (identical pattern to Generic Agent Task). Supports unified output mapping (Patterns A/B/C/D).",
   "properties": [
     {
       "type": "Hidden",
@@ -69,43 +69,26 @@
       }
     },
     {
-      "label": "Request Body",
-      "description": "JSON body for POST/PUT. Enter NA for GET requests or when using MinIO Body Path below.",
+      "label": "Input Parameters (JSON)",
+      "description": "Defines the request body. Three modes:\n\n══ MODE 1: Raw JSON body (paste directly, no array needed) ══\nPaste your JSON body as-is. All ${...} placeholders are resolved.\nUse this for FWA, CC, or any pre-formed JSON POST body.\n{\n  \"reqid\": \"${fn.uuid}\",\n  \"org\": \"SIT\",\n  \"ts\": \"${fn.isoTimestamp}\",\n  ...\n}\n\n══ MODE 2: Array of typed entries (build body from parts) ══\nUse when you need to mix direct values, MinIO files, or MinIO JSON.\n\n  type=value + key → adds key/value pair to body object\n  [{\"key\": \"policy_id\", \"type\": \"value\", \"value\": \"${processVariable.policy_id}\"}]\n\n  type=minioFile + key → downloads file, base64-encodes, adds under key\n  [{\"key\": \"document\", \"type\": \"minioFile\", \"value\": \"${documentPath}\"}]\n\n  type=minioJson + key → downloads JSON file, extracts at sourceJsonPath, adds under key\n  [{\"key\": \"attribs\", \"type\": \"minioJson\", \"value\": \"${attribsMinioPath}\", \"sourceJsonPath\": \"$.attribs\"}]\n\n══ MODE 3: No body (GET requests) ══\nLeave as [] or empty.",
       "type": "Text",
-      "value": "NA",
+      "value": "[]",
       "binding": {
         "type": "camunda:field",
-        "name": "body"
-      }
-    },
-    {
-      "label": "MinIO Body Path",
-      "description": "Process variable holding the MinIO path of a JSON file to use as request body (e.g. ${attribsMinioPath}). Overrides Request Body above. Enter NA to skip.",
-      "type": "String",
-      "value": "NA",
-      "binding": {
-        "type": "camunda:field",
-        "name": "minioBodyPath"
-      }
-    },
-    {
-      "label": "MinIO Body JsonPath",
-      "description": "JsonPath to extract from the MinIO file. Use $ for the entire file, or a specific path e.g. $.attribs.hni",
-      "type": "String",
-      "value": "$",
-      "binding": {
-        "type": "camunda:field",
-        "name": "minioBodyJsonPath"
+        "name": "inputParams"
       }
     },
     {
       "label": "Output Variable Name",
-      "description": "Name of the process variable to store the full JSON response. Also derives {name}_minioPath which is always auto-populated with the MinIO storage path.",
+      "description": "Name of the process variable to store the full JSON response. Also auto-populates {name}_minioPath with the MinIO storage path.",
       "type": "String",
       "value": "apiResponse",
       "binding": {
         "type": "camunda:field",
         "name": "outputVar"
+      },
+      "constraints": {
+        "notEmpty": true
       }
     },
     {

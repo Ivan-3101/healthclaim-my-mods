@@ -38,7 +38,49 @@ import java.util.regex.Pattern;
  * Makes a configurable REST call and processes its response using a unified
  * outputMapping config — identical in structure and capability to GenericAgentDelegate.
  *
- * Output options:
+ * ─────────────────────────────────────────────────────────────────────────────
+ * INPUT BODY CONSTRUCTION via inputParams JSON Array
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * inputParams is a JSON Array. Each entry has a "type" field:
+ *
+ *   type: "value"
+ *     - WITH a "key"    → adds {"key": resolvedValue} to the body JSON object.
+ *                         resolvedValue goes through full placeholder resolution
+ *                         (${fn.uuid}, ${fn.isoTimestamp}, ${processVariable.x}, etc.)
+ *                         If resolvedValue is itself a valid JSON object/array string,
+ *                         it is inlined as a nested object (not double-serialized).
+ *     - WITHOUT a "key" → the entire "value" string IS the raw request body
+ *                         (after placeholder resolution). Use this for passing a
+ *                         large pre-formed JSON body (e.g. the FWA / CC payload).
+ *
+ *   type: "minioFile"
+ *     - Downloads the file at the MinIO path given by "value" (supports ${} placeholders).
+ *     - Base64-encodes the file bytes.
+ *     - Adds {"key": "<base64string>"} to the body JSON object.
+ *     - Requires "key".
+ *
+ *   type: "minioJson"
+ *     - Downloads the file at the MinIO path given by "value" (supports ${} placeholders).
+ *     - Parses the file as JSON.
+ *     - Optionally extracts at "sourceJsonPath" (defaults to "$" = whole file).
+ *     - Adds {"key": <extractedObject>} to the body JSON object.
+ *     - Requires "key".
+ *
+ * Examples:
+ *
+ *   // Pass a large pre-formed JSON body (e.g. FWA / CC stage):
+ *   [{"type": "value", "value": "{\"reqid\": \"${fn.uuid}\", \"org\": \"SIT\", ...}"}]
+ *
+ *   // Build body from individual keys:
+ *   [
+ *     {"key": "policy_id", "type": "value",    "value": "${processVariable.policy_id}"},
+ *     {"key": "document",  "type": "minioFile", "value": "${documentPath}"},
+ *     {"key": "attribs",   "type": "minioJson", "value": "${attribsMinioPath}", "sourceJsonPath": "$.attribs"}
+ *   ]
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * OUTPUT options (unchanged):
  *   Step 8.  Always stores full response as a Camunda process variable ({outputVar}).
  *   Step 9.  Always stores full response as a MinIO file ({outputVar}_minioPath).
  *   Step 10. outputMapping (unified) — single JSON config that handles ALL of:
@@ -84,15 +126,13 @@ import java.util.regex.Pattern;
 public class GenericApiCallDelegate implements JavaDelegate {
 
     // INPUTS (Injected from the Camunda Element Template)
-    private Expression baseUrl;           // Dropdown key → property prefix (e.g. "springapi" → "springapi.url")
-    private Expression route;             // API route, supports ${processVariable.x} (e.g. "/accounts/${processVariable.policy_id}")
-    private Expression authType;          // Auth method (e.g. "xApiKey")
-    private Expression method;            // HTTP Method (GET/POST/PUT/DELETE)
-    private Expression body;              // Direct JSON body for POST/PUT. Use "NA" when not needed or when using minioBodyPath.
-    private Expression minioBodyPath;     // Process variable holding a MinIO path to use as request body. Overrides body. "NA" to skip.
-    private Expression minioBodyJsonPath; // JsonPath to extract from the MinIO file. "$" = entire file.
-    private Expression outputVar;         // Process variable name for full response. Also derives {outputVar}_minioPath.
-    private Expression outputMapping;     // Unified output config (Patterns A/B/C/D). Enter {} to skip.
+    private Expression baseUrl;       // Dropdown key → property prefix (e.g. "springapi" → "springapi.url")
+    private Expression route;         // API route, supports ${processVariable.x} (e.g. "/accounts/${processVariable.policy_id}")
+    private Expression authType;      // Auth method (e.g. "xApiKey")
+    private Expression method;        // HTTP Method (GET/POST/PUT/DELETE)
+    private Expression inputParams;   // JSON Array describing how to build the request body
+    private Expression outputVar;     // Process variable name for full response. Also derives {outputVar}_minioPath.
+    private Expression outputMapping; // Unified output config (Patterns A/B/C/D). Enter {} to skip.
 
     @Override
     public void execute(DelegateExecution execution) throws Exception {
@@ -113,42 +153,8 @@ public class GenericApiCallDelegate implements JavaDelegate {
         String reqMethod  = method    != null ? (String) method.getValue(execution)    : "GET";
         String targetVar  = outputVar != null ? (String) outputVar.getValue(execution) : "apiResponse";
 
-        // 3. BUILD REQUEST BODY
-        String finalBody = null;
-
-        String rawMinioBodyPath = minioBodyPath != null ? (String) minioBodyPath.getValue(execution) : "NA";
-
-        if (!"NA".equalsIgnoreCase(rawMinioBodyPath.trim())) {
-            String resolvedMinioBodyPath = resolvePlaceholders(rawMinioBodyPath, execution, props);
-            String jsonPathExpr = minioBodyJsonPath != null ? (String) minioBodyJsonPath.getValue(execution) : "$";
-
-            log.info("Using MinIO file as request body. Path: {}, JsonPath: {}", resolvedMinioBodyPath, jsonPathExpr);
-
-            try {
-                StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
-                byte[] fileBytes = storage.downloadDocument(resolvedMinioBodyPath).readAllBytes();
-                String fileContent = new String(fileBytes, StandardCharsets.UTF_8);
-
-                if ("$".equals(jsonPathExpr)) {
-                    finalBody = fileContent;
-                } else {
-                    Configuration jacksonConfig = Configuration.builder()
-                            .jsonProvider(new JacksonJsonProvider())
-                            .mappingProvider(new JacksonMappingProvider())
-                            .build();
-                    Object extracted = JsonPath.using(jacksonConfig).parse(fileContent).read(jsonPathExpr);
-                    finalBody = (extracted instanceof String) ? (String) extracted : new JSONObject((Map<?,?>) extracted).toString();
-                }
-            } catch (Exception e) {
-                log.error("Failed to read MinIO body file '{}': {}", resolvedMinioBodyPath, e.getMessage());
-                throw new BpmnError("STORAGE_ERROR", "Failed to read MinIO body file: " + e.getMessage());
-            }
-        } else {
-            String reqBody = body != null ? (String) body.getValue(execution) : "NA";
-            if (!"NA".equalsIgnoreCase(reqBody)) {
-                finalBody = resolvePlaceholders(reqBody, execution, props);
-            }
-        }
+        // 3. BUILD REQUEST BODY FROM inputParams
+        String finalBody = buildRequestBody(execution, props, tenantId);
 
         // 4. CONSTRUCT URL
         String resolvedBase = props.getProperty(baseUrlKey + ".url");
@@ -235,6 +241,197 @@ public class GenericApiCallDelegate implements JavaDelegate {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // INPUT BODY BUILDER
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Builds the final request body string from the inputParams field.
+     *
+     * THREE MODES depending on the content of inputParams:
+     *
+     *  MODE 1 — Raw JSON object (starts with '{'):
+     *    The entire inputParams value IS the request body. Placeholder resolution is applied.
+     *    This is the simplest mode — paste your JSON body directly, exactly as in the old 'body' field.
+     *    Example:
+     *      {
+     *        "reqid": "${fn.uuid}",
+     *        "org": "SIT",
+     *        ...
+     *      }
+     *
+     *  MODE 2 — JSON Array (starts with '['):
+     *    Each entry in the array has a "type" field:
+     *      type "value"    + no key  → entry's value IS the entire raw body (after placeholder resolution).
+     *      type "value"    + key     → resolves value and adds to body JSON object under that key.
+     *      type "minioFile"+ key     → downloads file, base64-encodes, adds to body object under key.
+     *      type "minioJson"+ key     → downloads JSON file, extracts at sourceJsonPath, adds under key.
+     *
+     *  MODE 3 — Empty / null / "[]":
+     *    No body is sent. Use this for GET requests.
+     */
+    private String buildRequestBody(DelegateExecution execution, Properties props, String tenantId) throws Exception {
+
+        if (inputParams == null) {
+            log.info("inputParams is null — no request body.");
+            return null;
+        }
+
+        String rawInputParams = ((String) inputParams.getValue(execution)).trim();
+
+        if (rawInputParams.isEmpty() || rawInputParams.equals("[]")) {
+            log.info("inputParams is empty — no request body.");
+            return null;
+        }
+
+        // ── MODE 1: Raw JSON object pasted directly (no array wrapper) ────────
+        if (rawInputParams.startsWith("{")) {
+            log.info("inputParams is a raw JSON object — resolving placeholders and using as body directly.");
+            return resolvePlaceholders(rawInputParams, execution, props);
+        }
+
+        // ── MODE 2: JSON Array of typed entries ───────────────────────────────
+        JSONArray params = new JSONArray(rawInputParams);
+
+        if (params.length() == 0) {
+            return null;
+        }
+
+        // Will hold keyed entries; used when we're assembling a JSON object body.
+        JSONObject bodyObject = new JSONObject();
+        // Will be set if a raw body entry (no key) is found.
+        String rawBody = null;
+
+        for (int i = 0; i < params.length(); i++) {
+            JSONObject entry = params.getJSONObject(i);
+
+            String type  = entry.optString("type", "value");
+            String key   = entry.optString("key", "").trim();
+            String value = entry.optString("value", "").trim();
+
+            // Resolve all ${...} placeholders in the value string first.
+            String resolvedValue = resolvePlaceholders(value, execution, props);
+
+            if ("value".equalsIgnoreCase(type)) {
+
+                if (key.isEmpty()) {
+                    // ── NO KEY: treat the entire resolved value as the raw request body ──
+                    log.info("inputParams[{}]: type=value, no key → using as raw body.", i);
+                    rawBody = resolvedValue;
+                    // A raw body entry takes full ownership of the body; break here.
+                    break;
+                } else {
+                    // ── HAS KEY: inject into the body object ──────────────────────────
+                    log.info("inputParams[{}]: type=value, key='{}' → resolving value.", i, key);
+                    // Try to parse as JSON so it inlines cleanly (not double-serialised).
+                    String trimmed = resolvedValue.trim();
+                    if (trimmed.startsWith("{")) {
+                        try {
+                            bodyObject.put(key, new JSONObject(trimmed));
+                        } catch (Exception ex) {
+                            bodyObject.put(key, resolvedValue);
+                        }
+                    } else if (trimmed.startsWith("[")) {
+                        try {
+                            bodyObject.put(key, new JSONArray(trimmed));
+                        } catch (Exception ex) {
+                            bodyObject.put(key, resolvedValue);
+                        }
+                    } else {
+                        bodyObject.put(key, resolvedValue);
+                    }
+                }
+
+            } else if ("minioFile".equalsIgnoreCase(type)) {
+
+                if (key.isEmpty()) {
+                    throw new BpmnError("CONFIG_ERROR",
+                            "inputParams[" + i + "]: type=minioFile requires a 'key' field.");
+                }
+
+                log.info("inputParams[{}]: type=minioFile, key='{}', path='{}'", i, key, resolvedValue);
+
+                try {
+                    StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+                    byte[] fileBytes = storage.downloadDocument(resolvedValue).readAllBytes();
+                    String base64 = java.util.Base64.getEncoder().encodeToString(fileBytes);
+                    bodyObject.put(key, base64);
+                    log.info("inputParams[{}]: minioFile '{}' downloaded and base64-encoded → key='{}'",
+                            i, resolvedValue, key);
+                } catch (Exception e) {
+                    log.error("inputParams[{}]: Failed to download minioFile '{}': {}", i, resolvedValue, e.getMessage());
+                    throw new BpmnError("STORAGE_ERROR",
+                            "inputParams[" + i + "]: Could not download minioFile '" + resolvedValue + "': " + e.getMessage());
+                }
+
+            } else if ("minioJson".equalsIgnoreCase(type)) {
+
+                if (key.isEmpty()) {
+                    throw new BpmnError("CONFIG_ERROR",
+                            "inputParams[" + i + "]: type=minioJson requires a 'key' field.");
+                }
+
+                String sourceJsonPath = entry.optString("sourceJsonPath", "").trim();
+                log.info("inputParams[{}]: type=minioJson, key='{}', path='{}', sourceJsonPath='{}'",
+                        i, key, resolvedValue, sourceJsonPath);
+
+                try {
+                    StorageProvider storage = ObjectStorageService.getStorageProvider(tenantId);
+                    byte[] fileBytes = storage.downloadDocument(resolvedValue).readAllBytes();
+                    String fileContent = new String(fileBytes, StandardCharsets.UTF_8);
+
+                    if (sourceJsonPath.isEmpty() || "$".equals(sourceJsonPath)) {
+                        // Entire file → inline as JSON object or array
+                        String trimmed = fileContent.trim();
+                        if (trimmed.startsWith("[")) {
+                            bodyObject.put(key, new JSONArray(trimmed));
+                        } else {
+                            bodyObject.put(key, new JSONObject(trimmed));
+                        }
+                    } else {
+                        // Extract a specific path
+                        Configuration jacksonConfig = Configuration.builder()
+                                .jsonProvider(new JacksonJsonProvider())
+                                .mappingProvider(new JacksonMappingProvider())
+                                .build();
+                        Object extracted = JsonPath.using(jacksonConfig).parse(fileContent).read(sourceJsonPath);
+
+                        if (extracted instanceof Map) {
+                            bodyObject.put(key, new JSONObject((Map<?, ?>) extracted));
+                        } else if (extracted instanceof List) {
+                            bodyObject.put(key, new JSONArray((List<?>) extracted));
+                        } else {
+                            bodyObject.put(key, extracted);
+                        }
+                    }
+
+                    log.info("inputParams[{}]: minioJson '{}' processed → key='{}'", i, resolvedValue, key);
+
+                } catch (Exception e) {
+                    log.error("inputParams[{}]: Failed to process minioJson '{}': {}", i, resolvedValue, e.getMessage());
+                    throw new BpmnError("STORAGE_ERROR",
+                            "inputParams[" + i + "]: Could not process minioJson '" + resolvedValue + "': " + e.getMessage());
+                }
+
+            } else {
+                log.warn("inputParams[{}]: Unknown type '{}' — skipping entry.", i, type);
+            }
+        }
+
+        // Decide what to return
+        if (rawBody != null) {
+            // A no-key value entry provided the full raw body
+            return rawBody;
+        }
+
+        if (bodyObject.length() > 0) {
+            return bodyObject.toString();
+        }
+
+        // Nothing built (e.g. all entries were GET-style with no body)
+        return null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // UNIFIED OUTPUT MAPPING
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -255,42 +452,25 @@ public class GenericApiCallDelegate implements JavaDelegate {
      *  storageType    (optional)  "minio"                              default: "minio"
      *  targetPath     (required)  MinIO destination path. Supports ${var} placeholders.
      *  targetVarName  (optional)  Process variable receiving the resolved MinIO path.
+     *                             Defaults to "{outputKey}_minioPath".
      *
-     *  ── For merging multiple paths ───────────────────────────────────────────
-     *  mergeVariables (optional)  true | false                         default: false
-     *  mergePaths     (required when mergeVariables=true)
-     *                 JSON Array of entries. Each entry:
-     *
-     *                 keyName      (required) Key in the merged output object
-     *                 sourceType   (optional) "responseJson" (DEFAULT) | "processVariable" | "minioFile"
-     *                 dataType     (optional) "string" | "json"         default: "json"
-     *                 path         (optional) JsonPath to extract        default: "$"
-     *                                         (only applies to responseJson and minioFile)
-     *
-     *                 ── sourceType = "processVariable" ───────────────────────
-     *                 variableName (required) Camunda process variable name.
-     *                              Works for plain strings, JSON strings, and objects.
-     *                              JSON strings are auto-parsed into nested objects.
-     *                              dataType is ignored for this sourceType.
-     *
-     *                 ── sourceType = "minioFile" ─────────────────────────────
-     *                 sourcePath   Explicit MinIO path. Supports ${var} placeholders.
-     *                 variableName Name of process variable holding the MinIO path.
-     *                              Use either sourcePath OR variableName, not both.
+     *  ── For mergeVariables = true (Patterns C / D) ───────────────────────────
+     *  mergeVariables (optional)  true → combine multiple sources into one object.
+     *  mergePaths     (required when mergeVariables=true) Array of source descriptors:
+     *    keyName      (required)  Key in the merged output object.
+     *    sourceType   (optional)  "responseJson" (default) | "processVariable" | "minioFile"
+     *    path         (optional)  JsonPath for responseJson / minioFile sources.
+     *    variableName (optional)  Camunda variable name (for processVariable / minioFile).
+     *    sourcePath   (optional)  Explicit MinIO path (for minioFile, supports ${var}).
+     *    dataType     (optional)  "string" | "json".
      * ─────────────────────────────────────────────────────────────────────────
      */
-    private void processOutputMapping(String responseBody, String mappingStr,
-                                      String tenantId, DelegateExecution execution, Properties props) {
-        if (mappingStr == null || mappingStr.trim().equals("{}")) {
-            log.debug("outputMapping is empty — skipping.");
-            return;
-        }
+    private void processOutputMapping(String responseBody, String outputMappingStr,
+                                      String tenantId, DelegateExecution execution,
+                                      Properties props) {
 
-        JSONObject mapping;
-        try {
-            mapping = new JSONObject(mappingStr);
-        } catch (Exception e) {
-            log.error("outputMapping is not valid JSON — skipping. Value: {}", mappingStr);
+        if (outputMappingStr == null || outputMappingStr.trim().equals("{}") || outputMappingStr.trim().isEmpty()) {
+            log.info("outputMapping is empty — skipping.");
             return;
         }
 
@@ -299,194 +479,177 @@ public class GenericApiCallDelegate implements JavaDelegate {
                 .mappingProvider(new JacksonMappingProvider())
                 .build();
 
-        var responseDocumentContext = JsonPath.using(jacksonConfig).parse(responseBody);
+        JSONObject mappingConfig = new JSONObject(outputMappingStr);
 
-        for (String outputKey : mapping.keySet()) {
-            JSONObject descriptor = mapping.getJSONObject(outputKey);
-            String storeIn  = descriptor.optString("storeIn", "processVariable");
-            String dataType = descriptor.optString("dataType", "json");
-            boolean isMerge = descriptor.optBoolean("mergeVariables", false);
-
+        for (String outputKey : mappingConfig.keySet()) {
             try {
+                JSONObject descriptor = mappingConfig.getJSONObject(outputKey);
 
-                if (isMerge) {
-                    // ── PATTERN C & D ─────────────────────────────────────────────────────
+                String  storeIn         = descriptor.optString("storeIn", "processVariable");
+                boolean mergeVariables  = descriptor.optBoolean("mergeVariables", false);
+                String  dataType        = descriptor.optString("dataType", "json");
+                String  path            = descriptor.optString("path", "$");
+
+                if (mergeVariables) {
+                    // ── PATTERNS C / D: merge multiple sources ────────────────────────
                     JSONArray mergePaths = descriptor.optJSONArray("mergePaths");
                     if (mergePaths == null || mergePaths.length() == 0) {
-                        log.warn("outputMapping key '{}': mergeVariables=true but mergePaths is missing/empty — skipping",
-                                outputKey);
+                        log.warn("outputMapping key '{}': mergeVariables=true but mergePaths is empty — skipping.", outputKey);
                         continue;
                     }
 
                     JSONObject merged = new JSONObject();
 
                     for (int i = 0; i < mergePaths.length(); i++) {
-                        JSONObject mp     = mergePaths.getJSONObject(i);
-                        String keyName    = mp.optString("keyName", "key" + i);
+                        JSONObject mp = mergePaths.getJSONObject(i);
+
+                        String keyName    = mp.optString("keyName", "");
                         String sourceType = mp.optString("sourceType", "responseJson");
                         String mergeType  = mp.optString("dataType", "json");
                         String mergePath  = mp.optString("path", "$");
 
-                        Object val = null;
+                        if (keyName.isEmpty()) {
+                            log.warn("outputMapping key '{}' mergePaths[{}]: missing keyName — skipping.", outputKey, i);
+                            continue;
+                        }
+
+                        Object val;
 
                         try {
                             if ("processVariable".equalsIgnoreCase(sourceType)) {
-                                // ── SOURCE: Camunda process variable ──────────────────────
-                                // Handles plain strings, JSON strings (auto-parsed), and objects.
-                                // dataType is intentionally ignored — driven by actual variable content.
+                                // ── SOURCE: Camunda process variable ─────────────────
                                 String variableName = mp.optString("variableName", "");
                                 if (variableName.isEmpty()) {
-                                    log.warn("Merge [{}] entry {}: sourceType=processVariable " +
-                                            "but variableName is empty — skipping", outputKey, i);
+                                    log.warn("Merge [{}] entry {}: sourceType=processVariable but variableName is empty — skipping.", outputKey, i);
                                     continue;
                                 }
                                 Object rawVal = execution.getVariable(variableName);
                                 if (rawVal == null) {
-                                    log.warn("Merge [{}] entry {}: processVariable '{}' is null — skipping",
-                                            outputKey, i, variableName);
+                                    log.warn("Merge [{}] entry {}: processVariable '{}' is null — skipping.", outputKey, i, variableName);
                                     continue;
                                 }
                                 if (rawVal instanceof String) {
                                     String strVal = ((String) rawVal).trim();
                                     if (strVal.startsWith("{")) {
-                                        try {
-                                            val = new JSONObject(strVal);
-                                        } catch (Exception ignored) {
-                                            val = strVal;
-                                        }
+                                        try { val = new JSONObject(strVal); } catch (Exception ig) { val = strVal; }
                                     } else if (strVal.startsWith("[")) {
-                                        try {
-                                            val = new JSONArray(strVal);
-                                        } catch (Exception ignored) {
-                                            val = strVal;
-                                        }
+                                        try { val = new JSONArray(strVal); } catch (Exception ig) { val = strVal; }
                                     } else {
                                         val = strVal;
                                     }
                                 } else {
                                     val = rawVal;
                                 }
-                                log.debug("Merge [{}]: keyName='{}' sourceType=processVariable " +
-                                                "variableName='{}' type={}",
+                                log.debug("Merge [{}]: keyName='{}' sourceType=processVariable variableName='{}' type={}",
                                         outputKey, keyName, variableName, val.getClass().getSimpleName());
 
                             } else if ("minioFile".equalsIgnoreCase(sourceType)) {
-                                // ── SOURCE: Existing MinIO file ───────────────────────────
-                                String resolvedMinioPath = resolveMinioSourcePath(
-                                        mp, execution, props, outputKey, i);
+                                // ── SOURCE: Existing MinIO file ──────────────────────
+                                String resolvedMinioPath = resolveMinioSourcePath(mp, execution, props, outputKey, i);
                                 if (resolvedMinioPath == null) continue;
 
-                                String fileContent = downloadMinioFileAsString(
-                                        resolvedMinioPath, tenantId, outputKey, i);
+                                String fileContent = downloadMinioFileAsString(resolvedMinioPath, tenantId, outputKey, i);
                                 if (fileContent == null) continue;
 
-                                val = extractFromJson(
-                                        fileContent, mergePath, mergeType, jacksonConfig, outputKey, keyName);
+                                val = extractFromJson(fileContent, mergePath, mergeType, jacksonConfig, outputKey, keyName);
                                 if (val == null) continue;
 
-                                log.debug("Merge [{}]: keyName='{}' sourceType=minioFile " +
-                                        "path='{}' from '{}'", outputKey, keyName, mergePath, resolvedMinioPath);
+                                log.debug("Merge [{}]: keyName='{}' sourceType=minioFile path='{}' from '{}'",
+                                        outputKey, keyName, mergePath, resolvedMinioPath);
 
                             } else {
-                                // ── SOURCE: responseJson (DEFAULT) ────────────────────────
-                                val = responseDocumentContext.read(mergePath);
+                                // ── SOURCE: responseJson (DEFAULT) ───────────────────
+                                val = JsonPath.using(jacksonConfig).parse(responseBody).read(mergePath);
                                 val = coerceType(val, mergeType);
-                                log.debug("Merge [{}]: keyName='{}' sourceType=responseJson " +
-                                        "path='{}' → '{}'", outputKey, keyName, mergePath, val);
+                                log.debug("Merge [{}]: keyName='{}' sourceType=responseJson path='{}' → '{}'",
+                                        outputKey, keyName, mergePath, val);
                             }
 
                         } catch (Exception e) {
-                            log.warn("Merge [{}] entry {}: error resolving keyName='{}' — " +
-                                    "skipping entry. Reason: {}", outputKey, i, keyName, e.getMessage());
+                            log.warn("Merge [{}] entry {}: error resolving keyName='{}' — skipping. Reason: {}",
+                                    outputKey, i, keyName, e.getMessage());
                             continue;
                         }
 
-                        // Add to merged object.
-                        // Duplicate keyNames collect into a JSON Array.
-                        if (merged.has(keyName)) {
-                            Object existing = merged.get(keyName);
-                            JSONArray arr = new JSONArray();
-                            addToArray(arr, existing);
-                            addToArray(arr, val);
-                            merged.put(keyName, arr);
-                        } else {
-                            putJsonValue(merged, keyName, val);
-                        }
+                        // Add to merged object. Duplicate keyNames collect into a JSONArray.
+                        putJsonValue(merged, keyName, val);
                     }
 
-                    // Route merged object to destination
+                    String serialized = merged.toString();
+
                     if ("objectStorage".equalsIgnoreCase(storeIn)) {
-                        // ── PATTERN D: Upload merged object as a MinIO file ───────────────
+                        // ── PATTERN D ──────────────────────────────────────────────────
                         String targetPath    = descriptor.optString("targetPath", "");
                         String targetVarName = descriptor.optString("targetVarName", outputKey + "_minioPath");
 
                         if (targetPath.isEmpty()) {
-                            log.warn("outputMapping key '{}': storeIn=objectStorage + mergeVariables=true " +
-                                    "but targetPath is empty — skipping", outputKey);
+                            log.warn("outputMapping key '{}': storeIn=objectStorage but targetPath is empty — skipping.", outputKey);
                             continue;
                         }
 
-                        String serialized         = merged.toString(2);
                         String resolvedTargetPath = resolvePlaceholders(targetPath, execution, props);
                         StorageProvider storage   = ObjectStorageService.getStorageProvider(tenantId);
-                        storage.uploadDocument(resolvedTargetPath,
-                                serialized.getBytes(StandardCharsets.UTF_8), "application/json");
+                        storage.uploadDocument(resolvedTargetPath, serialized.getBytes(StandardCharsets.UTF_8), "application/json");
                         execution.setVariable(targetVarName, resolvedTargetPath);
-                        log.info("Output mapping (merge/objectStorage): merged {} paths → " +
-                                "MinIO='{}' → var='{}'", mergePaths.length(), resolvedTargetPath, targetVarName);
+                        log.info("Output mapping (objectStorage merge): merged → MinIO='{}' → var='{}'",
+                                resolvedTargetPath, targetVarName);
 
                     } else {
-                        // ── PATTERN C: Set merged object as Camunda process variable ──────
-                        execution.setVariable(outputKey, merged.toString());
-                        log.info("Output mapping (merge/processVariable): set '{}' as merged " +
-                                "JSON object ({} paths)", outputKey, mergePaths.length());
+                        // ── PATTERN C ──────────────────────────────────────────────────
+                        try {
+                            ObjectValue objVal = Variables.objectValue(serialized)
+                                    .serializationDataFormat("application/json").create();
+                            execution.setVariable(outputKey, objVal);
+                        } catch (Exception e) {
+                            execution.setVariable(outputKey, serialized);
+                        }
+                        log.info("Output mapping (processVariable merge): set '{}' = merged object", outputKey);
                     }
 
                 } else {
-                    // ── PATTERN A & B ─────────────────────────────────────────────────────
-                    // Reads from raw API response only.
-                    String path = descriptor.optString("path", "$");
+                    // ── PATTERNS A / B: single path extraction ────────────────────────
                     Object val;
                     try {
-                        val = responseDocumentContext.read(path);
+                        val = JsonPath.using(jacksonConfig).parse(responseBody).read(path);
+                        val = coerceType(val, dataType);
                     } catch (Exception e) {
-                        log.warn("outputMapping key '{}': could not extract path '{}' — skipping",
-                                outputKey, path);
-                        continue;
+                        log.error("outputMapping key '{}': JsonPath '{}' failed on response — {}", outputKey, path, e.getMessage());
+                        throw new BpmnError("OUTPUT_MAPPING_ERROR",
+                                "Failed to read path '" + path + "' for key '" + outputKey + "': " + e.getMessage());
                     }
 
-                    val = coerceType(val, dataType);
-
                     if ("objectStorage".equalsIgnoreCase(storeIn)) {
-                        // ── PATTERN B ──────────────────────────────────────────────────────
+                        // ── PATTERN B ──────────────────────────────────────────────────
                         String targetPath    = descriptor.optString("targetPath", "");
                         String targetVarName = descriptor.optString("targetVarName", outputKey + "_minioPath");
 
                         if (targetPath.isEmpty()) {
-                            log.warn("outputMapping key '{}': storeIn=objectStorage but " +
-                                    "targetPath is empty — skipping", outputKey);
+                            log.warn("outputMapping key '{}': storeIn=objectStorage but targetPath is empty — skipping.", outputKey);
                             continue;
                         }
 
                         String serialized;
-                        if (val instanceof Map) {
-                            serialized = new JSONObject((Map<?, ?>) val).toString(2);
+                        if (val instanceof JSONObject) {
+                            serialized = ((JSONObject) val).toString();
+                        } else if (val instanceof JSONArray) {
+                            serialized = ((JSONArray) val).toString();
+                        } else if (val instanceof Map) {
+                            serialized = new JSONObject((Map<?, ?>) val).toString();
                         } else if (val instanceof List) {
-                            serialized = new JSONArray((List<?>) val).toString(2);
+                            serialized = new JSONArray((List<?>) val).toString();
                         } else {
-                            serialized = (val != null) ? val.toString() : "null";
+                            serialized = val != null ? val.toString() : "null";
                         }
 
                         String resolvedTargetPath = resolvePlaceholders(targetPath, execution, props);
                         StorageProvider storage   = ObjectStorageService.getStorageProvider(tenantId);
-                        storage.uploadDocument(resolvedTargetPath,
-                                serialized.getBytes(StandardCharsets.UTF_8), "application/json");
+                        storage.uploadDocument(resolvedTargetPath, serialized.getBytes(StandardCharsets.UTF_8), "application/json");
                         execution.setVariable(targetVarName, resolvedTargetPath);
                         log.info("Output mapping (objectStorage): path='{}' → MinIO='{}' → var='{}'",
                                 path, resolvedTargetPath, targetVarName);
 
                     } else {
-                        // ── PATTERN A ──────────────────────────────────────────────────────
+                        // ── PATTERN A ──────────────────────────────────────────────────
                         execution.setVariable(outputKey, val);
                         log.info("Output mapping (processVariable): set '{}' from path '{}' = '{}'",
                                 outputKey, path, val);
@@ -511,8 +674,8 @@ public class GenericApiCallDelegate implements JavaDelegate {
      */
     private String resolveMinioSourcePath(JSONObject mp, DelegateExecution execution,
                                           Properties props, String outputKey, int entryIndex) {
-        String sourcePath    = mp.optString("sourcePath", "");
-        String variableName  = mp.optString("variableName", "");
+        String sourcePath   = mp.optString("sourcePath", "");
+        String variableName = mp.optString("variableName", "");
 
         if (!sourcePath.isEmpty()) {
             return resolvePlaceholders(sourcePath, execution, props);
@@ -542,101 +705,71 @@ public class GenericApiCallDelegate implements JavaDelegate {
             byte[] bytes = storage.downloadDocument(minioPath).readAllBytes();
             return new String(bytes, StandardCharsets.UTF_8);
         } catch (Exception e) {
-            log.warn("Merge [{}] entry {}: failed to download MinIO file '{}' — skipping. Reason: {}",
+            log.warn("Merge [{}] entry {}: failed to download minioFile '{}' — skipping. Reason: {}",
                     outputKey, entryIndex, minioPath, e.getMessage());
             return null;
         }
     }
 
     /**
-     * Extracts a value from a JSON string using JsonPath, auto-parses rawResponse if present,
-     * then coerces the result to the requested dataType.
-     * Returns null (and logs a warning) if extraction fails.
+     * Extracts a value from a JSON string using JsonPath, optionally coercing it to a dataType.
+     * Returns null and logs a warning if extraction fails.
      */
     private Object extractFromJson(String jsonContent, String path, String dataType,
                                    Configuration jacksonConfig, String outputKey, String keyName) {
         try {
-            // Auto-parse rawResponse field so paths like $.rawResponse.answer work correctly
-            JSONObject parsed = new JSONObject(jsonContent);
-            if (parsed.has("rawResponse")) {
-                try {
-                    String raw = parsed.getString("rawResponse");
-                    parsed.put("rawResponse", new JSONObject(raw));
-                    jsonContent = parsed.toString();
-                } catch (Exception ignored) {
-                    // rawResponse is already an object or not valid JSON — leave as-is
-                }
-            }
-
             Object val = JsonPath.using(jacksonConfig).parse(jsonContent).read(path);
             return coerceType(val, dataType);
         } catch (Exception e) {
-            log.warn("outputMapping key '{}' keyName='{}': failed to extract path '{}' from file — skipping. Reason: {}",
+            log.warn("Merge [{}]: keyName='{}' JsonPath '{}' failed — skipping. Reason: {}",
                     outputKey, keyName, path, e.getMessage());
             return null;
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // TYPE COERCION
-    // ─────────────────────────────────────────────────────────────────────────
-
     /**
-     * Coerces the extracted value according to the requested dataType.
-     *
-     *  "string" — converts to String. If the value is a Map or List it is serialized to
-     *             a compact JSON string. Whole-number doubles are coerced to Long to
-     *             avoid type mismatches in Camunda form fields (e.g. RiskScore).
-     *  "json"   — returns the value as-is (Map, List, Number, Boolean, String, etc.)
+     * Coerces a value to the requested dataType.
+     *   "string" → calls toString()
+     *   "json"   → returns as-is (default)
      */
     private Object coerceType(Object val, String dataType) {
-        if (val == null) return null;
-
-        if ("string".equalsIgnoreCase(dataType)) {
-            if (val instanceof Map)  return new JSONObject((Map<?, ?>) val).toString();
-            if (val instanceof List) return new JSONArray((List<?>) val).toString();
-            return val.toString();
+        if ("string".equalsIgnoreCase(dataType) && val != null) {
+            return val instanceof String ? val : val.toString();
         }
-
-        // "json" — numeric coercion: whole-number doubles → Long
-        if (val instanceof Number) {
-            double d = ((Number) val).doubleValue();
-            if (d == Math.floor(d) && !Double.isInfinite(d)) {
-                return ((Number) val).longValue();
-            }
-        }
-
         return val;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // TYPE-SAFE JSON HELPERS
-    // ─────────────────────────────────────────────────────────────────────────
-
     /**
-     * Type-safe put into a JSONObject.
-     *
-     * Explicitly dispatches by runtime type before calling the matching put() overload.
-     * This avoids the "Ambiguous method call" compile error that occurs when passing
-     * an Object to JSONObject.put() — the compiler cannot choose between overloads
-     * like put(String, Map) and put(String, Collection) when the type is Object.
+     * Puts a value into a JSONObject by key.
+     * If the key already exists, converts to a JSONArray and appends.
+     * Handles all common types safely.
      */
-    private void putJsonValue(JSONObject target, String key, Object val) throws Exception {
-        if (val == null)                    target.put(key, JSONObject.NULL);
-        else if (val instanceof JSONObject) target.put(key, (JSONObject) val);
-        else if (val instanceof JSONArray)  target.put(key, (JSONArray) val);
-        else if (val instanceof Map)        target.put(key, new JSONObject((Map<?, ?>) val));
-        else if (val instanceof List)       target.put(key, new JSONArray((List<?>) val));
-        else if (val instanceof Boolean)    target.put(key, (boolean) val);
-        else if (val instanceof Integer)    target.put(key, (int) val);
-        else if (val instanceof Long)       target.put(key, (long) val);
-        else if (val instanceof Double)     target.put(key, (double) val);
-        else                                target.put(key, val.toString());
+    private void putJsonValue(JSONObject obj, String key, Object val) throws Exception {
+        if (obj.has(key)) {
+            Object existing = obj.get(key);
+            JSONArray arr;
+            if (existing instanceof JSONArray) {
+                arr = (JSONArray) existing;
+            } else {
+                arr = new JSONArray();
+                addToArray(arr, existing);
+            }
+            addToArray(arr, val);
+            obj.put(key, arr);
+        } else {
+            if (val == null)                   obj.put(key, JSONObject.NULL);
+            else if (val instanceof JSONObject) obj.put(key, (JSONObject) val);
+            else if (val instanceof JSONArray)  obj.put(key, (JSONArray) val);
+            else if (val instanceof Map)        obj.put(key, new JSONObject((Map<?, ?>) val));
+            else if (val instanceof List)       obj.put(key, new JSONArray((List<?>) val));
+            else if (val instanceof Boolean)    obj.put(key, (boolean) val);
+            else if (val instanceof Integer)    obj.put(key, (int) val);
+            else if (val instanceof Long)       obj.put(key, (long) val);
+            else if (val instanceof Double)     obj.put(key, (double) val);
+            else                                obj.put(key, val.toString());
+        }
     }
 
-    /**
-     * Type-safe add to a JSONArray.
-     */
     private void addToArray(JSONArray arr, Object val) throws Exception {
         if (val == null)                    arr.put(JSONObject.NULL);
         else if (val instanceof JSONObject) arr.put((JSONObject) val);
@@ -708,26 +841,31 @@ public class GenericApiCallDelegate implements JavaDelegate {
                         replacement = Instant.now().toString();
                         break;
                     case "randomTxnId":
-                        replacement = (char) ('A' + new Random().nextInt(26)) + Long.toString(Instant.now().toEpochMilli());
+                        char letter = (char) ('A' + new Random().nextInt(26));
+                        replacement = letter + String.valueOf(System.currentTimeMillis());
                         break;
                     default:
-                        log.warn("Unknown fn token: '{}'", fnName);
-                        replacement = "";
+                        log.warn("Unknown fn placeholder: {}", token);
                 }
+
             } else if (token.startsWith("appproperties.")) {
-                String key = token.substring("appproperties.".length());
-                replacement = props != null ? props.getProperty(key, "") : "";
+                String propKey = token.substring("appproperties.".length());
+                replacement = props.getProperty(propKey, "");
+
             } else if (token.startsWith("processVariable.")) {
-                String key = token.substring("processVariable.".length());
-                Object val = execution.getVariable(key);
-                replacement = val != null ? val.toString() : "";
+                String varKey = token.substring("processVariable.".length());
+                Object varVal = execution.getVariable(varKey);
+                replacement = varVal != null ? varVal.toString() : "";
+
             } else {
-                Object val = execution.getVariable(token);
-                replacement = val != null ? val.toString() : "${" + token + "}";
+                // Shorthand: ${someVar} → process variable
+                Object varVal = execution.getVariable(token);
+                replacement = varVal != null ? varVal.toString() : "";
             }
 
             matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
         }
+
         matcher.appendTail(result);
         return result.toString();
     }
